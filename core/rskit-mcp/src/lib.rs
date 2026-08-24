@@ -11,6 +11,7 @@
 //! - **Transport helpers**: validate canonical transport names
 //!   and build localhost-only Streamable HTTP configuration defaults
 
+#![warn(missing_docs)]
 #[cfg(feature = "protocol")]
 pub mod convert;
 #[cfg(feature = "server")]

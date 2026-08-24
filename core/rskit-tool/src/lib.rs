@@ -3,6 +3,7 @@
 //! Provides a type-safe framework for defining tools that can be used in agentic systems,
 //! LLM function calling, or MCP servers.
 
+#![warn(missing_docs)]
 mod callable;
 pub mod context;
 mod definition;
