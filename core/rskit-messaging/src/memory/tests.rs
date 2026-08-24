@@ -185,8 +185,6 @@ async fn event_publish_batch_and_receive() {
 async fn messages_returns_topic_history() {
     let broker: InMemoryBroker<String> = InMemoryBroker::new(16);
     let producer = broker.producer();
-    // Need a consumer so broadcast::send succeeds.
-    let _consumer = broker.consumer();
 
     producer
         .send(Message::new("t1", "a".to_string()))
@@ -357,6 +355,108 @@ async fn bounded_history_limit_is_opt_in() {
         .map(|msg| msg.payload)
         .collect::<Vec<_>>();
     assert_eq!(payloads, vec![2, 3]);
+}
+
+#[tokio::test]
+async fn send_without_consumer_is_accepted() {
+    // A fire-and-forget broker accepts a publish even when nothing is
+    // subscribed; the message must still land in history for assertions.
+    let broker: InMemoryBroker<String> = InMemoryBroker::new(16);
+    let producer = broker.producer();
+
+    producer
+        .send(Message::new("no-subs", "kept".to_string()))
+        .await
+        .unwrap();
+
+    assert_eq!(broker.message_count("no-subs").await, 1);
+    assert_eq!(broker.messages("no-subs").await[0].payload, "kept");
+}
+
+#[tokio::test]
+async fn recv_rejects_zero_timeout() {
+    use rskit_errors::ErrorCode;
+
+    let broker: InMemoryBroker<String> = InMemoryBroker::new(4);
+    let consumer = broker.consumer();
+
+    let err = consumer.recv(Duration::ZERO).await.unwrap_err();
+    assert_eq!(err.code(), ErrorCode::InvalidInput);
+}
+
+#[tokio::test]
+async fn recv_times_out_when_idle() {
+    use rskit_errors::ErrorCode;
+
+    let broker: InMemoryBroker<String> = InMemoryBroker::new(4);
+    let consumer = broker.consumer();
+
+    let err = consumer.recv(Duration::from_millis(20)).await.unwrap_err();
+    assert_eq!(err.code(), ErrorCode::Timeout);
+}
+
+#[tokio::test]
+async fn recv_reports_closed_channel() {
+    use rskit_errors::ErrorCode;
+
+    let broker: InMemoryBroker<String> = InMemoryBroker::new(4);
+    let consumer = broker.consumer();
+
+    // Drop every sender (the broker owns the only one) so the channel closes.
+    drop(broker);
+
+    let err = consumer.recv(Duration::from_secs(1)).await.unwrap_err();
+    assert_eq!(err.code(), ErrorCode::ExternalService);
+    assert!(err.to_string().contains("closed"), "got: {err}");
+}
+
+#[tokio::test]
+async fn recv_recovers_after_lagging() {
+    // A bounded broadcast buffer overflowing (slow consumer) drops the oldest
+    // messages at-most-once, but the consumer must recover and deliver the
+    // newest message rather than failing permanently.
+    let broker: InMemoryBroker<u32> = InMemoryBroker::new(2);
+    let producer = broker.producer();
+    let consumer = broker.consumer();
+    consumer.subscribe(&["lag"]).await.unwrap();
+
+    for value in 0..10 {
+        producer.send(Message::new("lag", value)).await.unwrap();
+    }
+
+    // The consumer lagged past the 2-slot buffer; the next receive must skip
+    // the dropped messages and return a surviving (newest) one, not error.
+    let received = consumer.recv(Duration::from_secs(1)).await.unwrap();
+    assert!(
+        received.payload >= 8,
+        "expected a recent message, got {}",
+        received.payload
+    );
+}
+
+#[tokio::test]
+async fn recv_event_reports_malformed_payload() {
+    use rskit_errors::ErrorCode;
+
+    let broker: InMemoryBroker<serde_json::Value> = InMemoryBroker::new(4);
+    let producer = broker.producer();
+    let consumer = broker.consumer();
+    EventConsumer::subscribe(&consumer, &["events"])
+        .await
+        .unwrap();
+
+    // A payload that is not a serialized Event must surface a typed decode
+    // error, never a silent success.
+    producer
+        .send(Message::new("events", serde_json::json!("not-an-event")))
+        .await
+        .unwrap();
+
+    let err = consumer
+        .recv_event(Duration::from_secs(1))
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), ErrorCode::Internal);
 }
 
 #[tokio::test]

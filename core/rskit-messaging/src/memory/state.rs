@@ -3,7 +3,7 @@
 
 use std::collections::{HashSet, VecDeque};
 
-use rskit_errors::{AppError, AppResult, ErrorCode};
+use rskit_errors::AppResult;
 use tokio::sync::{Mutex, broadcast};
 
 use crate::message::Message;
@@ -55,9 +55,12 @@ impl<T: Clone + Send + Sync + 'static> PublishState<T> {
         }
         self.topics.lock().await.insert(msg.topic.clone());
 
-        self.tx.send(msg).map_err(|_| {
-            AppError::new(ErrorCode::ExternalService, "no active consumers on channel")
-        })?;
+        // A broadcast send fails only when no receiver is currently subscribed.
+        // That is not a delivery error for a fire-and-forget broker: real
+        // brokers accept a publish regardless of subscribers, and the message
+        // stays recorded in history for assertions. Drop the "no receivers"
+        // signal instead of surfacing it as a spurious failure.
+        let _ = self.tx.send(msg);
 
         self.notify.notify_waiters();
         Ok(())
