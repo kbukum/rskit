@@ -96,7 +96,7 @@ jobs:
       - name: Release readiness
         run: make TOVEN="${{ steps.toven.outputs.toven }}" release-readiness
       - name: Coverage thresholds
-        run: make release-coverage
+        run: make TOVEN="${{ steps.toven.outputs.toven }}" release-coverage
       - name: Publish dry-run
         run: make TOVEN="${{ steps.toven.outputs.toven }}" publish-dry-run
       - name: Generate SBOM
