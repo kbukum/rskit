@@ -32,7 +32,7 @@ env:
   # Pinned Toven release used to drive the structural/architectural guardrail
   # gates (structure, topology, l7-edges, public-api, readiness) through the
   # `command` ecosystem tasks declared in toven.toml.
-  TOVEN_VERSION: v0.1.0-alpha.7
+  TOVEN_VERSION: v0.1.0-alpha.9
 
 jobs:
   changes:
@@ -312,22 +312,33 @@ jobs:
       - uses: taiki-e/install-action@5b4d68e2e660441203ab128a23676f1e4faf1532  # v2
         with:
           tool: cargo-nextest,cargo-llvm-cov
+      - name: Install the pinned Toven release
+        id: toven
+        # Pinned by immutable commit SHA; the `version` input independently pins
+        # the installed binary (checksum + keyless Sigstore signature verified).
+        uses: kbukum/toven/.github/actions/toven@d85aee8425fe0cc4584fb20356f0ec96fd44b22f # v0.1.0-alpha.9
+        with:
+          version: ${{ env.TOVEN_VERSION }}
       - name: Run coverage
+        # Single `toven coverage` entrypoint gated by the floors in toven.toml
+        # (line 90%, security-set 95%, per-module floors). On a PR the run is
+        # scoped to crates changed against the base and gated at the config's
+        # `changed_line` floor; on push it measures and gates the full workspace.
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            ./scripts/rskit_tool.py coverage --mode coverage --changed --changed-base "${{ github.event.pull_request.base.sha }}...${{ github.sha }}" --line-threshold "${PR_COVERAGE_LINE_THRESHOLD:-70}"
+            "${{ steps.toven.outputs.toven }}" coverage --base "${{ github.event.pull_request.base.sha }}" --merge-base
           else
-            ./scripts/rskit_tool.py coverage --mode coverage --clean full --line-threshold "${COVERAGE_LINE_THRESHOLD:-90}"
+            "${{ steps.toven.outputs.toven }}" coverage
           fi
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         if: failure()
         with:
           name: coverage-debug
-          path: target/coverage
+          path: target/toven/coverage
           if-no-files-found: ignore
       - uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f  # v5
         with:
-          directory: target/coverage/workspaces
+          directory: target/toven/coverage
           fail_ci_if_error: false
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
@@ -355,7 +366,7 @@ jobs:
         id: toven
         # Pinned by immutable commit SHA; the `version` input independently pins
         # the installed binary (checksum + keyless Sigstore signature verified).
-        uses: kbukum/toven/.github/actions/toven@c74531b0745dec78fa4d82795d77ccd5e26a80cb # v0.1.0-alpha.7
+        uses: kbukum/toven/.github/actions/toven@d85aee8425fe0cc4584fb20356f0ec96fd44b22f # v0.1.0-alpha.9
         with:
           version: ${{ env.TOVEN_VERSION }}
       - run: '"${{ steps.toven.outputs.toven }}" run topology'
@@ -388,7 +399,7 @@ jobs:
         run: cargo install cargo-public-api --version 0.52.0 --locked
       - name: Install the pinned Toven release
         id: toven
-        uses: kbukum/toven/.github/actions/toven@c74531b0745dec78fa4d82795d77ccd5e26a80cb # v0.1.0-alpha.7
+        uses: kbukum/toven/.github/actions/toven@d85aee8425fe0cc4584fb20356f0ec96fd44b22f # v0.1.0-alpha.9
         with:
           version: ${{ env.TOVEN_VERSION }}
       - run: '"${{ steps.toven.outputs.toven }}" run readiness'

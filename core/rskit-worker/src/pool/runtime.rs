@@ -313,6 +313,17 @@ async fn runner_loop<I, O>(
         }
     }
 
+    // Fail any envelopes still queued at shutdown with the same
+    // `ServiceUnavailable` shutdown error as a dequeued task, before draining the
+    // in-flight tasks. Queued work never started, so it is failed immediately;
+    // `Pool::close` closes the queue alongside the shutdown signal, so this drain
+    // terminates promptly. Without it the queued envelopes' result channels are
+    // simply dropped, surfacing a generic "task dropped" internal error to the
+    // caller instead of a clean shutdown signal.
+    while let Some(envelope) = receiver.recv().await {
+        fail_envelope_shutdown(envelope, &pool_name);
+    }
+
     while let Some(res) = join_set.join_next().await {
         if let Err(e) = res
             && e.is_panic()
@@ -421,5 +432,69 @@ mod tests {
         assert_eq!(event.data, Some(7));
 
         pool.shutdown().await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn queued_tasks_fail_with_service_unavailable_on_shutdown() {
+        use std::sync::Arc;
+
+        use tokio::sync::Notify;
+
+        struct GateHandler {
+            started: Arc<Notify>,
+            release: Arc<Notify>,
+        }
+
+        #[async_trait::async_trait]
+        impl Handler<u32, u32> for GateHandler {
+            async fn handle(
+                &self,
+                task: u32,
+                _emit: mpsc::Sender<Event<u32>>,
+                _cancel: CancellationToken,
+            ) -> AppResult<u32> {
+                self.started.notify_one();
+                self.release.notified().await;
+                Ok(task)
+            }
+        }
+
+        let started = Arc::new(Notify::new());
+        let release = Arc::new(Notify::new());
+        let pool = Pool::new(
+            Arc::new(GateHandler {
+                started: started.clone(),
+                release: release.clone(),
+            }),
+            PoolConfig::new("drain")
+                .with_size(1)
+                .with_queue_size(8)
+                .with_grace_period(Duration::from_millis(50)),
+        );
+
+        // The first task occupies the single worker permit and blocks, so the
+        // rest stay queued (or dequeued awaiting the permit).
+        let _running = pool.submit(1).await.unwrap();
+        started.notified().await;
+        let queued = vec![
+            pool.submit(2).await.unwrap(),
+            pool.submit(3).await.unwrap(),
+            pool.submit(4).await.unwrap(),
+        ];
+
+        // Stop accepting and signal shutdown; queued work must fail cleanly.
+        pool.close();
+
+        for handle in queued {
+            let error = handle.result().await.expect_err("queued task must fail");
+            assert_eq!(
+                error.code(),
+                ErrorCode::ServiceUnavailable,
+                "queued tasks must surface a clean shutdown error, not a generic drop"
+            );
+        }
+
+        // Let the blocked task finish so the runner can exit cleanly.
+        release.notify_one();
     }
 }

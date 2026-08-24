@@ -2012,6 +2012,7 @@ dependencies = [
  "rskit-errors",
  "serde",
  "serde_json",
+ "url",
  "uuid",
  "validator",
 ]

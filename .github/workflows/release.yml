@@ -23,7 +23,7 @@ permissions:
 
 env:
   # Pin the release to an immutable published Toven binary. Bump deliberately.
-  TOVEN_VERSION: v0.1.0-alpha.7
+  TOVEN_VERSION: v0.1.0-alpha.9
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.release.tag_name || inputs.tag }}
@@ -88,7 +88,7 @@ jobs:
         # Pinned by immutable commit SHA; the `version` input independently pins
         # the installed binary. The action wraps the reference install contract
         # (checksum + keyless Sigstore signature over SHA256SUMS) before use.
-        uses: kbukum/toven/.github/actions/toven@c74531b0745dec78fa4d82795d77ccd5e26a80cb # v0.1.0-alpha.7
+        uses: kbukum/toven/.github/actions/toven@d85aee8425fe0cc4584fb20356f0ec96fd44b22f # v0.1.0-alpha.9
         with:
           version: ${{ env.TOVEN_VERSION }}
       - name: Show the installed Toven version
@@ -96,7 +96,7 @@ jobs:
       - name: Release readiness
         run: make TOVEN="${{ steps.toven.outputs.toven }}" release-readiness
       - name: Coverage thresholds
-        run: make release-coverage
+        run: make TOVEN="${{ steps.toven.outputs.toven }}" release-coverage
       - name: Publish dry-run
         run: make TOVEN="${{ steps.toven.outputs.toven }}" publish-dry-run
       - name: Generate SBOM

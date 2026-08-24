@@ -17,7 +17,7 @@
 | build / check / test / lint / doc / doctest / coverage | `toven <task>` | Tasks declared and verified locally; **CI still on `scripts/rskit_tool.py`** |
 | Affected/changed test + lint matrix in CI | `scripts/rskit_tool.py ci …` | Pending — see mappings and gaps below |
 | MSRV compile matrix | `scripts/rskit_tool.py ci msrv` | Pending — see gap 3 |
-| Coverage gate in CI | `scripts/rskit_tool.py coverage` | Pending — mostly expressible, see gap 5 |
+| Coverage gate | `toven coverage` (single combined run) | Migrated — one whole-workspace invocation gates every crate (security ≥95, per-module floors); resolved the core↔contrib facade-cycle co-scheduling + fuzz no-op fan-out gap. Legacy `scripts/rskit_tool.py coverage` loop removed. |
 | Change → domain matrix | `scripts/rskit_tool.py domains affected` | Blocked — see gap 1 |
 | `cargo-deny` (three per-workspace configs) | native `cargo deny` in `make deny` | Blocked — see gap 4 |
 

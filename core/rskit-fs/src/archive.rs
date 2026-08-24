@@ -262,7 +262,7 @@ pub fn extract_tar_gz(
         }
         create_parent(&target)?;
         ensure_parent_within_root(archive, &root, &target, &name)?;
-        write_member_bounded(archive, &target, &mut member, limits, &mut written)?;
+        write_member_bounded(archive, &target, &name, &mut member, limits, &mut written)?;
         apply_mode(&target, mode)?;
         extracted.push(target);
     }
@@ -317,7 +317,7 @@ pub fn extract_zip(archive: &Path, dest: &Path, limits: ExtractLimits) -> AppRes
         }
         create_parent(&target)?;
         ensure_parent_within_root(archive, &root, &target, &name)?;
-        write_member_bounded(archive, &target, &mut member, limits, &mut written)?;
+        write_member_bounded(archive, &target, &name, &mut member, limits, &mut written)?;
         apply_mode(&target, mode)?;
         extracted.push(target);
     }
@@ -357,13 +357,13 @@ fn safe_member_path(archive: &Path, dest: &Path, name: &Path) -> AppResult<Membe
 fn write_member_bounded<R: Read>(
     archive: &Path,
     target: &Path,
+    member: &Path,
     reader: &mut R,
     limits: ExtractLimits,
     written: &mut u64,
 ) -> AppResult<()> {
     let remaining = limits.max_total_bytes.saturating_sub(*written);
-    let mut out =
-        File::create(target).map_err(|error| extract_io_error(archive, "create member", error))?;
+    let mut out = create_member_no_follow(archive, target, member)?;
     // Read one byte past the budget so an overrun is detected without trusting
     // the member's declared size.
     let mut limited = reader.by_ref().take(remaining.saturating_add(1));
@@ -433,6 +433,43 @@ fn ensure_parent_within_root(
         || Ok(()),
         |parent| ensure_within_root(archive, root, parent, member),
     )
+}
+
+/// Create (or truncate) `target` for writing without following a final
+/// symlink, so a symlink already present at the member's final path component
+/// cannot redirect the write outside the destination tree.
+///
+/// On Unix this is a single atomic `open(O_NOFOLLOW | O_CREAT | O_TRUNC)`: a
+/// symlink at `target` fails with `ELOOP`, which is surfaced as an escape. This
+/// closes the time-of-check/time-of-use gap a separate `symlink_metadata`
+/// preflight leaves open — the parent directory is already confined by
+/// [`ensure_parent_within_root`], and this rejects a swapped-in final symlink
+/// at open time rather than in an earlier, racy check. Non-Unix platforms lack
+/// `O_NOFOLLOW`, so they fall back to a best-effort preflight.
+#[cfg(unix)]
+fn create_member_no_follow(archive: &Path, target: &Path, member: &Path) -> AppResult<File> {
+    use std::os::unix::fs::OpenOptionsExt as _;
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(target)
+        .map_err(|error| {
+            if error.raw_os_error() == Some(libc::ELOOP) {
+                escape_error(archive, &member.display().to_string())
+            } else {
+                extract_io_error(archive, "create member", error)
+            }
+        })
+}
+
+#[cfg(not(unix))]
+fn create_member_no_follow(archive: &Path, target: &Path, member: &Path) -> AppResult<File> {
+    if std::fs::symlink_metadata(target).is_ok_and(|meta| meta.file_type().is_symlink()) {
+        return Err(escape_error(archive, &member.display().to_string()));
+    }
+    File::create(target).map_err(|error| extract_io_error(archive, "create member", error))
 }
 
 fn create_all_dir(dir: &Path) -> AppResult<()> {
@@ -907,6 +944,65 @@ mod tests {
         assert!(
             !outside.join("escape").exists(),
             "nothing may be written through the symlink"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn extract_tar_gz_rejects_a_final_symlink_target_in_the_destination_tree() {
+        let dir = tempdir().unwrap();
+        let secret = dir.path().join("secret");
+        std::fs::write(&secret, b"original").unwrap();
+        let out = dir.path().join("via-final-link.tar.gz");
+        // A regular-file member whose name matches a pre-existing symlink at the
+        // final path component (not a parent directory component).
+        write_raw_tar_gz(
+            &out,
+            |header| header.set_entry_type(tar::EntryType::Regular),
+            "payload",
+            b"pwned",
+        );
+        let dest = dir.path().join("dest");
+        std::fs::create_dir(&dest).unwrap();
+        std::os::unix::fs::symlink(&secret, dest.join("payload")).unwrap();
+
+        let error = extract_tar_gz(&out, &dest, ExtractLimits::default())
+            .expect_err("a pre-existing final symlink in dest must be rejected");
+        assert_eq!(error.code(), rskit_errors::ErrorCode::InvalidInput);
+        assert_eq!(
+            std::fs::read(&secret).unwrap(),
+            b"original",
+            "the symlink target outside dest must not be overwritten"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn extract_zip_rejects_a_final_symlink_target_in_the_destination_tree() {
+        let dir = tempdir().unwrap();
+        let secret = dir.path().join("secret");
+        std::fs::write(&secret, b"original").unwrap();
+        let out = dir.path().join("via-final-link.zip");
+        {
+            let file = std::fs::File::create(&out).unwrap();
+            let mut writer = ::zip::ZipWriter::new(file);
+            writer
+                .start_file("payload", ::zip::write::SimpleFileOptions::default())
+                .unwrap();
+            std::io::Write::write_all(&mut writer, b"pwned").unwrap();
+            writer.finish().unwrap();
+        }
+        let dest = dir.path().join("dest");
+        std::fs::create_dir(&dest).unwrap();
+        std::os::unix::fs::symlink(&secret, dest.join("payload")).unwrap();
+
+        let error = extract_zip(&out, &dest, ExtractLimits::default())
+            .expect_err("a pre-existing final symlink in dest must be rejected");
+        assert_eq!(error.code(), rskit_errors::ErrorCode::InvalidInput);
+        assert_eq!(
+            std::fs::read(&secret).unwrap(),
+            b"original",
+            "the symlink target outside dest must not be overwritten"
         );
     }
 }

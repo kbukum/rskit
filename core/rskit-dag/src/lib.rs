@@ -3,6 +3,7 @@
 //! Provides a directed acyclic graph runner that schedules independent nodes in parallel
 //! and passes outputs downstream. Includes an `as_tool` adapter
 //! so DAG workflows can be exposed as LLM tool-call targets.
+#![warn(missing_docs)]
 
 mod as_tool;
 mod dag;
