@@ -21,7 +21,7 @@ use super::pipe_io::{PipeIo, inherited_config, pipe_stdin_stdio, spawn_stdin_wri
 use super::pty::run_pty_mode;
 use super::redaction::RedactedArgs;
 use super::scope::ChildScope;
-use super::spawn::{PipeStdio, configure_command};
+use super::spawn::{PipeStdio, configure_command, spawn_with_etxtbsy_retry};
 
 /// Execute a subprocess with the given configuration and cancellation token.
 ///
@@ -201,8 +201,8 @@ async fn run_process(
     configure_command(&mut cmd, spec, config, stdio);
 
     debug!(program = %spec.program.display(), args = ?RedactedArgs::new(&spec.args, &config.arg_redaction), "spawning process");
-    let mut child = cmd
-        .spawn()
+    let mut child = spawn_with_etxtbsy_retry(&mut cmd)
+        .await
         .map_err(|error| spawn_error("failed to spawn process", error))?;
     let leader_pid = child.id().unwrap_or_default();
     let registration = supervisor.register_pid_with_group(leader_pid, config.lifecycle);

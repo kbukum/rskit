@@ -22,6 +22,7 @@ use super::lifecycle::wait_for_completion;
 use super::output::{captured, join_within, spawn_reader};
 use super::redaction::RedactedArgs;
 use super::scope::ChildScope;
+use super::spawn::spawn_with_etxtbsy_retry;
 use crate::capture::{append_line_bounded, shared_output};
 
 pub(in crate::runner) async fn run_pty_mode(
@@ -70,8 +71,8 @@ pub(in crate::runner) async fn run_pty_mode(
         args = ?RedactedArgs::new(&spec.args, &config.arg_redaction),
         "spawning process on pseudoterminal"
     );
-    let child = cmd
-        .spawn()
+    let child = spawn_with_etxtbsy_retry(&mut cmd)
+        .await
         .map_err(|error| spawn_error("failed to spawn process", error))?;
     let registration =
         supervisor.register_pid_with_group(child.id().unwrap_or_default(), config.lifecycle);
