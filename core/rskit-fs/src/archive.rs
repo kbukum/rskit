@@ -262,8 +262,7 @@ pub fn extract_tar_gz(
         }
         create_parent(&target)?;
         ensure_parent_within_root(archive, &root, &target, &name)?;
-        ensure_target_not_symlink(archive, &target, &name)?;
-        write_member_bounded(archive, &target, &mut member, limits, &mut written)?;
+        write_member_bounded(archive, &target, &name, &mut member, limits, &mut written)?;
         apply_mode(&target, mode)?;
         extracted.push(target);
     }
@@ -318,8 +317,7 @@ pub fn extract_zip(archive: &Path, dest: &Path, limits: ExtractLimits) -> AppRes
         }
         create_parent(&target)?;
         ensure_parent_within_root(archive, &root, &target, &name)?;
-        ensure_target_not_symlink(archive, &target, &name)?;
-        write_member_bounded(archive, &target, &mut member, limits, &mut written)?;
+        write_member_bounded(archive, &target, &name, &mut member, limits, &mut written)?;
         apply_mode(&target, mode)?;
         extracted.push(target);
     }
@@ -359,13 +357,13 @@ fn safe_member_path(archive: &Path, dest: &Path, name: &Path) -> AppResult<Membe
 fn write_member_bounded<R: Read>(
     archive: &Path,
     target: &Path,
+    member: &Path,
     reader: &mut R,
     limits: ExtractLimits,
     written: &mut u64,
 ) -> AppResult<()> {
     let remaining = limits.max_total_bytes.saturating_sub(*written);
-    let mut out =
-        File::create(target).map_err(|error| extract_io_error(archive, "create member", error))?;
+    let mut out = create_member_no_follow(archive, target, member)?;
     // Read one byte past the budget so an overrun is detected without trusting
     // the member's declared size.
     let mut limited = reader.by_ref().take(remaining.saturating_add(1));
@@ -437,22 +435,41 @@ fn ensure_parent_within_root(
     )
 }
 
-/// Reject a member whose final materialised path already exists as a symlink.
+/// Create (or truncate) `target` for writing without following a final
+/// symlink, so a symlink already present at the member's final path component
+/// cannot redirect the write outside the destination tree.
 ///
-/// [`ensure_parent_within_root`] only confines the *parent* directory, but
-/// [`File::create`] follows a symlink at the final path component. A symlink
-/// already present in the destination tree at `target` (e.g. `dest/payload`
-/// pointing at `/etc/passwd`) would otherwise let a regular-file member
-/// overwrite the link's target outside `dest`. Rejecting an existing final
-/// symlink upholds the extraction guarantee that a pre-existing symlink in the
-/// destination tree cannot redirect a write outside it.
-fn ensure_target_not_symlink(archive: &Path, target: &Path, member: &Path) -> AppResult<()> {
-    match std::fs::symlink_metadata(target) {
-        Ok(meta) if meta.file_type().is_symlink() => {
-            Err(escape_error(archive, &member.display().to_string()))
-        }
-        _ => Ok(()),
+/// On Unix this is a single atomic `open(O_NOFOLLOW | O_CREAT | O_TRUNC)`: a
+/// symlink at `target` fails with `ELOOP`, which is surfaced as an escape. This
+/// closes the time-of-check/time-of-use gap a separate `symlink_metadata`
+/// preflight leaves open — the parent directory is already confined by
+/// [`ensure_parent_within_root`], and this rejects a swapped-in final symlink
+/// at open time rather than in an earlier, racy check. Non-Unix platforms lack
+/// `O_NOFOLLOW`, so they fall back to a best-effort preflight.
+#[cfg(unix)]
+fn create_member_no_follow(archive: &Path, target: &Path, member: &Path) -> AppResult<File> {
+    use std::os::unix::fs::OpenOptionsExt as _;
+    std::fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .custom_flags(libc::O_NOFOLLOW)
+        .open(target)
+        .map_err(|error| {
+            if error.raw_os_error() == Some(libc::ELOOP) {
+                escape_error(archive, &member.display().to_string())
+            } else {
+                extract_io_error(archive, "create member", error)
+            }
+        })
+}
+
+#[cfg(not(unix))]
+fn create_member_no_follow(archive: &Path, target: &Path, member: &Path) -> AppResult<File> {
+    if std::fs::symlink_metadata(target).is_ok_and(|meta| meta.file_type().is_symlink()) {
+        return Err(escape_error(archive, &member.display().to_string()));
     }
+    File::create(target).map_err(|error| extract_io_error(archive, "create member", error))
 }
 
 fn create_all_dir(dir: &Path) -> AppResult<()> {
