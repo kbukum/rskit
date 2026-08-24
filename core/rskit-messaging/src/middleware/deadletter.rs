@@ -210,8 +210,33 @@ mod tests {
     use super::*;
     use crate::handler::{FnHandler, chain_handlers};
     use crate::memory::InMemoryBroker;
-    use crate::traits::MessageConsumer;
+    use crate::traits::{MessageConsumer, MessageProducer};
     use rskit_errors::{AppError, ErrorCode};
+
+    /// A producer double that fails every send, used to prove the middleware
+    /// propagates a DLQ publish failure instead of swallowing it.
+    struct FailingProducer;
+
+    #[async_trait]
+    impl<T: Send + Sync + 'static> MessageProducer<T> for FailingProducer {
+        async fn send(&self, _msg: Message<T>) -> AppResult<()> {
+            Err(AppError::new(
+                ErrorCode::ExternalService,
+                "dlq broker unavailable",
+            ))
+        }
+
+        async fn send_batch(&self, _msgs: Vec<Message<T>>) -> AppResult<()> {
+            Err(AppError::new(
+                ErrorCode::ExternalService,
+                "dlq broker unavailable",
+            ))
+        }
+
+        async fn flush(&self, _timeout: Duration) -> AppResult<()> {
+            Ok(())
+        }
+    }
 
     #[tokio::test]
     async fn success_does_not_produce_dlq() {
@@ -319,14 +344,13 @@ mod tests {
 
     #[tokio::test]
     async fn dlq_publish_failure_propagates() {
-        let broker = InMemoryBroker::<DeadLetterEnvelope<String>>::new(16);
-        let dlq_producer = broker.producer();
+        // A DLQ producer that fails must surface its error, never swallow it.
         let base: Arc<dyn MessageHandler<String>> =
             Arc::new(FnHandler::new(|_msg: Message<String>| async {
                 Err(AppError::new(ErrorCode::Internal, "boom"))
             }));
         let mw: Arc<dyn HandlerMiddleware<String>> = Arc::new(DeadLetterMiddleware {
-            producer: Arc::new(dlq_producer),
+            producer: Arc::new(FailingProducer),
             config: DeadLetterConfig::default(),
         });
         let handler = chain_handlers(base, &[mw]);

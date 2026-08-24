@@ -6300,6 +6300,7 @@ dependencies = [
  "bytes",
  "chrono",
  "google-cloud-auth",
+ "google-cloud-gax",
  "google-cloud-storage",
  "rskit-errors",
  "rskit-storage",

@@ -62,9 +62,27 @@ impl<T: Clone + Send + Sync + 'static> MessageConsumer<T> for InMemoryConsumer<T
             loop {
                 let msg = {
                     let mut rx = self.rx.lock().await;
-                    rx.recv().await.map_err(|e| {
-                        AppError::new(ErrorCode::ExternalService, format!("receive failed: {e}"))
-                    })?
+                    match rx.recv().await {
+                        Ok(msg) => msg,
+                        Err(broadcast::error::RecvError::Closed) => {
+                            return Err(AppError::new(
+                                ErrorCode::ExternalService,
+                                "broker channel closed",
+                            ));
+                        }
+                        Err(broadcast::error::RecvError::Lagged(dropped)) => {
+                            // The bounded broadcast buffer overflowed: a slow
+                            // consumer fell behind and `dropped` oldest messages
+                            // were skipped (at-most-once under backpressure).
+                            // Recover by continuing to the next surviving message
+                            // rather than surfacing the lag as a fatal error.
+                            tracing::debug!(
+                                dropped,
+                                "in-memory consumer lagged; oldest messages dropped"
+                            );
+                            continue;
+                        }
+                    }
                 };
 
                 let topics = self.topics.lock().await;
