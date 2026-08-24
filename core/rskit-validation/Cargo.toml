@@ -25,6 +25,7 @@ regex = { workspace = true }
 uuid         = { workspace = true }
 chrono       = { workspace = true }
 validator = { workspace = true }
+url = { workspace = true }
 
 # Internal
 rskit-errors = { workspace = true }
