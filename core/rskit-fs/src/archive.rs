@@ -262,6 +262,7 @@ pub fn extract_tar_gz(
         }
         create_parent(&target)?;
         ensure_parent_within_root(archive, &root, &target, &name)?;
+        ensure_target_not_symlink(archive, &target, &name)?;
         write_member_bounded(archive, &target, &mut member, limits, &mut written)?;
         apply_mode(&target, mode)?;
         extracted.push(target);
@@ -317,6 +318,7 @@ pub fn extract_zip(archive: &Path, dest: &Path, limits: ExtractLimits) -> AppRes
         }
         create_parent(&target)?;
         ensure_parent_within_root(archive, &root, &target, &name)?;
+        ensure_target_not_symlink(archive, &target, &name)?;
         write_member_bounded(archive, &target, &mut member, limits, &mut written)?;
         apply_mode(&target, mode)?;
         extracted.push(target);
@@ -433,6 +435,24 @@ fn ensure_parent_within_root(
         || Ok(()),
         |parent| ensure_within_root(archive, root, parent, member),
     )
+}
+
+/// Reject a member whose final materialised path already exists as a symlink.
+///
+/// [`ensure_parent_within_root`] only confines the *parent* directory, but
+/// [`File::create`] follows a symlink at the final path component. A symlink
+/// already present in the destination tree at `target` (e.g. `dest/payload`
+/// pointing at `/etc/passwd`) would otherwise let a regular-file member
+/// overwrite the link's target outside `dest`. Rejecting an existing final
+/// symlink upholds the extraction guarantee that a pre-existing symlink in the
+/// destination tree cannot redirect a write outside it.
+fn ensure_target_not_symlink(archive: &Path, target: &Path, member: &Path) -> AppResult<()> {
+    match std::fs::symlink_metadata(target) {
+        Ok(meta) if meta.file_type().is_symlink() => {
+            Err(escape_error(archive, &member.display().to_string()))
+        }
+        _ => Ok(()),
+    }
 }
 
 fn create_all_dir(dir: &Path) -> AppResult<()> {
@@ -907,6 +927,65 @@ mod tests {
         assert!(
             !outside.join("escape").exists(),
             "nothing may be written through the symlink"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn extract_tar_gz_rejects_a_final_symlink_target_in_the_destination_tree() {
+        let dir = tempdir().unwrap();
+        let secret = dir.path().join("secret");
+        std::fs::write(&secret, b"original").unwrap();
+        let out = dir.path().join("via-final-link.tar.gz");
+        // A regular-file member whose name matches a pre-existing symlink at the
+        // final path component (not a parent directory component).
+        write_raw_tar_gz(
+            &out,
+            |header| header.set_entry_type(tar::EntryType::Regular),
+            "payload",
+            b"pwned",
+        );
+        let dest = dir.path().join("dest");
+        std::fs::create_dir(&dest).unwrap();
+        std::os::unix::fs::symlink(&secret, dest.join("payload")).unwrap();
+
+        let error = extract_tar_gz(&out, &dest, ExtractLimits::default())
+            .expect_err("a pre-existing final symlink in dest must be rejected");
+        assert_eq!(error.code(), rskit_errors::ErrorCode::InvalidInput);
+        assert_eq!(
+            std::fs::read(&secret).unwrap(),
+            b"original",
+            "the symlink target outside dest must not be overwritten"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn extract_zip_rejects_a_final_symlink_target_in_the_destination_tree() {
+        let dir = tempdir().unwrap();
+        let secret = dir.path().join("secret");
+        std::fs::write(&secret, b"original").unwrap();
+        let out = dir.path().join("via-final-link.zip");
+        {
+            let file = std::fs::File::create(&out).unwrap();
+            let mut writer = ::zip::ZipWriter::new(file);
+            writer
+                .start_file("payload", ::zip::write::SimpleFileOptions::default())
+                .unwrap();
+            std::io::Write::write_all(&mut writer, b"pwned").unwrap();
+            writer.finish().unwrap();
+        }
+        let dest = dir.path().join("dest");
+        std::fs::create_dir(&dest).unwrap();
+        std::os::unix::fs::symlink(&secret, dest.join("payload")).unwrap();
+
+        let error = extract_zip(&out, &dest, ExtractLimits::default())
+            .expect_err("a pre-existing final symlink in dest must be rejected");
+        assert_eq!(error.code(), rskit_errors::ErrorCode::InvalidInput);
+        assert_eq!(
+            std::fs::read(&secret).unwrap(),
+            b"original",
+            "the symlink target outside dest must not be overwritten"
         );
     }
 }

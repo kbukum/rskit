@@ -34,13 +34,13 @@ pub fn write_frame<W: Write>(writer: &mut W, payload: &[u8], max_bytes: usize) -
         .map_err(|_| AppError::invalid_input("frame", "payload length exceeds u32 range"))?;
     writer
         .write_all(&len.to_be_bytes())
-        .map_err(|error| transport_error("write frame length", &error))?;
+        .map_err(|error| transport_error("write frame length", error))?;
     writer
         .write_all(payload)
-        .map_err(|error| transport_error("write frame payload", &error))?;
+        .map_err(|error| transport_error("write frame payload", error))?;
     writer
         .flush()
-        .map_err(|error| transport_error("flush frame", &error))?;
+        .map_err(|error| transport_error("flush frame", error))?;
     Ok(())
 }
 
@@ -69,7 +69,7 @@ pub fn read_frame<R: Read>(reader: &mut R, max_bytes: usize) -> AppResult<Option
     let mut payload = vec![0u8; len];
     reader
         .read_exact(&mut payload)
-        .map_err(|error| transport_error("read frame payload", &error))?;
+        .map_err(|error| transport_error("read frame payload", error))?;
     Ok(Some(payload))
 }
 
@@ -97,19 +97,24 @@ fn read_exact_or_eof<R: Read>(reader: &mut R, buf: &mut [u8]) -> AppResult<ReadE
             }
             Ok(count) => read += count,
             Err(error) if error.kind() == std::io::ErrorKind::Interrupted => {}
-            Err(error) => return Err(transport_error("read frame length", &error)),
+            Err(error) => return Err(transport_error("read frame length", error)),
         }
     }
     Ok(ReadEnd::Filled)
 }
 
 /// Build a typed transport error preserving the underlying I/O cause.
-fn transport_error(context: &str, error: &std::io::Error) -> AppError {
+///
+/// The original [`std::io::Error`] is attached by value so its OS error code
+/// ([`std::io::Error::raw_os_error`]) and source chain survive on the returned
+/// [`AppError`]; reconstructing a fresh error from `kind()`/`to_string()` would
+/// silently drop both.
+fn transport_error(context: &str, error: std::io::Error) -> AppError {
     AppError::new(
         ErrorCode::ServiceUnavailable,
         format!("framed transport: {context}"),
     )
-    .with_cause(std::io::Error::new(error.kind(), error.to_string()))
+    .with_cause(error)
 }
 
 #[cfg(test)]
@@ -170,6 +175,33 @@ mod tests {
         let mut buffer = Vec::new();
         assert!(write_frame(&mut buffer, b"too large", 1).is_err());
         assert!(write_frame(&mut FailingWriter, b"ok", DEFAULT_MAX_FRAME_BYTES).is_err());
+    }
+
+    #[test]
+    fn transport_error_preserves_underlying_io_cause() {
+        // ECONNRESET; a fresh io::Error rebuilt from kind()/to_string() would
+        // report `raw_os_error() == None`, so this pins cause fidelity.
+        const ECONNRESET: i32 = 104;
+
+        struct OsErrorWriter;
+        impl Write for OsErrorWriter {
+            fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
+                Err(std::io::Error::from_raw_os_error(ECONNRESET))
+            }
+
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let error = write_frame(&mut OsErrorWriter, b"payload", DEFAULT_MAX_FRAME_BYTES)
+            .expect_err("writer failure must surface");
+        let cause = error
+            .cause()
+            .expect("underlying I/O cause preserved")
+            .downcast_ref::<std::io::Error>()
+            .expect("cause is the original io::Error");
+        assert_eq!(cause.raw_os_error(), Some(ECONNRESET));
     }
 
     #[test]
