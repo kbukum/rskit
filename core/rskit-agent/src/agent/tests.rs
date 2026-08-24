@@ -544,3 +544,127 @@ async fn agent_component_lifecycle_is_named_and_healthy() {
     let health = agent.health();
     assert!(health.is_healthy());
 }
+
+// ── Budget & human-gate regression tests ────────────────────────────
+//
+// These lock the agent loop's security-relevant bounds: an untrusted model
+// cannot drive unbounded tool invocation (tool-call and wall-clock budgets),
+// and a `PreToolCall` hook is an enforced human gate that prevents a tool from
+// running at all.
+
+use std::sync::atomic::AtomicBool;
+
+use rskit_tool::{from_fn, text_result};
+
+#[derive(serde::Deserialize, schemars::JsonSchema)]
+struct NoInput {}
+
+fn tool_call_response(tool: &str) -> CompletionResponse {
+    CompletionResponse {
+        message: AssistantMessage {
+            content: vec![],
+            tool_calls: vec![rskit_llm::ToolUseBlock {
+                id: "tc_1".to_string(),
+                name: tool.to_string(),
+                input: serde_json::Map::new(),
+            }],
+            usage: None,
+        },
+        model: "mock".to_string(),
+        usage: Usage {
+            input_tokens: 1,
+            output_tokens: 1,
+            cached_tokens: 0,
+            reasoning_tokens: 0,
+        },
+        stop_reason: Some(rskit_llm::FinishReason::ToolUse),
+    }
+}
+
+#[tokio::test]
+async fn max_tool_calls_budget_stops_the_tool_loop() {
+    let registry = Arc::new(Registry::new());
+    registry
+        .register(
+            from_fn("noop", "No-op", |_ctx: Context, _input: NoInput| async {
+                Ok(text_result("done"))
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+    // The model keeps requesting a tool call every turn (the mock repeats its
+    // last response), so only the tool-call budget can end the run.
+    let provider = Arc::new(MockProvider::new(vec![tool_call_response("noop")]));
+    let agent = Agent::new(
+        provider,
+        AgentConfig {
+            tools: Some(registry),
+            max_tool_calls: 1,
+            ..AgentConfig::default()
+        },
+    );
+
+    let result = agent.run(vec![types::user("go")]).await.unwrap();
+    assert!(matches!(
+        result.stop_reason,
+        StopReason::MaxToolCallsExceeded
+    ));
+}
+
+#[tokio::test]
+async fn wall_clock_budget_stops_before_the_first_turn() {
+    let provider = Arc::new(MockProvider::single_text("unused"));
+    let agent = Agent::new(
+        provider,
+        AgentConfig {
+            wall_clock: Duration::ZERO,
+            ..AgentConfig::default()
+        },
+    );
+
+    let result = agent.run(vec![types::user("go")]).await.unwrap();
+    assert!(matches!(result.stop_reason, StopReason::WallClockExceeded));
+    assert_eq!(result.turn_count, 0);
+}
+
+#[tokio::test]
+async fn pre_tool_call_hook_veto_blocks_execution() {
+    let executed = Arc::new(AtomicBool::new(false));
+    let ran = Arc::clone(&executed);
+    let registry = Arc::new(Registry::new());
+    registry
+        .register(
+            from_fn("noop", "No-op", move |_ctx: Context, _input: NoInput| {
+                let ran = Arc::clone(&ran);
+                async move {
+                    ran.store(true, Ordering::SeqCst);
+                    Ok(text_result("done"))
+                }
+            })
+            .unwrap(),
+        )
+        .unwrap();
+
+    let hooks = Arc::new(HookRegistry::new());
+    let _unsub = hooks.on::<crate::hooks::PreToolCall>(crate::pre_tool_call_type(), |_, _| {
+        Err(HookError::fatal("tool denied by policy"))
+    });
+
+    let provider = Arc::new(MockProvider::new(vec![tool_call_response("noop")]));
+    let agent = Agent::new(
+        provider,
+        AgentConfig {
+            tools: Some(registry),
+            hooks: Some(hooks),
+            ..AgentConfig::default()
+        },
+    );
+
+    let result = agent.run(vec![types::user("go")]).await.unwrap();
+    assert!(matches!(result.stop_reason, StopReason::Aborted));
+    assert!(
+        !executed.load(Ordering::SeqCst),
+        "tool must not execute after a PreToolCall veto"
+    );
+}
