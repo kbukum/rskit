@@ -4,6 +4,7 @@
 //! executes any requested tool calls, emits hook events at each lifecycle point,
 //! and manages context size via a pluggable [`ContextStrategy`].
 
+#![warn(missing_docs)]
 pub mod agent;
 pub mod command;
 pub mod config;
