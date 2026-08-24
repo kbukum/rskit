@@ -908,7 +908,6 @@ async fn transcode_uses_requested_image_formats_for_memory_output() {
         ("gif", "gif", ImageFormat::Gif),
         ("bmp", "bmp", ImageFormat::Bmp),
         ("tif", "tif", ImageFormat::Tiff),
-        ("unknown", "unknown", ImageFormat::Png),
     ];
     let backend = image_executor();
 
@@ -932,6 +931,27 @@ async fn transcode_uses_requested_image_formats_for_memory_output() {
         let actual = image::guess_format(&bytes)
             .unwrap_or_else(|err| panic!("guess {extension} failed: {err}"));
         assert_eq!(actual, expected);
+    }
+}
+
+#[tokio::test]
+async fn transcode_to_unsupported_format_is_rejected() {
+    let backend = image_executor();
+    let fixture = create_gradient_png(16, 16);
+    let source = FileSource::from_path(fixture.path());
+
+    for format_id in ["made-up", "svg", "heif"] {
+        let err = backend
+            .execute(
+                &source,
+                &[MediaOp::Transcode(OutputConfig::new(Format::new(
+                    format_id,
+                )))],
+                Some(&FileSink::Memory),
+            )
+            .await
+            .expect_err("unsupported transcode format must be rejected, not fall back to PNG");
+        assert_eq!(err.code(), rskit_errors::ErrorCode::InvalidInput);
     }
 }
 

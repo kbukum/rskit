@@ -2,11 +2,15 @@ use super::Metric;
 use crate::result::MetricResult;
 use crate::types::ScoredSample;
 
+/// Object-safe metric interface used by run-level benchmark orchestration.
 pub trait RunMetric<L = String>: Send + Sync {
+    /// Returns the stable metric name used in benchmark results.
     fn name(&self) -> &str;
+    /// Computes the metric from scored samples.
     fn compute(&self, scored: &[ScoredSample<L>]) -> MetricResult;
 }
 
+/// Adapts a metric suite metric into the run-level metric trait.
 pub fn as_run_metric<L>(metric: Box<dyn Metric<L>>) -> Box<dyn RunMetric<L>>
 where
     L: Send + Sync + 'static,
@@ -14,6 +18,7 @@ where
     Box::new(RunMetricAdapter(metric))
 }
 
+/// Adapts every metric in a vector into the run-level metric trait.
 pub fn as_run_metrics<L>(metrics: Vec<Box<dyn Metric<L>>>) -> Vec<Box<dyn RunMetric<L>>>
 where
     L: Send + Sync + 'static,

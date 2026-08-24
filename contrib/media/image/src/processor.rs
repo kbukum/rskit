@@ -52,16 +52,26 @@ impl ImageProcessor {
         }
     }
 
-    fn format_from_name(name: &str) -> ImageFormat {
+    /// Resolve an explicitly requested output format identifier.
+    ///
+    /// The requested format is caller-supplied free-form text (a
+    /// [`Format`](rskit_media::format::Format) wraps an arbitrary string), so an
+    /// unsupported identifier is a trust-boundary error: it is rejected with a
+    /// typed [`ErrorCode::InvalidInput`] rather than silently falling back to
+    /// PNG and producing a success-shaped but wrong-format artifact.
+    fn format_from_name(name: &str) -> AppResult<ImageFormat> {
         match name {
-            "jpeg" | "jpg" => ImageFormat::Jpeg,
-            "png" => ImageFormat::Png,
-            "gif" => ImageFormat::Gif,
-            "bmp" => ImageFormat::Bmp,
-            "tiff" | "tif" => ImageFormat::Tiff,
-            "webp" => ImageFormat::WebP,
-            "avif" => ImageFormat::Avif,
-            _ => ImageFormat::Png,
+            "jpeg" | "jpg" => Ok(ImageFormat::Jpeg),
+            "png" => Ok(ImageFormat::Png),
+            "gif" => Ok(ImageFormat::Gif),
+            "bmp" => Ok(ImageFormat::Bmp),
+            "tiff" | "tif" => Ok(ImageFormat::Tiff),
+            "webp" => Ok(ImageFormat::WebP),
+            "avif" => Ok(ImageFormat::Avif),
+            other => Err(AppError::new(
+                ErrorCode::InvalidInput,
+                format!("image processor cannot transcode to unsupported format: {other}"),
+            )),
         }
     }
 }
@@ -314,7 +324,7 @@ impl MediaExecutor for ImageProcessor {
                 }
                 MediaOp::Transcode(config) => {
                     let format_id = config.format.id();
-                    output_format = Self::format_from_name(format_id);
+                    output_format = Self::format_from_name(format_id)?;
                 }
                 _ => {
                     if !self.supports(op) {
@@ -421,9 +431,20 @@ mod tests {
             ("tif", ImageFormat::Tiff),
             ("webp", ImageFormat::WebP),
             ("avif", ImageFormat::Avif),
-            ("unknown", ImageFormat::Png),
         ] {
-            assert_eq!(ImageProcessor::format_from_name(name), expected);
+            assert_eq!(
+                ImageProcessor::format_from_name(name).expect("supported format"),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn requested_transcode_to_unsupported_format_is_rejected() {
+        for name in ["made-up", "svg", "heif", "", "PNG"] {
+            let err = ImageProcessor::format_from_name(name)
+                .expect_err("unsupported requested format must be rejected");
+            assert_eq!(err.code(), ErrorCode::InvalidInput);
         }
     }
 

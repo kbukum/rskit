@@ -7,6 +7,8 @@
 //! and a test-owned [`RunStorage`] implementation for deterministic tests; use [`SystemClock`]
 //! and [`FileRunStorage`] for normal CLI runs.
 
+#![warn(missing_docs)]
+
 pub mod cli;
 pub mod compare;
 pub mod curves;

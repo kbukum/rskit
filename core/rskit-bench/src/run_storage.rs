@@ -10,8 +10,11 @@ use std::path::{Path, PathBuf};
 
 /// Options for listing stored results.
 pub struct ListOptions {
+    /// Maximum number of summaries to return; zero means no truncation.
     pub limit: usize,
+    /// Optional run tag filter.
     pub tag: Option<String>,
+    /// Optional dataset name filter.
     pub dataset: Option<String>,
 }
 
@@ -27,18 +30,21 @@ impl Default for ListOptions {
 
 impl ListOptions {
     #[must_use]
+    /// Sets the maximum number of summaries returned by storage listing.
     pub fn with_limit(mut self, n: usize) -> Self {
         self.limit = n;
         self
     }
 
     #[must_use]
+    /// Filters listed run summaries by run tag.
     pub fn with_tag(mut self, tag: impl Into<String>) -> Self {
         self.tag = Some(tag.into());
         self
     }
 
     #[must_use]
+    /// Filters listed run summaries by dataset name.
     pub fn with_dataset(mut self, dataset: impl Into<String>) -> Self {
         self.dataset = Some(dataset.into());
         self
@@ -47,9 +53,13 @@ impl ListOptions {
 
 /// Abstraction for storing/retrieving benchmark results.
 pub trait RunStorage: Send + Sync {
+    /// Persists a benchmark run and returns its run identifier.
     fn save(&self, result: &BenchRunResult) -> AppResult<String>;
+    /// Loads a stored benchmark run by identifier.
     fn load(&self, run_id: &str) -> AppResult<BenchRunResult>;
+    /// Loads the newest stored benchmark run.
     fn latest(&self) -> AppResult<BenchRunResult>;
+    /// Lists stored benchmark run summaries matching the provided options.
     fn list(&self, opts: ListOptions) -> AppResult<Vec<BenchRunSummary>>;
 }
 
@@ -59,6 +69,7 @@ pub struct FileRunStorage {
 }
 
 impl FileRunStorage {
+    /// Creates file-backed run storage rooted at `dir`.
     pub fn new(dir: impl Into<PathBuf>) -> Self {
         Self { dir: dir.into() }
     }
