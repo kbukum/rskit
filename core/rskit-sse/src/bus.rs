@@ -232,7 +232,7 @@ mod tests {
     use futures_util::StreamExt;
 
     #[derive(Clone, Debug, Serialize)]
-    struct TestEvent {
+    struct SseTestEvent {
         msg: String,
     }
 
@@ -253,7 +253,7 @@ mod tests {
         let bus = SseBus::new(16).unwrap();
         let mut stream = std::pin::pin!(bus.subscribe());
 
-        bus.publish(TestEvent {
+        bus.publish(SseTestEvent {
             msg: "hello".into(),
         })
         .unwrap();
@@ -268,7 +268,7 @@ mod tests {
 
     #[test]
     fn subscriber_count_tracks_receivers() {
-        let bus: SseBus<TestEvent> = SseBus::new(16).unwrap();
+        let bus: SseBus<SseTestEvent> = SseBus::new(16).unwrap();
         assert_eq!(bus.subscriber_count(), 0);
 
         let _s1 = bus.subscribe();
@@ -278,8 +278,8 @@ mod tests {
     #[tokio::test]
     async fn subscribe_after_replays_newer_events() {
         let bus = SseBus::new(16).unwrap();
-        let first = bus.publish(TestEvent { msg: "one".into() }).unwrap();
-        let second = bus.publish(TestEvent { msg: "two".into() }).unwrap();
+        let first = bus.publish(SseTestEvent { msg: "one".into() }).unwrap();
+        let second = bus.publish(SseTestEvent { msg: "two".into() }).unwrap();
 
         let mut stream = std::pin::pin!(bus.subscribe_after(Some(&first.id)));
         let replayed = stream.next().await.expect("replayed").unwrap();
@@ -288,7 +288,7 @@ mod tests {
 
     #[test]
     fn capacity_above_maximum_is_rejected() {
-        match SseBus::<TestEvent>::new(MAX_CAPACITY + 1) {
+        match SseBus::<SseTestEvent>::new(MAX_CAPACITY + 1) {
             Ok(_) => panic!("capacity above maximum should fail"),
             Err(error) => assert!(error.to_string().contains("at most")),
         }
@@ -300,7 +300,7 @@ mod tests {
             id: "42".to_string(),
             event: Some("message".to_string()),
             retry: Some(Duration::from_millis(250)),
-            data: TestEvent { msg: "ok".into() },
+            data: SseTestEvent { msg: "ok".into() },
         };
 
         assert!(event.into_axum_event().is_ok());
@@ -323,8 +323,8 @@ mod tests {
     #[tokio::test]
     async fn axum_stream_replays_and_skips_unserializable_events() {
         let bus = SseBus::new(4).unwrap().with_retry(Duration::from_secs(1));
-        let first = bus.publish(TestEvent { msg: "one".into() }).unwrap();
-        bus.publish(TestEvent { msg: "two".into() }).unwrap();
+        let first = bus.publish(SseTestEvent { msg: "one".into() }).unwrap();
+        bus.publish(SseTestEvent { msg: "two".into() }).unwrap();
 
         let mut stream = std::pin::pin!(bus.subscribe_axum_after(Some(&first.id)));
         let event = stream.next().await.expect("axum replay").unwrap();
@@ -335,7 +335,7 @@ mod tests {
     async fn axum_live_stream_and_serialization_skip_paths_are_exercised() {
         let bus = SseBus::new(4).unwrap();
         let mut stream = std::pin::pin!(bus.subscribe_axum());
-        bus.publish(TestEvent { msg: "live".into() }).unwrap();
+        bus.publish(SseTestEvent { msg: "live".into() }).unwrap();
         let event = stream.next().await.expect("live event").unwrap();
         drop(event);
 

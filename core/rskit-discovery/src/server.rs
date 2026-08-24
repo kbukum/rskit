@@ -168,42 +168,7 @@ mod tests {
     use std::sync::Arc;
 
     use rskit_errors::AppResult;
-
-    /// Mock server for testing
-    struct MockServer {
-        started: parking_lot::Mutex<bool>,
-        stopped: parking_lot::Mutex<bool>,
-    }
-
-    impl MockServer {
-        fn new() -> Self {
-            Self {
-                started: parking_lot::Mutex::new(false),
-                stopped: parking_lot::Mutex::new(false),
-            }
-        }
-    }
-
-    #[async_trait]
-    impl Component for MockServer {
-        fn name(&self) -> &str {
-            "mock-server"
-        }
-
-        async fn start(&self) -> AppResult<()> {
-            *self.started.lock() = true;
-            Ok(())
-        }
-
-        async fn stop(&self) -> AppResult<()> {
-            *self.stopped.lock() = true;
-            Ok(())
-        }
-
-        fn health(&self) -> Health {
-            Health::healthy("mock-server")
-        }
-    }
+    use rskit_testutil::FakeComponent;
 
     struct ErrorServer {
         fail_start: bool,
@@ -298,7 +263,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_lifecycle_success() {
-        let server = Arc::new(MockServer::new());
+        let server = Arc::new(FakeComponent::new("mock-server"));
         let registry = MockRegistry::new();
         let instance = ServiceInstance {
             id: "test-1".to_string(),
@@ -320,20 +285,20 @@ mod tests {
 
         // Start should start inner server and register
         discovery_server.start().await.unwrap();
-        assert!(*server.started.lock());
+        assert!(server.start_count() >= 1);
         assert_eq!(registry.registered_instances().len(), 1);
         assert_eq!(registry.registered_instances()[0].id, "test-1");
 
         // Stop should deregister and stop inner server
         discovery_server.stop().await.unwrap();
-        assert!(*server.stopped.lock());
+        assert!(server.stop_count() >= 1);
         assert_eq!(registry.deregistered_ids().len(), 1);
         assert_eq!(registry.deregistered_ids()[0], "test-1");
     }
 
     #[tokio::test]
     async fn test_registration_failure_stops_server() {
-        let server = Arc::new(MockServer::new());
+        let server = Arc::new(FakeComponent::new("mock-server"));
         let registry = MockRegistry::new();
         registry.set_register_error(Some("service unavailable".to_string()));
 
@@ -360,16 +325,16 @@ mod tests {
         assert!(result.is_err());
 
         // Server should have started (even though registration failed)
-        assert!(*server.started.lock());
+        assert!(server.start_count() >= 1);
 
         // After a short delay, we should see the stop called
         tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-        assert!(*server.stopped.lock());
+        assert!(server.stop_count() >= 1);
     }
 
     #[tokio::test]
     async fn test_deregistration_failure_doesnt_prevent_stop() {
-        let server = Arc::new(MockServer::new());
+        let server = Arc::new(FakeComponent::new("mock-server"));
         let registry = MockRegistry::new();
         let instance = ServiceInstance {
             id: "test-3".to_string(),
@@ -401,12 +366,12 @@ mod tests {
         assert!(result.is_ok());
 
         // Server should be stopped
-        assert!(*server.stopped.lock());
+        assert!(server.stop_count() >= 1);
     }
 
     #[test]
     fn test_component_name_and_accessors() {
-        let server = Arc::new(MockServer::new());
+        let server = Arc::new(FakeComponent::new("mock-server"));
         let registry = MockRegistry::new();
         let instance = ServiceInstance {
             id: "test-4".to_string(),

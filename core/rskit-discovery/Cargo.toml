@@ -42,3 +42,6 @@ rskit-httpclient = { workspace = true, optional = true }
 rskit-resilience = { workspace = true }
 rskit-stream = { workspace = true }
 rskit-util = { workspace = true }
+
+[dev-dependencies]
+rskit-testutil = { workspace = true }

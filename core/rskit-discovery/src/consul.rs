@@ -349,8 +349,7 @@ fn consul_status_error(response: ErrorResponse) -> AppError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
-    use tokio::sync::oneshot;
+    use rskit_testutil::{FakeHttpServer, FakeResponse};
 
     #[test]
     fn consul_http_timeout_exceeds_blocking_watch_wait() {
@@ -402,8 +401,14 @@ mod tests {
     #[tokio::test]
     async fn consul_resolve_maps_health_entries_from_local_http_server() {
         let body = r#"[{"Service":{"ID":"users-1","Service":"users","Address":"127.0.0.1","Port":8080,"Meta":{"zone":"a"},"Tags":["blue"]}}]"#;
-        let (addr, request) = serve_once(200, &[("X-Consul-Index", "7")], body).await;
-        let consul = ConsulDiscovery::new(&addr, None).unwrap();
+        let server = FakeHttpServer::serve_once(
+            FakeResponse::new(200)
+                .with_header("X-Consul-Index", "7")
+                .with_body(body),
+        )
+        .await
+        .unwrap();
+        let consul = ConsulDiscovery::new(&server.address(), None).unwrap();
 
         let instances = consul.resolve("users").await.unwrap();
 
@@ -415,14 +420,20 @@ mod tests {
             instances[0].metadata.get("zone").map(String::as_str),
             Some("a")
         );
-        let request = request.await.unwrap();
-        assert!(request.starts_with("GET /v1/health/service/users?passing=true "));
+        let request = server.captured_request().await.unwrap();
+        assert!(
+            request
+                .request_line()
+                .starts_with("GET /v1/health/service/users?passing=true ")
+        );
     }
 
     #[tokio::test]
     async fn consul_register_sends_payload_and_token_to_local_http_server() {
-        let (addr, request) = serve_once(200, &[], "").await;
-        let consul = ConsulDiscovery::new(&addr, Some("secret".to_owned())).unwrap();
+        let server = FakeHttpServer::serve_once(FakeResponse::new(200))
+            .await
+            .unwrap();
+        let consul = ConsulDiscovery::new(&server.address(), Some("secret".to_owned())).unwrap();
         let mut metadata = HashMap::new();
         metadata.insert(
             "health_url".to_string(),
@@ -441,82 +452,33 @@ mod tests {
 
         consul.register(&instance).await.unwrap();
 
-        let request = request.await.unwrap();
-        assert!(request.starts_with("PUT /v1/agent/service/register "));
+        let request = server.captured_request().await.unwrap();
         assert!(
             request
-                .to_ascii_lowercase()
-                .contains("x-consul-token: secret")
+                .request_line()
+                .starts_with("PUT /v1/agent/service/register ")
         );
+        assert_eq!(request.header("x-consul-token").as_deref(), Some("secret"));
         assert!(request.contains(r#""ID":"api-1""#));
         assert!(request.contains(r#""HTTP":"http://127.0.0.1:8080/health""#));
     }
 
     #[tokio::test]
     async fn consul_deregister_maps_non_success_status() {
-        let (addr, request) = serve_once(503, &[], "maintenance").await;
-        let consul = ConsulDiscovery::new(&addr, None).unwrap();
+        let server = FakeHttpServer::serve_once(FakeResponse::new(503).with_body("maintenance"))
+            .await
+            .unwrap();
+        let consul = ConsulDiscovery::new(&server.address(), None).unwrap();
 
         let err = consul.deregister("api-1").await.unwrap_err();
 
         assert_eq!(err.code(), rskit_errors::ErrorCode::ExternalService);
         assert!(err.to_string().contains("status 503"));
-        let request = request.await.unwrap();
-        assert!(request.starts_with("PUT /v1/agent/service/deregister/api-1 "));
-    }
-
-    async fn serve_once(
-        status: u16,
-        headers: &[(&str, &str)],
-        body: &'static str,
-    ) -> (String, oneshot::Receiver<String>) {
-        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
-            .await
-            .unwrap();
-        let addr = listener.local_addr().unwrap();
-        let (tx, rx) = oneshot::channel();
-        let headers = headers
-            .iter()
-            .map(|(name, value)| format!("{name}: {value}\r\n"))
-            .collect::<String>();
-        tokio::spawn(async move {
-            let (mut socket, _) = listener.accept().await.unwrap();
-            let mut bytes = Vec::new();
-            let mut buffer = [0u8; 1024];
-            let header_end = loop {
-                let read = socket.read(&mut buffer).await.unwrap();
-                if read == 0 {
-                    break bytes.len();
-                }
-                bytes.extend_from_slice(&buffer[..read]);
-                if let Some(pos) = bytes.windows(4).position(|window| window == b"\r\n\r\n") {
-                    break pos + 4;
-                }
-            };
-            let headers_text = String::from_utf8_lossy(&bytes[..header_end]).to_string();
-            let content_length = headers_text
-                .lines()
-                .find_map(|line| {
-                    let (name, value) = line.split_once(':')?;
-                    name.eq_ignore_ascii_case("content-length")
-                        .then(|| value.trim().parse::<usize>().ok())
-                        .flatten()
-                })
-                .unwrap_or(0);
-            while bytes.len().saturating_sub(header_end) < content_length {
-                let read = socket.read(&mut buffer).await.unwrap();
-                if read == 0 {
-                    break;
-                }
-                bytes.extend_from_slice(&buffer[..read]);
-            }
-            let _ = tx.send(String::from_utf8_lossy(&bytes).to_string());
-            let response = format!(
-                "HTTP/1.1 {status} OK\r\nContent-Length: {}\r\n{headers}\r\n{body}",
-                body.len()
-            );
-            socket.write_all(response.as_bytes()).await.unwrap();
-        });
-        (addr.to_string(), rx)
+        let request = server.captured_request().await.unwrap();
+        assert!(
+            request
+                .request_line()
+                .starts_with("PUT /v1/agent/service/deregister/api-1 ")
+        );
     }
 }

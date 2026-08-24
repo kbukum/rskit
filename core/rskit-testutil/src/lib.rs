@@ -20,6 +20,8 @@ pub mod current_dir;
 pub mod golden;
 /// Hook and event-bus test helpers.
 pub mod hook;
+/// In-process HTTP server fake for transport tests.
+pub mod http_server;
 /// Generic mock provider for testing.
 pub mod mock_provider;
 /// Temporary workspace and fixture helpers.
@@ -31,6 +33,7 @@ pub use config::TestAppConfig;
 pub use current_dir::CurrentDirGuard;
 pub use golden::{BLESS_ENV, Golden, GoldenMode, GoldenOutcome, Match, Normalizer, Rule};
 pub use hook::TestEvent;
+pub use http_server::{CapturedRequest, FakeHttpServer, FakeResponse};
 pub use mock_provider::MockProvider;
 pub use workspace::TestWorkspace;
 

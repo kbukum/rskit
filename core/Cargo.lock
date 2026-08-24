@@ -5600,6 +5600,7 @@ dependencies = [
  "rskit-httpclient",
  "rskit-resilience",
  "rskit-stream",
+ "rskit-testutil",
  "rskit-util",
  "serde",
  "serde_json",
