@@ -21,6 +21,11 @@ pub struct Config {
     /// Timeout for establishing a connection.
     #[serde(default = "default_connect_timeout", with = "duration_seconds")]
     pub connect_timeout: Duration,
+    /// Timeout applied to each individual Redis command (get/set/delete/exists).
+    ///
+    /// Bounds every remote call so a stalled connection cannot hang a caller indefinitely.
+    #[serde(default = "default_operation_timeout", with = "duration_seconds")]
+    pub operation_timeout: Duration,
     /// Optional prefix prepended to every key.
     pub key_prefix: Option<String>,
 }
@@ -33,6 +38,7 @@ impl fmt::Debug for Config {
             .field("password", &self.password.as_ref().map(|_| "<redacted>"))
             .field("database", &self.database)
             .field("connect_timeout", &self.connect_timeout)
+            .field("operation_timeout", &self.operation_timeout)
             .field("key_prefix", &self.key_prefix)
             .finish()
     }
@@ -46,6 +52,7 @@ impl Default for Config {
             password: None,
             database: 0,
             connect_timeout: default_connect_timeout(),
+            operation_timeout: default_operation_timeout(),
             key_prefix: None,
         }
     }
@@ -75,6 +82,10 @@ fn default_port() -> u16 {
 }
 
 fn default_connect_timeout() -> Duration {
+    Duration::from_secs(5)
+}
+
+fn default_operation_timeout() -> Duration {
     Duration::from_secs(5)
 }
 

@@ -109,6 +109,7 @@ fn default_config_targets_local_redis_without_prefix() {
     assert!(config.password.is_none());
     assert_eq!(config.database, 0);
     assert_eq!(config.connect_timeout, Duration::from_secs(5));
+    assert_eq!(config.operation_timeout, Duration::from_secs(5));
     assert!(config.key_prefix.is_none());
 }
 
@@ -231,6 +232,18 @@ async fn zero_connect_timeout_is_rejected_without_network() {
 }
 
 #[tokio::test]
+async fn zero_operation_timeout_is_rejected_without_network() {
+    let config = Config {
+        operation_timeout: Duration::ZERO,
+        ..Config::default()
+    };
+
+    let err = RedisClient::new(config).await.err().unwrap();
+
+    assert_eq!(err.code(), ErrorCode::InvalidInput);
+}
+
+#[tokio::test]
 async fn invalid_connection_url_is_rejected_before_connecting() {
     let config = Config {
         host: "bad host".to_string(),
@@ -322,6 +335,65 @@ async fn factory_uses_cache_prefix_when_adapter_prefix_is_absent() {
     };
 
     assert_eq!(err.code(), ErrorCode::InvalidInput);
+}
+
+/// A fake Redis that completes the connection handshake but never answers data commands,
+/// used to prove the per-operation timeout fires instead of hanging forever.
+struct StallingRedis {
+    port: u16,
+    task: JoinHandle<()>,
+}
+
+impl StallingRedis {
+    async fn start() -> Self {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let task = tokio::spawn(async move {
+            loop {
+                let Ok((stream, _)) = listener.accept().await else {
+                    break;
+                };
+                tokio::spawn(async move {
+                    let (read, mut write) = stream.into_split();
+                    let mut reader = BufReader::new(read);
+                    while let Some(command) = read_resp_array(&mut reader).await {
+                        match command.first().map(String::as_str) {
+                            // Answer the handshake so `ConnectionManager::new` succeeds.
+                            Some("CLIENT" | "PING" | "HELLO") => {
+                                let _ = write.write_all(b"+OK\r\n").await;
+                            }
+                            // Every real command stalls: never write a reply.
+                            _ => std::future::pending::<()>().await,
+                        }
+                    }
+                });
+            }
+        });
+        Self { port, task }
+    }
+}
+
+impl Drop for StallingRedis {
+    fn drop(&mut self) {
+        self.task.abort();
+    }
+}
+
+#[tokio::test]
+async fn operation_timeout_fires_when_server_never_replies() {
+    let server = StallingRedis::start().await;
+    let client = RedisClient::new(Config {
+        port: server.port,
+        operation_timeout: Duration::from_millis(50),
+        ..Config::default()
+    })
+    .await
+    .unwrap();
+
+    let err = client.get("key").await.unwrap_err();
+
+    assert_eq!(err.code(), ErrorCode::Timeout);
+    assert!(err.message().contains("redis get timed out"));
 }
 
 #[test]

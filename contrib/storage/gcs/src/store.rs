@@ -113,6 +113,29 @@ fn config_err(stage: &str, e: impl std::fmt::Display) -> AppError {
     )
 }
 
+/// Report whether a Cloud Storage error is a genuine "object not found".
+///
+/// Only a gRPC `NotFound` status means the object is absent; transport, auth, and other
+/// service failures carry a different (or no) status and must not be reported as absence.
+fn object_error_is_missing(e: &google_cloud_storage::Error) -> bool {
+    e.status()
+        .is_some_and(|status| status.code == google_cloud_gax::error::rpc::Code::NotFound)
+}
+
+/// Map a Cloud Storage object error to a typed [`AppError`], preserving the not-found distinction.
+///
+/// A missing object maps to [`ErrorCode::NotFound`]; every other failure (transport, auth,
+/// throttling, service errors) maps to [`ErrorCode::ExternalService`] so callers never mistake a
+/// real failure for absence.
+fn map_object_error(op: &str, e: &google_cloud_storage::Error) -> AppError {
+    let code = if object_error_is_missing(e) {
+        ErrorCode::NotFound
+    } else {
+        ErrorCode::ExternalService
+    };
+    AppError::new(code, format!("GCS {op} failed: {e}"))
+}
+
 impl<S> GcsStore<S>
 where
     S: google_cloud_storage::stub::Storage + 'static,
@@ -201,7 +224,7 @@ where
             .read_object(bucket, full_key)
             .send()
             .await
-            .map_err(|e| AppError::new(ErrorCode::NotFound, format!("GCS download failed: {e}")))?;
+            .map_err(|e| map_object_error("download", &e))?;
 
         let mut data = Vec::new();
         while let Some(chunk) = response.next().await {
@@ -236,7 +259,8 @@ where
     async fn exists(&self, key: &str) -> AppResult<bool> {
         match self.head(key).await {
             Ok(_) => Ok(true),
-            Err(_) => Ok(false),
+            Err(e) if e.code() == ErrorCode::NotFound => Ok(false),
+            Err(e) => Err(e),
         }
     }
 
@@ -250,7 +274,7 @@ where
             .set_object(full_key)
             .send()
             .await
-            .map_err(|e| AppError::new(ErrorCode::NotFound, format!("GCS head failed: {e}")))?;
+            .map_err(|e| map_object_error("head", &e))?;
 
         stored_file_from_object(prefixed_key(None, key), obj)
     }
@@ -826,6 +850,47 @@ mod tests {
         store_with(FailingStorage, FailingControl)
     }
 
+    fn not_found_error() -> google_cloud_storage::Error {
+        google_cloud_gax::error::Error::service(
+            google_cloud_gax::error::rpc::Status::default()
+                .set_code(google_cloud_gax::error::rpc::Code::NotFound)
+                .set_message("object not found"),
+        )
+    }
+
+    #[derive(Debug, Default)]
+    struct NotFoundControl;
+
+    impl google_cloud_storage::stub::StorageControl for NotFoundControl {
+        async fn delete_object(
+            &self,
+            _req: DeleteObjectRequest,
+            _options: GaxRequestOptions,
+        ) -> google_cloud_storage::Result<Response<()>> {
+            Err(not_found_error())
+        }
+
+        async fn get_object(
+            &self,
+            _req: GetObjectRequest,
+            _options: GaxRequestOptions,
+        ) -> google_cloud_storage::Result<Response<Object>> {
+            Err(not_found_error())
+        }
+
+        async fn list_objects(
+            &self,
+            _req: ListObjectsRequest,
+            _options: GaxRequestOptions,
+        ) -> google_cloud_storage::Result<Response<ListObjectsResponse>> {
+            Err(not_found_error())
+        }
+    }
+
+    fn missing_store() -> GcsStore<FailingStorage> {
+        store_with(FailingStorage, NotFoundControl)
+    }
+
     #[tokio::test]
     async fn upload_maps_transport_failure_to_internal_error() {
         let err = failing_store()
@@ -841,9 +906,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn download_maps_transport_failure_to_not_found_error() {
+    async fn download_maps_transport_failure_to_external_service_error() {
         let err = failing_store().download("input.txt").await.unwrap_err();
-        assert_eq!(err.code(), ErrorCode::NotFound);
+        assert_eq!(err.code(), ErrorCode::ExternalService);
         assert!(err.message().contains("GCS download failed"));
     }
 
@@ -864,12 +929,22 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn head_maps_transport_failure_to_not_found_error() {
+    async fn head_maps_transport_failure_to_external_service_error() {
         let err = failing_store().head("input.txt").await.unwrap_err();
+        assert_eq!(err.code(), ErrorCode::ExternalService);
+        assert!(err.message().contains("GCS head failed"));
+        // A transport failure is a real error, not absence: `exists` must propagate it.
+        let exists_err = failing_store().exists("input.txt").await.unwrap_err();
+        assert_eq!(exists_err.code(), ErrorCode::ExternalService);
+    }
+
+    #[tokio::test]
+    async fn head_and_exists_report_absence_only_on_not_found_status() {
+        let err = missing_store().head("input.txt").await.unwrap_err();
         assert_eq!(err.code(), ErrorCode::NotFound);
         assert!(err.message().contains("GCS head failed"));
-        // `exists` swallows the head error and reports absence.
-        assert!(!failing_store().exists("input.txt").await.unwrap());
+        // A genuine NotFound status is the only case where `exists` reports absence.
+        assert!(!missing_store().exists("input.txt").await.unwrap());
     }
 
     #[tokio::test]
