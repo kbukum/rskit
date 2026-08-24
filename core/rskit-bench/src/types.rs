@@ -48,7 +48,9 @@ pub struct Prediction<L = String> {
 /// Pairs ground-truth sample with its prediction for metric computation.
 #[derive(Debug, Clone)]
 pub struct ScoredSample<L = String> {
+    /// Ground-truth sample that was evaluated.
     pub sample: BenchSample<L>,
+    /// Prediction produced for the sample.
     pub prediction: Prediction<L>,
 }
 

@@ -120,12 +120,61 @@ impl Reporter for FailingReporter {
     }
 }
 
+#[derive(Clone, Default)]
+struct RecordingReporter {
+    calls: Arc<Mutex<usize>>,
+}
+
+impl Reporter for RecordingReporter {
+    fn name(&self) -> &str {
+        "recording"
+    }
+
+    fn generate(&self, writer: &mut dyn Write, result: &BenchRunResult) -> AppResult<()> {
+        *self.calls.lock() += 1;
+        writer
+            .write_all(result.id.as_bytes())
+            .map_err(|e| AppError::new(ErrorCode::Internal, format!("write: {e}")))
+    }
+}
+
+/// Storage whose `latest()` fails with a non-`NotFound` error, modelling a real
+/// baseline-load failure (corrupt file, permission denied) rather than a missing
+/// first-run baseline.
+struct BrokenLatestStorage;
+
+impl RunStorage for BrokenLatestStorage {
+    fn save(&self, result: &BenchRunResult) -> AppResult<String> {
+        Ok(result.id.clone())
+    }
+
+    fn load(&self, run_id: &str) -> AppResult<BenchRunResult> {
+        Err(AppError::new(
+            ErrorCode::NotFound,
+            format!("missing {run_id}"),
+        ))
+    }
+
+    fn latest(&self) -> AppResult<BenchRunResult> {
+        Err(AppError::new(
+            ErrorCode::ExternalService,
+            "baseline store unreachable",
+        ))
+    }
+
+    fn list(&self, _opts: ListOptions) -> AppResult<Vec<BenchRunSummary>> {
+        Ok(Vec::new())
+    }
+}
+
 #[tokio::test]
-async fn runner_records_successes_failures_metrics_storage_and_reporter_errors() {
+async fn runner_records_successes_failures_metrics_and_storage() {
     let loader = DatasetLoader::new(fixture_dataset_dir(), string_label_mapper())
         .with_manifest_file("custom-manifest.json");
     let storage = RecordingStorage::default();
     let saved = storage.saved.clone();
+    let reporter = RecordingReporter::default();
+    let reporter_calls = reporter.calls.clone();
     let evaluator = EvaluatorFunc::new("fixture-evaluator", |input| {
         Box::pin(async move {
             let text = String::from_utf8_lossy(&input);
@@ -148,7 +197,7 @@ async fn runner_records_successes_failures_metrics_storage_and_reporter_errors()
         .register("fixture", Box::new(evaluator), 2)
         .with_metrics(exact_match_suite())
         .with_storage(Box::new(storage))
-        .with_reporter(Box::new(FailingReporter))
+        .with_reporter(Box::new(reporter))
         .with_clock(Arc::new(FixedClock::new(1_704_067_200, 42)))
         .run(
             &loader,
@@ -179,6 +228,98 @@ async fn runner_records_successes_failures_metrics_storage_and_reporter_errors()
             .any(|sample| sample.error.contains("model refused sample"))
     );
     assert_eq!(saved.lock().len(), 1);
+    assert_eq!(*reporter_calls.lock(), 1);
+}
+
+#[tokio::test]
+async fn runner_surfaces_reporter_failure_instead_of_swallowing_it() {
+    let loader = DatasetLoader::new(fixture_dataset_dir(), string_label_mapper())
+        .with_manifest_file("custom-manifest.json");
+    let evaluator = EvaluatorFunc::new("fixture-evaluator", |_input| {
+        Box::pin(async {
+            Ok(Prediction {
+                label: "yes".to_owned(),
+                score: 0.9,
+                ..Prediction::default()
+            })
+        })
+    });
+
+    let error = BenchRunner::new()
+        .register("fixture", Box::new(evaluator), 1)
+        .with_metrics(exact_match_suite())
+        .with_reporter(Box::new(FailingReporter))
+        .with_clock(Arc::new(FixedClock::new(1_704_067_200, 42)))
+        .run(&loader, RunOptions::default().with_concurrency(1))
+        .await
+        .expect_err("a failing reporter must not be reported as a successful run");
+
+    assert_eq!(error.code(), ErrorCode::Internal);
+    assert!(
+        error.message().contains("failing"),
+        "message: {}",
+        error.message()
+    );
+}
+
+#[tokio::test]
+async fn runner_fails_gate_when_baseline_load_errors_and_regression_gate_is_on() {
+    let loader = DatasetLoader::new(fixture_dataset_dir(), string_label_mapper())
+        .with_manifest_file("custom-manifest.json");
+    let evaluator = EvaluatorFunc::new("fixture-evaluator", |_input| {
+        Box::pin(async {
+            Ok(Prediction {
+                label: "yes".to_owned(),
+                score: 0.9,
+                ..Prediction::default()
+            })
+        })
+    });
+
+    let error = BenchRunner::new()
+        .register("fixture", Box::new(evaluator), 1)
+        .with_metrics(exact_match_suite())
+        .with_storage(Box::new(BrokenLatestStorage))
+        .with_comparator(rskit_bench::compare::RunComparator::default())
+        .with_clock(Arc::new(FixedClock::new(1_704_067_200, 10)))
+        .run(&loader, RunOptions::default().with_fail_on_regression(true))
+        .await
+        .expect_err("a baseline-load failure must not silently pass the regression gate");
+
+    assert_eq!(error.code(), ErrorCode::ExternalService);
+    assert!(
+        error.message().contains("cannot verify regression"),
+        "message: {}",
+        error.message()
+    );
+}
+
+#[tokio::test]
+async fn runner_first_run_passes_gate_without_a_baseline() {
+    let loader = DatasetLoader::new(fixture_dataset_dir(), string_label_mapper())
+        .with_manifest_file("custom-manifest.json");
+    let evaluator = EvaluatorFunc::new("fixture-evaluator", |_input| {
+        Box::pin(async {
+            Ok(Prediction {
+                label: "yes".to_owned(),
+                score: 0.9,
+                ..Prediction::default()
+            })
+        })
+    });
+
+    // Empty storage: `latest()` returns NotFound, which is a legitimate first run.
+    let result = BenchRunner::new()
+        .register("fixture", Box::new(evaluator), 1)
+        .with_metrics(exact_match_suite())
+        .with_storage(Box::new(RecordingStorage::default()))
+        .with_comparator(rskit_bench::compare::RunComparator::default())
+        .with_clock(Arc::new(FixedClock::new(1_704_067_200, 10)))
+        .run(&loader, RunOptions::default().with_fail_on_regression(true))
+        .await
+        .expect("first run without a baseline must pass the gate");
+
+    assert_eq!(result.metrics[0].name, "exact_match");
 }
 
 #[tokio::test]

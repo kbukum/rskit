@@ -4,21 +4,25 @@ use crate::result::{BenchRunResult, MetricResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+/// Compares two benchmark runs and classifies metric changes by significance.
 pub struct RunComparator {
     threshold: f64,
 }
 
 impl RunComparator {
+    /// Creates a comparator with the default absolute significance threshold.
     pub fn new() -> Self {
         Self { threshold: 0.01 }
     }
 
     #[must_use]
+    /// Sets the minimum absolute metric delta treated as significant.
     pub fn with_threshold(mut self, threshold: f64) -> Self {
         self.threshold = threshold;
         self
     }
 
+    /// Builds a diff from `base` to `target`, including metric changes and per-sample correctness changes.
     pub fn compare(&self, base: &BenchRunResult, target: &BenchRunResult) -> RunDiff {
         let mut changes = Vec::new();
 
@@ -91,15 +95,22 @@ impl Default for RunComparator {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Difference summary between two benchmark runs.
 pub struct RunDiff {
+    /// Identifier of the baseline run.
     pub base_id: String,
+    /// Identifier of the target run being compared.
     pub target_id: String,
+    /// Metric-level changes found in metrics present in both runs.
     pub changes: Vec<MetricChange>,
+    /// Sample identifiers that were incorrect in the baseline and correct in the target run.
     pub fixed: Vec<String>,
+    /// Sample identifiers that were correct in the baseline and incorrect in the target run.
     pub regressed: Vec<String>,
 }
 
 impl RunDiff {
+    /// Formats the diff as a concise multi-line human-readable summary.
     pub fn summary(&self) -> String {
         let mut lines = Vec::new();
         lines.push(format!("Comparison: {} → {}", self.base_id, self.target_id));
@@ -120,17 +131,25 @@ impl RunDiff {
         lines.join("\n")
     }
 
+    /// Returns true when any significant metric change moved in the negative direction.
     pub fn has_regression(&self) -> bool {
         self.changes.iter().any(|c| !c.improved && c.significant)
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// A single metric value change between two benchmark runs.
 pub struct MetricChange {
+    /// Metric name, or dotted sub-metric name for entries from the metric value map.
     pub name: String,
+    /// Metric value in the baseline run.
     pub old_value: f64,
+    /// Metric value in the target run.
     pub new_value: f64,
+    /// Difference computed as `new_value - old_value`.
     pub delta: f64,
+    /// Whether the metric value increased in the target run.
     pub improved: bool,
+    /// Whether the absolute delta meets the comparator significance threshold.
     pub significant: bool,
 }

@@ -52,6 +52,7 @@ impl<L> BenchRunner<L>
 where
     L: Clone + Send + Sync + std::fmt::Display + 'static,
 {
+    /// Creates an empty benchmark runner.
     pub fn new() -> Self {
         Self {
             branches: Vec::new(),
@@ -63,6 +64,7 @@ where
         }
     }
 
+    /// Registers an evaluator branch with a display name and tier.
     pub fn register(
         mut self,
         name: impl Into<String>,
@@ -78,24 +80,28 @@ where
     }
 
     #[must_use]
+    /// Sets the metric suite computed after evaluator branches finish.
     pub fn with_metrics(mut self, suite: Suite<L>) -> Self {
         self.metrics = Some(suite);
         self
     }
 
     #[must_use]
+    /// Sets the result storage backend used for saving runs and loading comparison baselines.
     pub fn with_storage(mut self, storage: Box<dyn RunStorage>) -> Self {
         self.storage = Some(storage);
         self
     }
 
     #[must_use]
+    /// Adds a reporter invoked after the benchmark result is assembled.
     pub fn with_reporter(mut self, reporter: Box<dyn Reporter>) -> Self {
         self.reporters.push(reporter);
         self
     }
 
     #[must_use]
+    /// Sets the comparator used for optional regression checks against the latest stored run.
     pub fn with_comparator(mut self, comparator: RunComparator) -> Self {
         self.comparator = Some(comparator);
         self
@@ -108,6 +114,7 @@ where
         self
     }
 
+    /// Runs all registered evaluator branches over the loaded dataset and returns the benchmark result.
     pub async fn run(
         &self,
         loader: &DatasetLoader<L>,
@@ -329,29 +336,56 @@ where
             storage.save(&result)?;
         }
 
+        let mut reporter_failures: Vec<(String, AppError)> = Vec::new();
         for reporter in &self.reporters {
             let mut buf = Vec::new();
             if let Err(e) = reporter.generate(&mut buf, &result) {
-                tracing::warn!(
+                tracing::error!(
                     reporter = reporter.name(),
                     error = %e,
-                    "Report generation failed"
+                    "report generation failed"
                 );
+                reporter_failures.push((reporter.name().to_string(), e));
             }
         }
+        if !reporter_failures.is_empty() {
+            let failed_names: Vec<String> = reporter_failures
+                .iter()
+                .map(|(name, _)| name.clone())
+                .collect();
+            let (_, first_error) = reporter_failures.remove(0);
+            return Err(first_error.context(format!(
+                "report generation failed for {} reporter(s): {}",
+                failed_names.len(),
+                failed_names.join(", ")
+            )));
+        }
 
-        if let (Some(comparator), Some(storage)) = (&self.comparator, &self.storage)
-            && let Ok(prev) = storage.latest()
-        {
-            let diff = comparator.compare(&prev, &result);
-            if opts.fail_on_regression && diff.has_regression() {
-                let error = AppError::new(
-                    ErrorCode::Internal,
-                    format!("Regression detected:\n{}", diff.summary()),
-                );
-                return Err(error);
+        if let (Some(comparator), Some(storage)) = (&self.comparator, &self.storage) {
+            match storage.latest() {
+                Ok(prev) => {
+                    let diff = comparator.compare(&prev, &result);
+                    if opts.fail_on_regression && diff.has_regression() {
+                        return Err(AppError::new(
+                            ErrorCode::Internal,
+                            format!("Regression detected:\n{}", diff.summary()),
+                        ));
+                    }
+                    tracing::info!("{}", diff.summary());
+                }
+                // No prior run is a legitimate first-run baseline, not a failure.
+                Err(e) if e.code() == ErrorCode::NotFound => {
+                    tracing::debug!("no previous run to compare against");
+                }
+                // A real failure to load the baseline must not silently disable the
+                // regression gate: surface it when the caller demanded the gate.
+                Err(e) => {
+                    if opts.fail_on_regression {
+                        return Err(e.context("cannot verify regression: loading baseline run"));
+                    }
+                    tracing::warn!(error = %e, "skipping regression comparison: baseline load failed");
+                }
             }
-            tracing::info!("{}", diff.summary());
         }
 
         Ok(result)

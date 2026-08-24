@@ -11,6 +11,7 @@ pub struct JUnitReporter {
 }
 
 impl JUnitReporter {
+    /// Creates a JUnit reporter with the XML test suite name.
     pub fn new(suite_name: impl Into<String>) -> Self {
         Self {
             suite_name: suite_name.into(),

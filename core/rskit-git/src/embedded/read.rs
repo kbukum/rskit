@@ -487,20 +487,24 @@ fn git2_time_to_system_time(time: git2::Time) -> SystemTime {
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
-
     use rskit_errors::ErrorCode;
+    use rskit_testutil::TestWorkspace;
 
     use crate::read::{Differ, IgnoreReader};
 
     #[test]
     fn status_includes_untracked_files_but_excludes_ignored_paths() {
-        let root = rskit_fs::TempDir::new().expect("temp dir");
-        let repo = super::super::init(root.path()).expect("init repo");
-        fs::write(root.path().join(".gitignore"), "target/\n").expect("write ignore");
-        fs::write(root.path().join("visible.rs"), "fn main() {}\n").expect("write source");
-        fs::create_dir_all(root.path().join("target/debug")).expect("create target");
-        fs::write(root.path().join("target/debug/app"), "binary\n").expect("write ignored file");
+        let workspace = TestWorkspace::new("git-status");
+        let repo = super::super::init(workspace.path()).expect("init repo");
+        workspace
+            .write_file(".gitignore", b"target/\n")
+            .expect("write ignore");
+        workspace
+            .write_file("visible.rs", b"fn main() {}\n")
+            .expect("write source");
+        workspace
+            .write_file("target/debug/app", b"binary\n")
+            .expect("write ignored file");
 
         let paths = repo
             .status()
@@ -515,11 +519,14 @@ mod tests {
 
     #[test]
     fn ignore_reader_reports_gitignored_paths_without_requiring_files() {
-        let root = rskit_fs::TempDir::new().expect("temp dir");
-        let repo = super::super::init(root.path()).expect("init repo");
-        fs::write(root.path().join(".gitignore"), "target/\n").expect("write ignore");
-        fs::create_dir_all(root.path().join("target/debug")).expect("create target");
-        fs::write(root.path().join("visible.rs"), "fn main() {}\n").expect("write source");
+        let workspace = TestWorkspace::new("git-ignore");
+        let repo = super::super::init(workspace.path()).expect("init repo");
+        workspace
+            .write_file(".gitignore", b"target/\n")
+            .expect("write ignore");
+        workspace
+            .write_file("visible.rs", b"fn main() {}\n")
+            .expect("write source");
 
         assert!(
             repo.is_ignored("target/debug/app")
@@ -534,8 +541,8 @@ mod tests {
 
     #[test]
     fn ignore_reader_rejects_invalid_repository_paths() {
-        let root = rskit_fs::TempDir::new().expect("temp dir");
-        let repo = super::super::init(root.path()).expect("init repo");
+        let workspace = TestWorkspace::new("git-ignore-invalid");
+        let repo = super::super::init(workspace.path()).expect("init repo");
 
         let err = repo
             .is_ignored("../target/debug/app")
@@ -553,8 +560,8 @@ mod tests {
 
     #[test]
     fn ignore_reader_rejects_bare_repositories() {
-        let root = rskit_fs::TempDir::new().expect("temp dir");
-        let repo = super::super::init_bare(root.path()).expect("init bare repo");
+        let workspace = TestWorkspace::new("git-ignore-bare");
+        let repo = super::super::init_bare(workspace.path()).expect("init bare repo");
 
         let err = repo
             .is_ignored("target/debug/app")

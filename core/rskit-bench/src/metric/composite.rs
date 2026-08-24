@@ -2,6 +2,7 @@ use super::Metric;
 use crate::{MetricResult, ScoredSample};
 use std::collections::HashMap;
 
+/// Creates a composite metric that averages constituent metric values by their supplied weights.
 pub fn weighted<L>(metrics: Vec<(Box<dyn Metric<L>>, f64)>) -> Box<dyn Metric<L>>
 where
     L: Send + Sync + 'static,

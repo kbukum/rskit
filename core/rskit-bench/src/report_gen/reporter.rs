@@ -6,7 +6,9 @@ use std::io::Write;
 
 /// Generates formatted output from benchmark results.
 pub trait Reporter: Send + Sync {
+    /// Returns the stable reporter name used in diagnostics.
     fn name(&self) -> &str;
+    /// Writes a report for a benchmark run result.
     fn generate(&self, writer: &mut dyn Write, result: &BenchRunResult) -> AppResult<()>;
 }
 

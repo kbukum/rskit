@@ -259,16 +259,10 @@ async fn collector_runs_transforms_publishes_targets_and_reuses_done_cache() {
                 ..DatasetLimits::default()
             },
         )),
-        vec![
-            Box::new(CountingTarget {
-                name: "counting",
-                fail: false,
-            }),
-            Box::new(CountingTarget {
-                name: "failing",
-                fail: true,
-            }),
-        ],
+        vec![Box::new(CountingTarget {
+            name: "counting",
+            fail: false,
+        })],
         CollectorConfig {
             output_dir: dir.path().to_path_buf(),
             concurrency: 2,
@@ -318,11 +312,6 @@ async fn collector_runs_transforms_publishes_targets_and_reuses_done_cache() {
             .iter()
             .any(|event| event == "publish-done:counting:2")
     );
-    assert!(
-        observed
-            .iter()
-            .any(|event| event.starts_with("publish-error:failing:"))
-    );
 
     let cached_progress = RecordingProgress::default();
     let cached_events = cached_progress.events();
@@ -351,6 +340,60 @@ async fn collector_runs_transforms_publishes_targets_and_reuses_done_cache() {
             .lock()
             .iter()
             .any(|event| event == "cached:0:fixture:2")
+    );
+}
+
+#[tokio::test]
+async fn collector_surfaces_publish_target_failure_instead_of_success() {
+    let dir = TempDir::new().unwrap();
+    let progress = RecordingProgress::default();
+    let events = progress.events();
+    let source = FixtureSource::new("fixture", vec![item(b"real", Label::Real, "fixture", 1)]);
+
+    let err = Collector::new(
+        vec![Box::new(source)],
+        Vec::new(),
+        Arc::new(LocalBlobSink::new(dir.path(), DatasetLimits::default())),
+        vec![
+            Box::new(CountingTarget {
+                name: "counting",
+                fail: false,
+            }),
+            Box::new(CountingTarget {
+                name: "failing",
+                fail: true,
+            }),
+        ],
+        CollectorConfig {
+            output_dir: dir.path().to_path_buf(),
+            concurrency: 1,
+            source_timeout_secs: 0.0,
+            force: false,
+            limits: DatasetLimits::default(),
+        },
+        Box::new(progress),
+    )
+    .run(&CancellationToken::new())
+    .await
+    .expect_err("a failed publish target must not be reported as a successful run");
+
+    assert_eq!(err.code(), ErrorCode::ExternalService);
+    assert!(
+        err.message().contains("failing"),
+        "message: {}",
+        err.message()
+    );
+    // The failure is reported through progress and the successful target still ran.
+    let observed = events.lock().clone();
+    assert!(
+        observed
+            .iter()
+            .any(|event| event == "publish-done:counting:1")
+    );
+    assert!(
+        observed
+            .iter()
+            .any(|event| event.starts_with("publish-error:failing:"))
     );
 }
 

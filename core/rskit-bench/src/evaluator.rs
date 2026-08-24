@@ -50,6 +50,7 @@ pub struct EvaluatorFunc<L = String> {
 }
 
 impl<L> EvaluatorFunc<L> {
+    /// Creates an evaluator with a static name and async prediction closure.
     pub fn new<F>(name: &'static str, func: F) -> Self
     where
         F: Fn(Vec<u8>) -> BoxFuture<'static, AppResult<Prediction<L>>> + Send + Sync + 'static,
@@ -93,6 +94,7 @@ where
     TI: Fn(Vec<u8>) -> I + Send + Sync,
     TO: Fn(O) -> Prediction<L> + Send + Sync,
 {
+    /// Creates an evaluator adapter around a request-response provider and conversion functions.
     pub fn new(
         provider: impl RequestResponse<I, O> + Send + Sync + 'static,
         to_input: TI,

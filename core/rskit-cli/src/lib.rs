@@ -18,6 +18,8 @@
 //!   interactive prompts (line, rich raw-mode, and scripted media) with a non-interactive fallback.
 //! - [`signal`] — caller-declared graceful shutdown via [`ShutdownController`] and [`CancellationToken`], plus the [`on_ctrl_c`] convenience for the single-signal case.
 
+#![warn(missing_docs)]
+
 pub mod live;
 pub mod progress;
 pub mod prompt;

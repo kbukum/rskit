@@ -5,9 +5,12 @@ use crate::types::{BenchSample, LabelMapper};
 use rskit_errors::AppResult;
 use std::path::PathBuf;
 
+/// Configuration for loading benchmark datasets from a manifest.
 pub struct DatasetLoaderConfig {
+    /// Manifest file name relative to the dataset directory.
     pub manifest_file: String,
     #[allow(clippy::type_complexity)]
+    /// Optional predicate used to exclude manifest samples before content is read.
     pub filter: Option<Box<dyn Fn(&Sample) -> bool + Send + Sync>>,
 }
 
@@ -20,6 +23,7 @@ impl Default for DatasetLoaderConfig {
     }
 }
 
+/// Loads manifest samples and maps their string labels into typed benchmark samples.
 pub struct DatasetLoader<L = String> {
     dir: PathBuf,
     mapper: LabelMapper<L>,
@@ -27,6 +31,7 @@ pub struct DatasetLoader<L = String> {
 }
 
 impl<L: Send + Clone + 'static> DatasetLoader<L> {
+    /// Creates a loader rooted at `dir` using `mapper` to convert manifest labels.
     pub fn new(dir: impl Into<PathBuf>, mapper: LabelMapper<L>) -> Self {
         Self {
             dir: dir.into(),
@@ -36,15 +41,18 @@ impl<L: Send + Clone + 'static> DatasetLoader<L> {
     }
 
     #[must_use]
+    /// Sets the manifest file name to load from the dataset directory.
     pub fn with_manifest_file(mut self, name: impl Into<String>) -> Self {
         self.config.manifest_file = name.into();
         self
     }
 
+    /// Loads and validates the configured dataset manifest.
     pub fn manifest(&self) -> AppResult<DatasetManifest> {
         load_manifest_file(&self.dir, &self.config.manifest_file)
     }
 
+    /// Loads all manifest samples that pass the optional filter.
     pub fn all(&self) -> AppResult<Vec<BenchSample<L>>> {
         let manifest = self.manifest()?;
         let mut samples = Vec::new();
@@ -67,6 +75,7 @@ impl<L: Send + Clone + 'static> DatasetLoader<L> {
         Ok(samples)
     }
 
+    /// Sets a predicate that filters manifest samples before loading them.
     pub fn filter<F>(mut self, predicate: F) -> Self
     where
         F: Fn(&Sample) -> bool + Send + Sync + 'static,

@@ -18,6 +18,7 @@ pub struct TimingMiddleware<L> {
 }
 
 impl<L: Send + Sync + Clone + 'static> TimingMiddleware<L> {
+    /// Creates timing middleware around an evaluator.
     pub fn new(inner: Box<dyn Evaluator<L>>) -> Self {
         Self {
             inner,
@@ -33,10 +34,12 @@ impl<L: Send + Sync + Clone + 'static> TimingMiddleware<L> {
         self
     }
 
+    /// Returns recorded sample identifiers and elapsed evaluation durations.
     pub fn timings(&self) -> Vec<(String, Duration)> {
         self.timings.lock().clone()
     }
 
+    /// Returns the mean recorded evaluation duration, or zero when no timings have been recorded.
     pub fn average(&self) -> Duration {
         let t = self.timings.lock();
         if t.is_empty() {
@@ -85,6 +88,7 @@ pub struct CachingMiddleware<L> {
 }
 
 impl<L: Send + Sync + Clone + 'static> CachingMiddleware<L> {
+    /// Creates caching middleware around an evaluator.
     pub fn new(inner: Box<dyn Evaluator<L>>) -> Self {
         Self {
             inner,
@@ -94,10 +98,12 @@ impl<L: Send + Sync + Clone + 'static> CachingMiddleware<L> {
         }
     }
 
+    /// Returns the number of evaluations served from the cache.
     pub fn hit_count(&self) -> u64 {
         *self.hits.lock()
     }
 
+    /// Returns the number of evaluations forwarded to the wrapped evaluator.
     pub fn miss_count(&self) -> u64 {
         *self.misses.lock()
     }

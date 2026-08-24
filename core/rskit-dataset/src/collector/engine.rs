@@ -233,6 +233,7 @@ impl<T: DatasetItem> Collector<T> {
         self.sink.finish().await?;
 
         // ── Publish to targets ───────────────────────────────────────
+        let mut publish_failures: Vec<(String, rskit_errors::AppError)> = Vec::new();
         for target in &self.targets {
             if cancel.is_cancelled() {
                 break;
@@ -248,6 +249,7 @@ impl<T: DatasetItem> Collector<T> {
                     self.progress
                         .on_publish_error(target.name(), &e.to_string());
                     tracing::error!(target = target.name(), error = %e, "publish failed");
+                    publish_failures.push((target.name().to_string(), e));
                 }
             }
         }
@@ -256,6 +258,21 @@ impl<T: DatasetItem> Collector<T> {
 
         // Save final manifest
         save_manifest(out.to_path_buf(), manifest).await?;
+
+        // A publish failure must not be reported as a successful run: surface it
+        // (preserving the first target's cause) instead of returning `Ok`.
+        if !publish_failures.is_empty() {
+            let failed_names: Vec<String> = publish_failures
+                .iter()
+                .map(|(name, _)| name.clone())
+                .collect();
+            let (_, first_error) = publish_failures.remove(0);
+            return Err(first_error.context(format!(
+                "publish failed for {} target(s): {}",
+                failed_names.len(),
+                failed_names.join(", ")
+            )));
+        }
 
         tracing::debug!(
             total = result.total_items,

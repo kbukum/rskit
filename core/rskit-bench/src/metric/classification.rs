@@ -8,6 +8,7 @@ fn safe_divide(a: f64, b: f64) -> f64 {
     if b == 0.0 { 0.0 } else { a / b }
 }
 
+/// Creates a binary classification metric that reports precision, recall, F1, accuracy, false-positive rate, and confusion detail.
 pub fn binary_classification<L>(positive_label: L, threshold: f64) -> Box<dyn Metric<L>>
 where
     L: PartialEq + Display + Clone + Send + Sync + 'static,
@@ -81,6 +82,7 @@ impl<L: PartialEq + Display + Clone + Send + Sync + 'static> Metric<L> for Binar
     }
 }
 
+/// Creates a metric that returns an N×N confusion matrix for the supplied label order.
 pub fn confusion_matrix<L>(labels: Vec<L>) -> Box<dyn Metric<L>>
 where
     L: PartialEq + Display + Clone + Send + Sync + 'static,
@@ -124,6 +126,7 @@ impl<L: PartialEq + Display + Clone + Send + Sync + 'static> Metric<L>
     }
 }
 
+/// Creates a metric that evaluates binary classification quality across thresholds and reports the best F1 score.
 pub fn threshold_sweep<L>(positive_label: L, thresholds: Option<Vec<f64>>) -> Box<dyn Metric<L>>
 where
     L: PartialEq + Display + Clone + Send + Sync + 'static,
@@ -184,6 +187,7 @@ impl<L: PartialEq + Display + Clone + Send + Sync + 'static> Metric<L> for Thres
     }
 }
 
+/// Creates a multi-class classification metric with macro and micro precision, recall, F1, and accuracy values.
 pub fn multi_class_classification<L>(labels: Vec<L>) -> Box<dyn Metric<L>>
 where
     L: PartialEq + Display + Clone + Send + Sync + 'static,

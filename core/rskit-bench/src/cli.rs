@@ -9,6 +9,7 @@ use rskit_errors::{AppError, AppResult, ErrorCode};
 use std::io::Write;
 use std::path::PathBuf;
 
+/// Runs common benchmark result commands against a configured result store.
 pub struct CliRunner {
     storage: Box<dyn RunStorage>,
 }
@@ -27,11 +28,13 @@ impl CliRunner {
         Self { storage }
     }
 
+    /// Writes a Markdown report for the newest stored benchmark run.
     pub fn show_latest(&self, writer: &mut dyn Write) -> AppResult<()> {
         let result = self.storage.latest()?;
         self.show_run_detail(writer, &result)
     }
 
+    /// Writes a Markdown report for the stored benchmark run with `run_id`.
     pub fn show_run(&self, writer: &mut dyn Write, run_id: &str) -> AppResult<()> {
         let result = self.storage.load(run_id)?;
         self.show_run_detail(writer, &result)
@@ -42,6 +45,7 @@ impl CliRunner {
         reporter.generate(writer, result)
     }
 
+    /// Compares two stored benchmark runs and writes a summary of metric and sample changes.
     pub fn compare_runs(
         &self,
         writer: &mut dyn Write,
@@ -57,6 +61,7 @@ impl CliRunner {
         Ok(())
     }
 
+    /// Compares the two newest stored benchmark runs and writes a summary.
     pub fn compare_latest(&self, writer: &mut dyn Write) -> AppResult<()> {
         let runs = self.storage.list(ListOptions::default().with_limit(2))?;
         if runs.len() < 2 {
@@ -68,6 +73,7 @@ impl CliRunner {
         self.compare_runs(writer, &runs[1].id, &runs[0].id)
     }
 
+    /// Writes a table of stored benchmark run summaries matching `opts`.
     pub fn list_runs(&self, writer: &mut dyn Write, opts: ListOptions) -> AppResult<()> {
         let runs = self.storage.list(opts)?;
         if runs.is_empty() {
