@@ -131,9 +131,7 @@ impl<P: Provider + 'static> rskit_provider::Stream<CompletionRequest, StreamEven
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{self as llm, types};
-    use futures::StreamExt;
-    use rskit_provider::RequestResponse;
+    use crate::types;
 
     #[test]
     fn test_capabilities_default() {
@@ -158,107 +156,7 @@ mod tests {
         assert_eq!(count_tokens_approx(&msgs), 0);
     }
 
-    /// `MockProvider` only implements `complete` to verify default impls (stream, capabilities, `count_tokens`) compose correctly.
-    struct MockProvider;
-
-    #[async_trait]
-    impl rskit_provider::Provider for MockProvider {
-        fn name(&self) -> &'static str {
-            "mock"
-        }
-    }
-
-    #[async_trait]
-    impl rskit_provider::RequestResponse<CompletionRequest, CompletionResponse> for MockProvider {
-        async fn execute(&self, input: CompletionRequest) -> AppResult<CompletionResponse> {
-            self.complete(input).await
-        }
-    }
-
-    #[async_trait]
-    impl Provider for MockProvider {
-        async fn complete(
-            &self,
-            _request: CompletionRequest,
-        ) -> Result<CompletionResponse, AppError> {
-            Ok(CompletionResponse {
-                message: llm::AssistantMessage {
-                    content: llm::text_content("Hi"),
-                    tool_calls: vec![],
-                    usage: None,
-                },
-                model: "mock".to_string(),
-                usage: rskit_ai::Usage {
-                    input_tokens: 1,
-                    output_tokens: 1,
-                    cached_tokens: 0,
-                    reasoning_tokens: 0,
-                },
-                stop_reason: Some(FinishReason::Stop),
-            })
-        }
-    }
-
-    #[tokio::test]
-    async fn test_mock_provider_complete() {
-        let provider = MockProvider;
-        let request = CompletionRequest {
-            model: "mock".to_string(),
-            messages: vec![types::user("hi")],
-            max_tokens: None,
-            temperature: None,
-            stream: false,
-            tools: None,
-            tool_choice: None,
-        };
-        let resp = provider.complete(request).await.unwrap();
-        assert_eq!(resp.model, "mock");
-    }
-
-    #[tokio::test]
-    async fn test_default_stream_synthesizes_from_complete() {
-        let provider = MockProvider;
-        let request = CompletionRequest {
-            model: "mock".to_string(),
-            messages: vec![types::user("hi")],
-            max_tokens: None,
-            temperature: None,
-            stream: true,
-            tools: None,
-            tool_choice: None,
-        };
-        let mut stream = provider.stream(request).await.unwrap();
-        let mut event_types = vec![];
-        while let Some(event) = stream.next().await {
-            event_types.push(event.event_type());
-        }
-        assert_eq!(
-            event_types,
-            vec!["message.start", "text.delta", "usage.delta", "message.stop"]
-        );
-    }
-
-    #[tokio::test]
-    async fn test_default_count_tokens_uses_approx() {
-        let provider = MockProvider;
-        let msgs = vec![types::user("hello world")];
-        assert_eq!(provider.count_tokens(&msgs), count_tokens_approx(&msgs));
-    }
-
-    #[tokio::test]
-    async fn test_llm_request_response_adapter() {
-        let provider = Arc::new(MockProvider);
-        let adapter = LlmRequestResponse(provider);
-        let request = CompletionRequest {
-            model: "mock".to_string(),
-            messages: vec![types::user("hi")],
-            max_tokens: None,
-            temperature: None,
-            stream: false,
-            tools: None,
-            tool_choice: None,
-        };
-        let resp = adapter.execute(request).await.unwrap();
-        assert_eq!(resp.model, "mock");
-    }
+    // Provider-driven behaviour (complete, default stream synthesis, count_tokens,
+    // and the `LlmRequestResponse` adapter) is proven against the shipped `Echo`
+    // provider in `echo.rs`, so no bespoke provider double is duplicated here.
 }

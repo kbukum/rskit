@@ -2,9 +2,13 @@
 //!
 //! Defines request/response structs, stream helpers,
 //! and the canonical [`Provider`] trait shared across LLM provider implementations.
+#![warn(missing_docs)]
 
 /// LLM request/response types and helper constructors.
 pub mod types;
+
+/// Deterministic echo provider for local composition and downstream tests.
+pub mod echo;
 
 /// Streaming event types emitted during completion.
 pub mod stream_events;
@@ -17,6 +21,7 @@ pub mod registry;
 /// Component lifecycle mixin for LLM providers (D12).
 pub mod lifecycle;
 
+pub use echo::Echo;
 pub use lifecycle::Lifecycle;
 pub use provider::{LlmRequestResponse, LlmStream, Provider};
 pub use registry::{Factory, Registry, default_registry};
