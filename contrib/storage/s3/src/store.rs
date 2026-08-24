@@ -222,7 +222,11 @@ impl FileStore for S3Store {
             .await
         {
             Ok(_) => Ok(true),
-            Err(_) => Ok(false),
+            Err(err) if head_object_is_missing(&err) => Ok(false),
+            Err(err) => Err(AppError::new(
+                ErrorCode::Internal,
+                format!("S3 exists failed: {err}"),
+            )),
         }
     }
 
@@ -325,6 +329,20 @@ fn uploaded_file(
     metadata: HashMap<String, String>,
 ) -> StoredFile {
     StoredFile::new(prefixed_key(None, key), size, content_type).with_metadata(metadata)
+}
+
+/// Distinguish a genuine "object not found" from any other `head_object` failure.
+///
+/// Only a modeled `NotFound` service error or a raw `404` status means the object is absent;
+/// every other outcome (auth, network, throttling, service errors) is a real failure that must
+/// propagate rather than be reported as a successful "does not exist".
+fn head_object_is_missing(
+    err: &aws_sdk_s3::error::SdkError<aws_sdk_s3::operation::head_object::HeadObjectError>,
+) -> bool {
+    use aws_sdk_s3::operation::head_object::HeadObjectError;
+    err.as_service_error()
+        .is_some_and(HeadObjectError::is_not_found)
+        || err.raw_response().map(|r| r.status().as_u16()) == Some(404)
 }
 
 fn stored_file_from_head(
@@ -887,6 +905,21 @@ mod tests {
 
         let (absent, _) = wire_store(wire_config(None), vec![error_response(404, "NotFound")]);
         assert!(!absent.exists("file.txt").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn exists_propagates_non_not_found_errors() {
+        let (denied, _) = wire_store(wire_config(None), vec![error_response(403, "AccessDenied")]);
+        let err = denied.exists("file.txt").await.unwrap_err();
+        assert_eq!(err.code(), ErrorCode::Internal);
+        assert!(err.message().contains("S3 exists failed"));
+
+        let (failed, _) = wire_store(
+            wire_config(None),
+            vec![error_response(500, "InternalError")],
+        );
+        let err = failed.exists("file.txt").await.unwrap_err();
+        assert_eq!(err.code(), ErrorCode::Internal);
     }
 
     #[tokio::test]

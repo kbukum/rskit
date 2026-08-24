@@ -20,6 +20,12 @@ impl RedisClient {
                 "redis connect_timeout must be greater than zero",
             ));
         }
+        if config.operation_timeout.is_zero() {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                "redis operation_timeout must be greater than zero",
+            ));
+        }
         let client = redis::Client::open(config.connection_url()).map_err(|e| {
             AppError::new(ErrorCode::ConnectionFailed, "invalid redis connection URL").with_cause(e)
         })?;
@@ -48,19 +54,34 @@ impl RedisClient {
     fn conn(&self) -> redis::aio::ConnectionManager {
         self.manager.clone()
     }
+
+    /// Bound a single Redis command by the configured per-operation timeout.
+    async fn with_op_timeout<F, T>(&self, op: &str, future: F) -> AppResult<T>
+    where
+        F: std::future::Future<Output = redis::RedisResult<T>>,
+    {
+        match timeout(self.config.operation_timeout, future).await {
+            Ok(result) => result.map_err(redis_err),
+            Err(_) => Err(AppError::new(
+                ErrorCode::Timeout,
+                format!(
+                    "redis {op} timed out after {}ms",
+                    self.config.operation_timeout.as_millis()
+                ),
+            )),
+        }
+    }
 }
 
 #[async_trait::async_trait]
 impl CacheStore for RedisClient {
     async fn get(&self, key: &str) -> AppResult<Option<String>> {
-        self.conn()
-            .get(self.prefixed_key(key))
+        let key = self.prefixed_key(key);
+        self.with_op_timeout("get", async move { self.conn().get(key).await })
             .await
-            .map_err(redis_err)
     }
 
     async fn set(&self, key: &str, val: &str, ttl: Option<Duration>) -> AppResult<()> {
-        let mut conn = self.conn();
         let key = self.prefixed_key(key);
         match ttl {
             Some(ttl) => {
@@ -70,28 +91,33 @@ impl CacheStore for RedisClient {
                         "cache TTL must be greater than zero",
                     ));
                 }
-                conn.pset_ex::<_, _, ()>(&key, val, redis_ttl_millis(ttl)?)
-                    .await
-                    .map_err(redis_err)
+                let millis = redis_ttl_millis(ttl)?;
+                self.with_op_timeout("set", async move {
+                    self.conn().pset_ex::<_, _, ()>(&key, val, millis).await
+                })
+                .await
             }
-            None => conn.set::<_, _, ()>(&key, val).await.map_err(redis_err),
+            None => {
+                self.with_op_timeout("set", async move {
+                    self.conn().set::<_, _, ()>(&key, val).await
+                })
+                .await
+            }
         }
     }
 
     async fn delete(&self, key: &str) -> AppResult<bool> {
+        let key = self.prefixed_key(key);
         let removed: i64 = self
-            .conn()
-            .del(self.prefixed_key(key))
-            .await
-            .map_err(redis_err)?;
+            .with_op_timeout("delete", async move { self.conn().del(key).await })
+            .await?;
         Ok(removed > 0)
     }
 
     async fn exists(&self, key: &str) -> AppResult<bool> {
-        self.conn()
-            .exists(self.prefixed_key(key))
+        let key = self.prefixed_key(key);
+        self.with_op_timeout("exists", async move { self.conn().exists(key).await })
             .await
-            .map_err(redis_err)
     }
 }
 
