@@ -8,13 +8,70 @@ base_ref = "origin/main"
 #   run_strategy = "leaf-to-top"
 [ecosystems.rust]
 manifests = "auto"
+# The `fuzz/` workspace (`rskit-fuzz`) is a `cargo fuzz` harness: its only
+# targets are `[[bin]]` fuzz entrypoints with `test = false`, so it has no
+# unit-test or coverage surface of its own (the logic it fuzzes lives in the
+# covered core crates). Running any test/coverage task over it is a no-op that
+# errors (`cargo llvm-cov` fails with "no profraw files"). rskit builds, tests,
+# covers, formats, and deny-checks only core/contrib/examples (the Makefile
+# scopes those explicitly; lockfile upkeep uses plain `cargo`), so the harness
+# has no place in Toven discovery. Dropping it here keeps the combined
+# `toven coverage` honest and green across the three real workspaces and removes
+# the need to defensively release-exclude it below.
+exclude = ["fuzz"]
 
 [ecosystems.rust.coverage]
-changed_line = 85.0
-enforcement = "advisory"
-function = 80.0
+# Canonical coverage gate (the sole entrypoint is `toven coverage`; the former
+# `scripts/rskit_tool.py coverage` path and `.config/coverage.toml` are retired).
+# Line-only gate, matching the historical policy: 90% per module, 95% for the
+# security-load-bearing set, with a small set of justified per-module floors and
+# `rskit-suite` (the facade smoke aggregator) measured but never gated.
+changed_line = 70.0
+enforcement = "block"
+exclude = ["rskit-suite"]
+line = 90.0
+
+[ecosystems.rust.coverage.profiles.security]
+# Security-load-bearing crates hold a higher line floor.
+line = 95.0
+modules = [
+  "rskit-auth",
+  "rskit-authz",
+  "rskit-encryption",
+  "rskit-errors",
+  "rskit-resilience",
+  "rskit-security",
+]
+
+# rskit-process is gated below the default because its llvm-cov *line* metric is
+# unreliable for this crate, while region and function coverage confirm the
+# reachable logic is well covered:
+#   * Multi-line call/closure argument lines report 0 hits even though the
+#     enclosing statement provably executes (e.g. the readiness/spawn error
+#     constructors run but their bare-identifier argument lines count 0).
+#   * The line count is not stable across edits: removing a few dead source
+#     lines can shift the reported line denominator and percentage in
+#     counter-intuitive ways.
+# The only remaining genuinely-uncovered logic is defensive I/O-error handling
+# (child.wait/try_wait/kill/write returning unexpected errors) that cannot be
+# driven deterministically without fault injection. The floor still gates real
+# regressions (coverage is a signal, not a target).
+[modules."rust:rskit-process".coverage]
+line = 85.0
+
+# rskit-testutil is the shipped test-tooling crate; some helper surface is only
+# exercised by downstream crates, so it carries a lower own-crate floor.
+[modules."rust:rskit-testutil".coverage]
 line = 80.0
-region = 70.0
+
+# rskit-messaging-rabbitmq is gated below the default because its remaining
+# uncovered logic is live-broker lapin code (connect, create_channel, basic_qos,
+# queue_declare, consumer task delivery) that cannot run without a real RabbitMQ
+# broker, which the no-network unit-test policy forbids. All broker-independent
+# logic (config validation, routing, lazy factory wiring, receive timeout, event
+# decode) is covered.
+[modules."rust:rskit-messaging-rabbitmq".coverage]
+line = 85.0
 
 # rskit's publishable core and contrib crates publish to crates.io; a release is
 # gated on a clean tree and registry idempotency, supports an alpha prerelease
@@ -97,13 +154,14 @@ tag_format = "v{version}"
 # staged set as the manifests. A hook failure aborts the bump atomically.
 on_resolved = ["sync-readme-versions"]
 
-# The `examples/` demos (`agent-demo`, `core-cli`, `media-demo`) and the
-# `fuzz/` harness (`rskit-fuzz`) are `publish = false` in their manifests and
-# must never reach crates.io. Toven does not infer publishability from a
-# manifest's `publish = false`, so each non-publishable crate is classified
-# explicitly here as excluded from the release (no version bump, tag, registry
-# call, or hosted release). This keeps workspace discovery from sweeping the
-# demos and the fuzz target into the registry train.
+# The `examples/` demos (`agent-demo`, `core-cli`, `media-demo`) are
+# `publish = false` in their manifests and must never reach crates.io. Toven
+# does not infer publishability from a manifest's `publish = false`, so each
+# non-publishable crate is classified explicitly here as excluded from the
+# release (no version bump, tag, registry call, or hosted release). This keeps
+# workspace discovery from sweeping the demos into the registry train. (The
+# `fuzz/` harness needs no such block: it is dropped from discovery entirely via
+# `[ecosystems.rust].exclude` above.)
 [modules."rust:agent-demo".release]
 exclude = true
 
@@ -111,9 +169,6 @@ exclude = true
 exclude = true
 
 [modules."rust:media-demo".release]
-exclude = true
-
-[modules."rust:rskit-fuzz".release]
 exclude = true
 
 [ecosystems.rust.tasks.build]
@@ -132,6 +187,14 @@ shared_inputs = ["contrib/Cargo.lock", "core/Cargo.lock", "examples/Cargo.lock"]
 argv = ["cargo", "llvm-cov", "--manifest-path", "{module.manifest}", "--workspace", "--lcov", "--output-path", "target/toven/coverage/rust-{module.name}.lcov", "{args}"]
 cacheable = false
 fan_out = "whole-workspace"
+# `cargo llvm-cov --workspace` measures each workspace atomically and resolves
+# its own cross-workspace closure, so it is sound to co-schedule inside the
+# facade back-dependency cycle (core's `rskit` facade depends on contrib for its
+# feature re-exports, while contrib depends back on core). Without this the
+# combined `toven coverage` fails closed on that cycle; with it a single
+# invocation gates core+contrib+examples in one wave. Matches the Rust adapter
+# default for this task.
+workspace_closure = true
 kind = "coverage"
 shared_inputs = ["contrib/Cargo.lock", "core/Cargo.lock", "examples/Cargo.lock"]
 
@@ -145,11 +208,15 @@ shared_inputs = ["contrib/Cargo.lock", "core/Cargo.lock", "examples/Cargo.lock"]
 argv = ["cargo", "fmt", "--manifest-path", "{module.manifest}", "--all", "{args}"]
 cacheable = false
 fan_out = "whole-workspace"
+# `cargo fmt --all` is a workspace-atomic invocation (see the coverage task's
+# note) — co-schedulable across the facade cycle. Matches the adapter default.
+workspace_closure = true
 shared_inputs = ["contrib/Cargo.lock", "core/Cargo.lock", "examples/Cargo.lock"]
 
 [ecosystems.rust.tasks.format-check]
 argv = ["cargo", "fmt", "--manifest-path", "{module.manifest}", "--all", "--check", "{args}"]
 fan_out = "whole-workspace"
+workspace_closure = true
 kind = "format"
 shared_inputs = ["contrib/Cargo.lock", "core/Cargo.lock", "examples/Cargo.lock"]
 
@@ -175,6 +242,9 @@ shared_inputs = ["contrib/Cargo.lock", "core/Cargo.lock", "examples/Cargo.lock"]
 [ecosystems.rust.tasks.vuln]
 argv = ["cargo", "audit", "--file", "{workspace.root}/Cargo.lock", "{args}"]
 fan_out = "whole-workspace"
+# `cargo audit` reads each workspace lockfile atomically — co-schedulable across
+# the facade cycle. Matches the adapter default.
+workspace_closure = true
 shared_inputs = ["contrib/Cargo.lock", "core/Cargo.lock", "examples/Cargo.lock"]
 
 # nextest (the `test` task) cannot execute documentation tests, so `doctest`

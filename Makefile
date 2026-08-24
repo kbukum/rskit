@@ -1,4 +1,4 @@
-.PHONY: all setup build test test-nextest test-doc test-python test-affected coverage coverage-changed test-coverage test-coverage-html lint fmt fmt-check check check-fast check-facade-features \
+.PHONY: all setup build test test-nextest test-doc test-python test-affected coverage coverage-changed test-coverage lint fmt fmt-check check check-fast check-facade-features \
        check-core check-patterns check-crosscutting check-composition check-transport check-auth check-data check-ai \
        check-media check-infra doc deny check-l7-edges check-workspace-deps-sync check-topology check-public-api release-plan release-status release-readiness release-coverage \
        release-bump release-tag publish-dry-run release-publish release-sbom depgraphs clean help ci ci-test ci-lint ci-fmt ensure-act structure toven-canary lock
@@ -14,6 +14,8 @@ RSKIT_TOOL = $(PYTHON) ./scripts/rskit_tool.py
 # e.g. `make TOVEN=../toven/target/release/toven toven-canary`.
 TOVEN ?= toven
 WORKSPACE_MANIFESTS = $(CORE_MANIFEST) $(CONTRIB_MANIFEST) $(EXAMPLES_MANIFEST)
+# Baseline ref for changed-scope coverage selection.
+CHANGED_BASE ?= origin/main
 # Every workspace that owns a Cargo.lock, including the fuzz harness excluded
 # from the build/test train.
 LOCK_MANIFESTS = $(WORKSPACE_MANIFESTS) $(FUZZ_MANIFEST)
@@ -48,21 +50,9 @@ define run_cargo_target
 endef
 
 define run_coverage_target
-	@$(RSKIT_TOOL) coverage $(1) \
-		$(if $(W),--workspace $(W)) \
-		$(if $(C),--package $(C)) \
-		$(if $(PACKAGES),--packages "$(PACKAGES)") \
-		$(if $(JOBS),--jobs $(JOBS)) \
-		$(if $(CLEAN),--clean $(CLEAN)) \
-		$(if $(EXCLUDE_PACKAGES),--exclude-packages "$(EXCLUDE_PACKAGES)") \
-		$(if $(THRESHOLD),--line-threshold $(THRESHOLD)) \
-		$(if $(FUNCTION_THRESHOLD),--function-threshold $(FUNCTION_THRESHOLD)) \
-		$(if $(REGION_THRESHOLD),--region-threshold $(REGION_THRESHOLD)) \
-		$(if $(SECURITY_THRESHOLD),--security-line-threshold $(SECURITY_THRESHOLD)) \
-		$(if $(PROGRESS_INTERVAL),--progress-interval $(PROGRESS_INTERVAL)) \
-		$(if $(PROGRESS_STYLE),--progress-style $(PROGRESS_STYLE)) \
-		$(if $(PROGRESS_WIDTH),--progress-width $(PROGRESS_WIDTH)) \
-		$(if $(T),--test-filter "$(T)")
+	@$(TOVEN) coverage $(1) \
+		$(if $(THRESHOLD),--line $(THRESHOLD)) \
+		$(if $(JOBS),--jobs $(JOBS))
 endef
 
 define run_domain_target
@@ -128,21 +118,19 @@ test-python:
 test-affected:
 	@$(RSKIT_TOOL) ci test --scope changed --changed-base origin/main...HEAD --feature-mode both $(if $(PROFILE),--profile $(PROFILE),--profile ci)
 
-## Run workspace-level coverage with per-package reporting (C=<crate>, PACKAGES=<list>, W=core|contrib|examples, JOBS=<n>, THRESHOLD=<pct>, T=<test pattern>)
-## Requires: cargo install cargo-nextest cargo-llvm-cov
+## Run per-package coverage and gate against the thresholds in toven.toml
+## (THRESHOLD=<pct> overrides the line floor, JOBS=<n> caps parallelism)
 coverage:
 	$(call run_coverage_target,)
 
 ## Alias for coverage
 test-coverage: coverage
 
-## Run workspace-level coverage for changed crates
+## Run coverage for crates changed against CHANGED_BASE (default origin/main)
 coverage-changed:
-	$(call run_coverage_target,--changed)
-
-## Run tests with coverage HTML report
-test-coverage-html:
-	$(call run_coverage_target,--html)
+	@$(TOVEN) coverage --base $(CHANGED_BASE) --merge-base \
+		$(if $(THRESHOLD),--line $(THRESHOLD)) \
+		$(if $(JOBS),--jobs $(JOBS))
 
 ## Run clippy linter (C=<crate>)
 lint:
@@ -262,10 +250,8 @@ release-readiness: check
 	@$(TOVEN) run readiness
 	@$(TOVEN) release readiness
 
-## Run release coverage gates (default per-package line coverage >=90%)
-## Requires: cargo-nextest, cargo-llvm-cov
-release-coverage:
-	$(call run_coverage_target,--mode release)
+## Run release coverage gates (per-package line coverage floors from toven.toml)
+release-coverage: coverage
 
 ## Phase 1 — bump: write per-crate manifest version bumps + dependency floors into
 ## the working tree and stage them, WITHOUT committing (stage-only is the default;
@@ -424,10 +410,9 @@ help:
 	@echo "  make test-doc           [C=] [W=] [FEATURES=]                 Run doctests only; defaults to TEST_FEATURES=--all-features"
 	@echo "  make test-python                          Run Python tooling tests"
 	@echo "  make test-affected                        Run tests for changed crates"
-	@echo "  make coverage           [C=] [PACKAGES=] [T=] [W=] [JOBS=] [CLEAN=] [THRESHOLD=] [PROGRESS_INTERVAL=] [PROGRESS_STYLE=]  Run workspace coverage with per-package reporting"
-	@echo "  make coverage-changed   [T=] [JOBS=] [THRESHOLD=]                       Run coverage for changed crates"
-	@echo "  make test-coverage      [C=] [T=] [W=]                                  Alias for coverage"
-	@echo "  make test-coverage-html [C=] [T=] [W=]                                  Run coverage with HTML reports"
+	@echo "  make coverage           [JOBS=] [THRESHOLD=]                            Run per-package coverage and gate via toven.toml"
+	@echo "  make coverage-changed   [JOBS=] [THRESHOLD=] [CHANGED_BASE=]            Run coverage for crates changed vs the base ref"
+	@echo "  make test-coverage                                                     Alias for coverage"
 	@echo "  make lint               [C=] [W=] [FEATURES=]                 Run clippy; defaults to --all-features"
 	@echo "  make fmt                [W=]               Format code"
 	@echo "  make fmt-check          [W=]               Check formatting"
@@ -483,6 +468,5 @@ help:
 	@echo "  make test C=rskit-storage-s3             Test S3 contrib crate"
 	@echo "  make lint C=rskit-errors                 Lint errors crate"
 	@echo "  make check W=core                        Full check on core workspace"
-	@echo "  make coverage C=rskit-errors             Coverage for one crate"
-	@echo "  make coverage W=core JOBS=4              Coverage for core crates"
-	@echo "  make coverage-changed                    Coverage for changed crates"
+	@echo "  make coverage                            Coverage + gate for every workspace in one combined run"
+	@echo "  make coverage-changed                    Coverage for crates changed vs origin/main"

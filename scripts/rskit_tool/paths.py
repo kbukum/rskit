@@ -15,8 +15,3 @@ CORE_AND_CONTRIB = {
     "core": WORKSPACES["core"],
     "contrib": WORKSPACES["contrib"],
 }
-CONFIG_DIR = ROOT / ".config"
-COVERAGE_CONFIG = CONFIG_DIR / "coverage.toml"
-COVERAGE_ROOT = ROOT / "target" / "coverage"
-MODULES_DIR = COVERAGE_ROOT / "modules"
-COVERAGE_WORKSPACES_DIR = COVERAGE_ROOT / "workspaces"
