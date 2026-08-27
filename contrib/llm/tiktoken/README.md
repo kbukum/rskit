@@ -12,7 +12,7 @@ use rskit_llm_tiktoken::{Encoding, TiktokenCounter, counter};
 
 // Construct a concrete counter for an explicit encoding.
 let tk = TiktokenCounter::new(Encoding::Cl100kBase)?;
-assert!(tk.count("hello world") > 0);
+assert!(tk.count("hello world")? > 0);
 
 // Or inject one as a shared `TokenCounter`, selected by name.
 let shared = counter("o200k_base")?;

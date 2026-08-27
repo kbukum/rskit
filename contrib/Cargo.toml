@@ -77,7 +77,7 @@ insta = { version = "1.47", features = ["json", "yaml", "redactions"] }
 
 # Tokenizers
 tiktoken-rs = "0.12"
-tokenizers = { version = "0.23", default-features = false, features = ["onig"] }
+tokenizers = { version = "0.23", default-features = false, features = ["fancy-regex"] }
 
 # Messaging adapters
 rdkafka = { version = "0.39", features = ["tokio"] }

@@ -53,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Token counting
 
-`rskit-llm` owns the canonical `TokenCounter` port — a deterministic `count(&str) -> usize` seam for sizing prompts, budgets, and eval metrics. Core ships only the dependency-free `HeuristicTokenCounter` (a coarse ~4-characters-per-token approximation); exact, model-specific tokenizers are feature-gated `contrib/llm/*` adapters that implement the same trait and are injected explicitly:
+`rskit-llm` owns the canonical `TokenCounter` port — a deterministic `count(&str) -> AppResult<usize>` seam for sizing prompts, budgets, and eval metrics. Core ships only the dependency-free `HeuristicTokenCounter` (a coarse ~4-characters-per-token approximation); exact, model-specific tokenizers are feature-gated `contrib/llm/*` adapters that implement the same trait and are injected explicitly:
 
 - `rskit-llm-tiktoken` — OpenAI BPE via `tiktoken-rs` (facade feature `llm-tiktoken`).
 - `rskit-llm-hf-tokenizers` — HuggingFace `tokenizer.json` via `tokenizers` (facade feature `llm-hf-tokenizers`).
@@ -62,8 +62,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 use rskit_llm::{HeuristicTokenCounter, TokenCounter};
 
 let counter = HeuristicTokenCounter;
-assert_eq!(counter.count(""), 0);
-assert!(counter.count("some prompt text") > 0);
+assert_eq!(counter.count("")?, 0);
+assert!(counter.count("some prompt text")? > 0);
+# Ok::<(), rskit_errors::AppError>(())
 ```
 
 ## When to use

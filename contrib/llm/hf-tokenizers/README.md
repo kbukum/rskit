@@ -12,7 +12,7 @@ use rskit_llm_hf_tokenizers::{HfTokenCounter, counter};
 
 // Load a concrete counter from a tokenizer.json path.
 let hf = HfTokenCounter::from_file("tokenizer.json")?;
-assert!(hf.count("hello world") > 0);
+assert!(hf.count("hello world")? > 0);
 
 // Or inject one as a shared `TokenCounter`.
 let shared = counter("tokenizer.json")?;
