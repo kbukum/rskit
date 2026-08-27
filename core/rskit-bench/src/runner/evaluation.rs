@@ -4,6 +4,7 @@
 //! [`Pool`](rskit_worker::Pool) of [`EvaluationHandler`]s; each handler runs the
 //! branch [`Evaluator`] under a timeout and reports an [`EvaluationOutcome`].
 
+use crate::eval_context::EvalContext;
 use crate::evaluator::Evaluator;
 use crate::result::BenchSampleResult;
 use crate::types::{BenchSample, Prediction};
@@ -21,6 +22,8 @@ pub(super) struct EvaluationHandler<L> {
     pub(super) branch_name: String,
     pub(super) timeout_secs: u64,
     pub(super) clock: SharedClock,
+    /// Run seed used to derive a deterministic per-sample [`EvalContext`].
+    pub(super) seed: u64,
 }
 
 /// The identifying fields of a sample, retained so a worker failure can still be
@@ -67,8 +70,9 @@ where
     ) -> AppResult<EvaluationOutcome<L>> {
         let start = self.clock.monotonic_millis();
         let input = sample.input.clone();
+        let ctx = EvalContext::for_sample(self.seed, &sample.id);
         let timeout = tokio::time::Duration::from_secs(self.timeout_secs);
-        let eval = tokio::time::timeout(timeout, self.evaluator.evaluate(input));
+        let eval = tokio::time::timeout(timeout, self.evaluator.evaluate(input, ctx));
         let result = tokio::select! {
             _ = cancel.cancelled() => {
                 return Ok(EvaluationOutcome::Failure {

@@ -10,7 +10,12 @@ use super::provenance::RunProvenance;
 use super::schema;
 
 /// Complete result of a benchmark run.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// Marked `#[non_exhaustive]`: construct it inside the crate via the runner, or from
+/// [`BenchRunResult::default`] plus field assignment, so new fields can be added
+/// without breaking external constructors.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct BenchRunResult {
     /// Generated run identifier.
     pub id: String,
@@ -48,7 +53,7 @@ pub struct BenchRunResult {
 }
 
 /// Dataset metadata included in run results.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct DatasetInfo {
     /// Dataset name from manifest.
     pub name: String,

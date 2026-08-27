@@ -124,6 +124,8 @@ governor = { version = "0.10", features = ["std"] }
 # rand 0.10 is only needed by rmcp today and would force duplicate rand/chacha20
 # families into crates that only need simple token/jitter randomness.
 rand = "0.9"
+# Explicit, value-stable ChaCha RNG for reproducible benchmark seeding; pairs with rand 0.9.
+rand_chacha = "0.9"
 zeroize = { version = "1", features = ["derive"] }
 
 # gRPC

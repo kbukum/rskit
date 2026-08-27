@@ -1,11 +1,6 @@
 //! Reproducibility provenance for benchmark runs.
 //!
-//! A [`RunProvenance`] record captures everything needed to reproduce and audit a
-//! benchmark run — the deterministic seed, the source-control commit, the tool and
-//! host identity, and an order-independent content hash of the evaluated dataset.
-//! Host and commit values are gathered through an injected [`ProvenanceProbe`], so
-//! unit tests can supply fixed values with no process, environment, or network
-//! access.
+//! A [`RunProvenance`] record captures everything needed to reproduce and audit a benchmark run — the deterministic seed and RNG algorithm, the source-control commit, the tool and host identity, and an order-independent content hash of the evaluated dataset. Host and commit values are gathered through an injected [`ProvenanceProbe`], so unit tests can supply fixed values with no process, environment, or network access.
 
 use serde::{Deserialize, Serialize};
 
@@ -15,15 +10,15 @@ use crate::types::BenchSample;
 
 /// Reproducibility metadata captured for a benchmark run.
 ///
-/// The seed always serializes — it drives reproducibility, so a run must record
-/// which seed produced it even when it is zero. Genuinely-absent fields (an
-/// unresolved commit, an unnamed dataset) are omitted so the record stays sparse
-/// rather than padded with empty placeholders.
+/// The seed always serializes — it drives reproducibility, so a run must record which seed produced it even when it is zero. Genuinely-absent fields (an unresolved commit, an unnamed dataset) are omitted so the record stays sparse rather than padded with empty placeholders.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RunProvenance {
     /// Deterministic run seed (see [`RunOptions::with_seed`](crate::RunOptions::with_seed)).
     #[serde(default)]
     pub seed: u64,
+    /// RNG algorithm the seed drives (see [`RNG_ALGORITHM`](crate::RNG_ALGORITHM)), so a seed maps to the same sequence across rebuilds.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub rng_algorithm: String,
     /// Source-control commit the run was built from, when resolvable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub git_commit: Option<String>,
@@ -42,9 +37,12 @@ pub struct RunProvenance {
     /// Order-independent content hash of the evaluated dataset.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub dataset_hash: String,
-    /// Dataset name.
+    /// Dataset name from the manifest.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub dataset_name: String,
+    /// Dataset version from the manifest.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub dataset_version: String,
     /// Evaluator branch names, in registration order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub branches: Vec<String>,
@@ -55,8 +53,7 @@ pub struct RunProvenance {
 
 /// Gathers host and source-control provenance for a benchmark run.
 ///
-/// Injected into the [`BenchRunner`](crate::BenchRunner) so tests supply
-/// deterministic values with no process, environment, or network access.
+/// Injected into the [`BenchRunner`](crate::BenchRunner) so tests supply deterministic values with no process, environment, or network access.
 pub trait ProvenanceProbe: Send + Sync {
     /// Source-control commit for the run, or `None` when unresolvable.
     fn git_commit(&self) -> Option<String>;
@@ -72,14 +69,9 @@ pub trait ProvenanceProbe: Send + Sync {
 const GIT_COMMIT_ENV_VARS: [&str; 4] =
     ["GITHUB_SHA", "GIT_COMMIT", "CI_COMMIT_SHA", "SOURCE_COMMIT"];
 
-/// Default probe: reads host/os/arch from the standard library and the git commit
-/// from well-known CI environment variables.
+/// Default probe: reads host/os/arch from the standard library and the git commit from well-known CI environment variables.
 ///
-/// The commit is resolved best-effort from CI environment variables rather than by
-/// invoking `git`, so the bench crate takes no dependency on a git library and the
-/// probe performs no process or network I/O. A caller that wants an authoritative
-/// commit (for example via `rskit-git`) can resolve it and inject a
-/// [`FixedProvenanceProbe`] instead.
+/// The commit is resolved best-effort from CI environment variables rather than by invoking `git`, so the bench crate takes no dependency on a git library and the probe performs no process or network I/O. A caller that wants an authoritative commit (for example via `rskit-git`) can resolve it and inject a [`FixedProvenanceProbe`] instead.
 #[derive(Debug, Default, Clone)]
 pub struct SystemProvenanceProbe;
 
@@ -178,22 +170,26 @@ impl ProvenanceProbe for FixedProvenanceProbe {
     }
 }
 
-/// Computes an order-independent content hash of a dataset from each sample's id
-/// and label, so the same dataset hashes identically regardless of load order.
+/// Computes an order-independent content hash of a dataset from each sample's id, raw input bytes, and label, so the same dataset hashes identically regardless of load order.
 ///
-/// Each `(id, label)` pair is folded incrementally with length-prefixed framing via
-/// [`ContentHasher::update_framed`], so datasets whose ids or labels contain tabs,
-/// newlines, or other delimiters cannot collide, and no large intermediate string is
-/// materialized regardless of dataset size.
+/// Each field is folded incrementally with length-prefixed framing via [`ContentHasher::update_framed`], so datasets whose ids, inputs, or labels contain tabs, newlines, or other delimiters cannot collide, and no large intermediate buffer is materialized regardless of dataset size. Input bytes are included so that changing a sample's content while keeping its id and label still changes the hash.
 pub(crate) fn dataset_hash<L: std::fmt::Display>(samples: &[BenchSample<L>]) -> String {
-    let mut records: Vec<(&str, String)> = samples
+    let mut records: Vec<(&str, &[u8], String)> = samples
         .iter()
-        .map(|sample| (sample.id.as_str(), sample.label.to_string()))
+        .map(|sample| {
+            (
+                sample.id.as_str(),
+                sample.input.as_slice(),
+                sample.label.to_string(),
+            )
+        })
         .collect();
     records.sort();
     let mut hasher = ContentHasher::new();
-    for (id, label) in &records {
-        hasher.update_framed(id.as_bytes(), label.as_bytes());
+    for (id, input, label) in &records {
+        hasher.update_framed(b"id", id.as_bytes());
+        hasher.update_framed(b"input", input);
+        hasher.update_framed(b"label", label.as_bytes());
     }
     hasher.finalize_hex()
 }
@@ -205,9 +201,13 @@ mod tests {
     use super::*;
 
     fn sample(id: &str, label: &str) -> BenchSample<String> {
+        sample_with_input(id, label, b"")
+    }
+
+    fn sample_with_input(id: &str, label: &str, input: &[u8]) -> BenchSample<String> {
         BenchSample {
             id: id.to_string(),
-            input: Vec::new(),
+            input: input.to_vec(),
             label: label.to_string(),
             source: String::new(),
             metadata: HashMap::new(),
@@ -225,6 +225,7 @@ mod tests {
     fn populated_provenance_round_trips() {
         let provenance = RunProvenance {
             seed: 42,
+            rng_algorithm: "rand_chacha:ChaCha8Rng".into(),
             git_commit: Some("abc123".into()),
             tool_version: "0.2.0".into(),
             host: "ci-runner".into(),
@@ -232,6 +233,7 @@ mod tests {
             arch: "x86_64".into(),
             dataset_hash: "deadbeef".into(),
             dataset_name: "eval".into(),
+            dataset_version: "2.1.0".into(),
             branches: vec!["primary".into()],
             metrics: vec!["exact_match".into()],
         };
@@ -270,6 +272,15 @@ mod tests {
     fn dataset_hash_changes_with_content() {
         let base = [sample("a", "yes")];
         let changed = [sample("a", "no")];
+        assert_ne!(dataset_hash(&base), dataset_hash(&changed));
+    }
+
+    #[test]
+    fn dataset_hash_changes_when_only_input_changes() {
+        // Same id and label, different raw input content must hash differently —
+        // evaluators consume `input`, so it is part of dataset identity.
+        let base = [sample_with_input("a", "yes", b"first")];
+        let changed = [sample_with_input("a", "yes", b"second")];
         assert_ne!(dataset_hash(&base), dataset_hash(&changed));
     }
 

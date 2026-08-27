@@ -75,54 +75,53 @@ fn bench_result() -> BenchRunResult {
         json!({"not": "a known curve"}),
     );
 
-    BenchRunResult {
-        id: "run-1".to_owned(),
-        schema: "https://schemas.skillsenselab.dev/rskit/bench/run-result/v1.json".to_owned(),
-        version: "1.0.0".to_owned(),
-        timestamp: "2026-06-07T00:00:00Z".to_owned(),
-        tag: "release".to_owned(),
-        duration_ms: 1_234,
-        dataset: DatasetInfo {
-            name: "fixture-dataset".to_owned(),
-            version: "2.1.0".to_owned(),
-            sample_count: 2,
-            label_distribution,
+    let mut r = BenchRunResult::default();
+    r.id = "run-1".to_owned();
+    r.schema = "https://schemas.skillsenselab.dev/rskit/bench/run-result/v1.json".to_owned();
+    r.version = "1.0.0".to_owned();
+    r.timestamp = "2026-06-07T00:00:00Z".to_owned();
+    r.tag = "release".to_owned();
+    r.duration_ms = 1_234;
+    r.dataset = DatasetInfo {
+        name: "fixture-dataset".to_owned(),
+        version: "2.1.0".to_owned(),
+        sample_count: 2,
+        label_distribution,
+    };
+    r.metrics = vec![MetricResult {
+        name: "accuracy".to_owned(),
+        value: 0.5,
+        values,
+        detail: Some(json!({
+            "labels": ["yes", "no"],
+            "matrix": [[1, 0], [1, 0]]
+        })),
+    }];
+    r.branches = branches;
+    r.samples = vec![
+        BenchSampleResult {
+            id: "positive".to_owned(),
+            label: "yes".to_owned(),
+            predicted: "yes".to_owned(),
+            score: 0.91,
+            correct: true,
+            branch_scores: HashMap::new(),
+            duration_ms: 10,
+            error: String::new(),
         },
-        metrics: vec![MetricResult {
-            name: "accuracy".to_owned(),
-            value: 0.5,
-            values,
-            detail: Some(json!({
-                "labels": ["yes", "no"],
-                "matrix": [[1, 0], [1, 0]]
-            })),
-        }],
-        branches,
-        samples: vec![
-            BenchSampleResult {
-                id: "positive".to_owned(),
-                label: "yes".to_owned(),
-                predicted: "yes".to_owned(),
-                score: 0.91,
-                correct: true,
-                branch_scores: HashMap::new(),
-                duration_ms: 10,
-                error: String::new(),
-            },
-            BenchSampleResult {
-                id: "negative".to_owned(),
-                label: "no".to_owned(),
-                predicted: "yes".to_owned(),
-                score: 0.67,
-                correct: false,
-                branch_scores,
-                duration_ms: 20,
-                error: "ambiguous".to_owned(),
-            },
-        ],
-        curves,
-        provenance: rskit_bench::RunProvenance::default(),
-    }
+        BenchSampleResult {
+            id: "negative".to_owned(),
+            label: "no".to_owned(),
+            predicted: "yes".to_owned(),
+            score: 0.67,
+            correct: false,
+            branch_scores,
+            duration_ms: 20,
+            error: "ambiguous".to_owned(),
+        },
+    ];
+    r.curves = curves;
+    r
 }
 
 #[test]

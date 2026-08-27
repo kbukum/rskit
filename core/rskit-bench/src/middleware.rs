@@ -1,5 +1,6 @@
 //! Evaluator middleware: timing and caching wrappers.
 
+use crate::eval_context::EvalContext;
 use crate::evaluator::Evaluator;
 use crate::types::Prediction;
 use rskit_errors::AppResult;
@@ -60,9 +61,9 @@ impl<L: Send + Sync + Clone + 'static> Evaluator<L> for TimingMiddleware<L> {
         self.inner.is_available().await
     }
 
-    async fn evaluate(&self, input: Vec<u8>) -> AppResult<Prediction<L>> {
+    async fn evaluate(&self, input: Vec<u8>, ctx: EvalContext) -> AppResult<Prediction<L>> {
         let start = self.clock.monotonic_millis();
-        let result = self.inner.evaluate(input).await;
+        let result = self.inner.evaluate(input, ctx).await;
         let elapsed = Duration::from_millis(elapsed_millis(start, self.clock.monotonic_millis()));
         if let Ok(ref pred) = result {
             self.timings.lock().push((pred.sample_id.clone(), elapsed));
@@ -119,14 +120,14 @@ impl<L: Send + Sync + Clone + 'static> Evaluator<L> for CachingMiddleware<L> {
         self.inner.is_available().await
     }
 
-    async fn evaluate(&self, input: Vec<u8>) -> AppResult<Prediction<L>> {
+    async fn evaluate(&self, input: Vec<u8>, ctx: EvalContext) -> AppResult<Prediction<L>> {
         let key = hash_bytes(&input);
         if let Some(cached) = self.cache.lock().get(&key).cloned() {
             *self.hits.lock() += 1;
             return Ok(cached);
         }
         *self.misses.lock() += 1;
-        let result = self.inner.evaluate(input).await?;
+        let result = self.inner.evaluate(input, ctx).await?;
         self.cache.lock().insert(key, result.clone());
         Ok(result)
     }

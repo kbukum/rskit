@@ -2,10 +2,10 @@
 
 use std::collections::HashMap;
 
-use rand::SeedableRng;
-use rand::rngs::StdRng;
-
 /// Options for configuring a benchmark run.
+///
+/// Constructed via [`RunOptions::default`] and the `with_*` builder methods; marked `#[non_exhaustive]` so new options can be added without breaking call sites.
+#[non_exhaustive]
 pub struct RunOptions {
     /// Maximum number of in-flight sample evaluations per branch.
     pub concurrency: usize,
@@ -17,8 +17,7 @@ pub struct RunOptions {
     pub fail_on_regression: bool,
     /// Metric target thresholds keyed by metric name.
     pub targets: HashMap<String, f64>,
-    /// Deterministic seed recorded in run provenance and used to derive a
-    /// reproducible RNG via [`RunOptions::seeded_rng`].
+    /// Deterministic run seed recorded in provenance and threaded into each evaluator's [`EvalContext`](crate::EvalContext) as a per-sample derived seed.
     pub seed: u64,
 }
 
@@ -72,19 +71,9 @@ impl RunOptions {
     }
 
     #[must_use]
-    /// Sets the deterministic run seed recorded in provenance and used by
-    /// [`RunOptions::seeded_rng`].
+    /// Sets the deterministic run seed recorded in provenance and threaded into each evaluator's [`EvalContext`](crate::EvalContext).
     pub fn with_seed(mut self, seed: u64) -> Self {
         self.seed = seed;
         self
-    }
-
-    /// Returns a reproducible RNG derived from [`RunOptions::seed`].
-    ///
-    /// The same seed yields an identical sequence, so any sampling or shuffling an
-    /// evaluator or metric performs can be made deterministic across runs.
-    #[must_use]
-    pub fn seeded_rng(&self) -> StdRng {
-        StdRng::seed_from_u64(self.seed)
     }
 }

@@ -6,6 +6,7 @@ use super::evaluation::{
 use super::options::RunOptions;
 use crate::compare::RunComparator;
 use crate::dataset_loader::DatasetLoader;
+use crate::eval_context::RNG_ALGORITHM;
 use crate::evaluator::Evaluator;
 use crate::execution::BenchExecutionPlan;
 use crate::metric::Suite;
@@ -119,9 +120,7 @@ where
 
     /// Sets the provenance probe used to record host and source-control identity.
     ///
-    /// Defaults to [`SystemProvenanceProbe`]. Inject a
-    /// [`FixedProvenanceProbe`](crate::FixedProvenanceProbe) for deterministic,
-    /// offline reproducibility tests.
+    /// Defaults to [`SystemProvenanceProbe`]. Inject a [`FixedProvenanceProbe`](crate::FixedProvenanceProbe) for deterministic, offline reproducibility tests.
     #[must_use]
     pub fn with_provenance_probe(mut self, probe: Arc<dyn ProvenanceProbe>) -> Self {
         self.probe = probe;
@@ -161,15 +160,16 @@ where
         execution: &BenchExecutionPlan,
     ) -> AppResult<BenchRunResult> {
         let start = self.clock.monotonic_millis();
-        let samples = loader.all()?;
+        let loaded = loader.load()?;
+        let samples = loaded.samples;
         let dataset_info = {
             let mut label_distribution: HashMap<String, usize> = HashMap::new();
             for s in &samples {
                 *label_distribution.entry(s.label.to_string()).or_insert(0) += 1;
             }
             DatasetInfo {
-                name: opts.tag.clone(),
-                version: String::new(),
+                name: loaded.name.clone(),
+                version: loaded.version.clone(),
                 sample_count: samples.len(),
                 label_distribution,
             }
@@ -186,6 +186,7 @@ where
                 branch_name: branch.name.clone(),
                 timeout_secs: opts.timeout_secs,
                 clock: Arc::clone(&self.clock),
+                seed: opts.seed,
             });
             let pool = Pool::new(handler, execution.pool_config_for(&branch.name));
             let mut branch_metrics: HashMap<String, f64> = HashMap::new();
@@ -334,6 +335,7 @@ where
 
         let provenance = RunProvenance {
             seed: opts.seed,
+            rng_algorithm: RNG_ALGORITHM.to_string(),
             git_commit: self.probe.git_commit(),
             tool_version: env!("CARGO_PKG_VERSION").to_string(),
             host: self.probe.host(),
@@ -341,6 +343,7 @@ where
             arch: self.probe.arch(),
             dataset_hash: dataset_hash(&samples),
             dataset_name: dataset_info.name.clone(),
+            dataset_version: dataset_info.version.clone(),
             branches: self.branches.iter().map(|b| b.name.clone()).collect(),
             metrics: metric_results.iter().map(|m| m.name.clone()).collect(),
         };
