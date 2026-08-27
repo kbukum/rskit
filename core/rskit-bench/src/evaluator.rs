@@ -1,8 +1,8 @@
 //! Evaluator trait and adapters for bench.
 //!
-//! An [`Evaluator`] takes raw `Vec<u8>` input and produces a [`Prediction`].
-//! This is the core abstraction that bench uses to run model evaluation.
+//! An [`Evaluator`] takes raw `Vec<u8>` input plus a deterministic [`EvalContext`] and produces a [`Prediction`]. This is the core abstraction that bench uses to run model evaluation.
 
+use crate::eval_context::EvalContext;
 use crate::types::Prediction;
 use rskit_errors::AppResult;
 use rskit_provider::RequestResponse;
@@ -30,14 +30,16 @@ where
     }
 
     /// Execute the evaluator on raw input and return a prediction.
-    async fn evaluate(&self, input: Vec<u8>) -> AppResult<Prediction<L>>;
+    ///
+    /// The [`EvalContext`] carries a per-sample deterministic seed; evaluators that use randomness should draw it from [`EvalContext::rng`] so runs stay reproducible.
+    async fn evaluate(&self, input: Vec<u8>, ctx: EvalContext) -> AppResult<Prediction<L>>;
 }
 
 /// Wraps a closure as an [`Evaluator`].
 ///
 /// # Example
 /// ```rust,ignore
-/// let eval = EvaluatorFunc::new("my-model", |input: Vec<u8>| {
+/// let eval = EvaluatorFunc::new("my-model", |input: Vec<u8>, _ctx| {
 ///     Box::pin(async move {
 ///         Ok(Prediction { label: "positive".into(), score: 0.95, ..Default::default() })
 ///     })
@@ -46,14 +48,19 @@ where
 pub struct EvaluatorFunc<L = String> {
     name: &'static str,
     #[allow(clippy::type_complexity)]
-    func: Box<dyn Fn(Vec<u8>) -> BoxFuture<'static, AppResult<Prediction<L>>> + Send + Sync>,
+    func: Box<
+        dyn Fn(Vec<u8>, EvalContext) -> BoxFuture<'static, AppResult<Prediction<L>>> + Send + Sync,
+    >,
 }
 
 impl<L> EvaluatorFunc<L> {
     /// Creates an evaluator with a static name and async prediction closure.
     pub fn new<F>(name: &'static str, func: F) -> Self
     where
-        F: Fn(Vec<u8>) -> BoxFuture<'static, AppResult<Prediction<L>>> + Send + Sync + 'static,
+        F: Fn(Vec<u8>, EvalContext) -> BoxFuture<'static, AppResult<Prediction<L>>>
+            + Send
+            + Sync
+            + 'static,
     {
         Self {
             name,
@@ -68,8 +75,8 @@ impl<L: Send + Sync + 'static> Evaluator<L> for EvaluatorFunc<L> {
         self.name
     }
 
-    async fn evaluate(&self, input: Vec<u8>) -> AppResult<Prediction<L>> {
-        (self.func)(input).await
+    async fn evaluate(&self, input: Vec<u8>, ctx: EvalContext) -> AppResult<Prediction<L>> {
+        (self.func)(input, ctx).await
     }
 }
 
@@ -143,7 +150,7 @@ where
         }
     }
 
-    async fn evaluate(&self, input: Vec<u8>) -> AppResult<Prediction<L>> {
+    async fn evaluate(&self, input: Vec<u8>, _ctx: EvalContext) -> AppResult<Prediction<L>> {
         let converted_input = (self.to_input)(input);
         let output = self.provider.execute(converted_input).await?;
         Ok((self.to_prediction)(output))
@@ -153,6 +160,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::{Evaluator, FromProvider};
+    use crate::eval_context::EvalContext;
     use crate::types::Prediction;
     use rskit_errors::AppResult;
     use rskit_provider::{Provider, RequestResponse};
@@ -202,7 +210,7 @@ mod tests {
         assert!(!evaluator.is_available().await);
         assert_eq!(
             evaluator
-                .evaluate(vec![1, 2, 3])
+                .evaluate(vec![1, 2, 3], EvalContext::new(0))
                 .await
                 .expect("evaluate should succeed")
                 .label,

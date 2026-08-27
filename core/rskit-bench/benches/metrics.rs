@@ -108,24 +108,22 @@ fn make_bench_run_result(n_samples: usize) -> BenchRunResult {
             error: String::new(),
         })
         .collect();
-    BenchRunResult {
-        id: "bench-run-001".into(),
-        schema: "https://gokit.dev/bench/v1/schema.json".into(),
+    let mut r = BenchRunResult::default();
+    r.id = "bench-run-001".into();
+    r.schema = "https://gokit.dev/bench/v1/schema.json".into();
+    r.version = "1.0".into();
+    r.timestamp = "2025-01-15T12:00:00Z".into();
+    r.tag = "bench".into();
+    r.duration_ms = 100;
+    r.dataset = DatasetInfo {
+        name: "bench-dataset".into(),
         version: "1.0".into(),
-        timestamp: "2025-01-15T12:00:00Z".into(),
-        tag: "bench".into(),
-        duration_ms: 100,
-        dataset: DatasetInfo {
-            name: "bench-dataset".into(),
-            version: "1.0".into(),
-            sample_count: n_samples,
-            label_distribution: HashMap::new(),
-        },
-        metrics,
-        branches: HashMap::new(),
-        samples,
-        curves: HashMap::new(),
-    }
+        sample_count: n_samples,
+        label_distribution: HashMap::new(),
+    };
+    r.metrics = metrics;
+    r.samples = samples;
+    r
 }
 
 // ---------------------------------------------------------------------------

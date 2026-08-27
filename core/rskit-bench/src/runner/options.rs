@@ -3,6 +3,9 @@
 use std::collections::HashMap;
 
 /// Options for configuring a benchmark run.
+///
+/// Constructed via [`RunOptions::default`] and the `with_*` builder methods; marked `#[non_exhaustive]` so new options can be added without breaking call sites.
+#[non_exhaustive]
 pub struct RunOptions {
     /// Maximum number of in-flight sample evaluations per branch.
     pub concurrency: usize,
@@ -14,6 +17,8 @@ pub struct RunOptions {
     pub fail_on_regression: bool,
     /// Metric target thresholds keyed by metric name.
     pub targets: HashMap<String, f64>,
+    /// Deterministic run seed recorded in provenance and threaded into each evaluator's [`EvalContext`](crate::EvalContext) as a per-sample derived seed.
+    pub seed: u64,
 }
 
 impl Default for RunOptions {
@@ -24,6 +29,7 @@ impl Default for RunOptions {
             tag: String::from("default"),
             fail_on_regression: false,
             targets: HashMap::new(),
+            seed: 0,
         }
     }
 }
@@ -61,6 +67,13 @@ impl RunOptions {
     /// Adds or replaces a target threshold for a named metric.
     pub fn with_target(mut self, metric: impl Into<String>, threshold: f64) -> Self {
         self.targets.insert(metric.into(), threshold);
+        self
+    }
+
+    #[must_use]
+    /// Sets the deterministic run seed recorded in provenance and threaded into each evaluator's [`EvalContext`](crate::EvalContext).
+    pub fn with_seed(mut self, seed: u64) -> Self {
+        self.seed = seed;
         self
     }
 }

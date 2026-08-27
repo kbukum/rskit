@@ -6,6 +6,7 @@ use std::sync::{
 
 use rskit_bench::cli::CliRunner;
 use rskit_bench::curves::{CalibrationCurve, ConfusionMatrixDetail};
+use rskit_bench::eval_context::EvalContext;
 use rskit_bench::evaluator::{Evaluator, EvaluatorFunc};
 use rskit_bench::middleware::{with_caching, with_timing};
 use rskit_bench::result::{
@@ -17,29 +18,26 @@ use rskit_bench::viz::{render_calibration, render_comparison, render_confusion};
 use rskit_errors::{AppError, AppResult, ErrorCode};
 
 fn result(id: &str, timestamp: &str, tag: &str, f1: f64) -> BenchRunResult {
-    BenchRunResult {
-        id: id.to_owned(),
-        schema: rskit_bench::schema::schema_url(),
-        version: rskit_bench::schema::version(),
-        timestamp: timestamp.to_owned(),
-        tag: tag.to_owned(),
-        duration_ms: 10,
-        dataset: DatasetInfo {
-            name: "dataset".to_owned(),
-            version: "1".to_owned(),
-            sample_count: 1,
-            label_distribution: HashMap::new(),
-        },
-        metrics: vec![MetricResult {
-            name: "classification".to_owned(),
-            value: f1,
-            values: HashMap::from([("f1".to_owned(), f1)]),
-            detail: None,
-        }],
-        branches: HashMap::new(),
-        samples: Vec::new(),
-        curves: HashMap::new(),
-    }
+    let mut r = BenchRunResult::default();
+    r.id = id.to_owned();
+    r.schema = rskit_bench::schema::schema_url();
+    r.version = rskit_bench::schema::version();
+    r.timestamp = timestamp.to_owned();
+    r.tag = tag.to_owned();
+    r.duration_ms = 10;
+    r.dataset = DatasetInfo {
+        name: "dataset".to_owned(),
+        version: "1".to_owned(),
+        sample_count: 1,
+        label_distribution: HashMap::new(),
+    };
+    r.metrics = vec![MetricResult {
+        name: "classification".to_owned(),
+        value: f1,
+        values: HashMap::from([("f1".to_owned(), f1)]),
+        detail: None,
+    }];
+    r
 }
 
 #[derive(Default)]
@@ -104,7 +102,7 @@ impl RunStorage for MemoryRunStorage {
 async fn middleware_caches_successes_and_times_only_successful_predictions() {
     let calls = Arc::new(AtomicUsize::new(0));
     let evaluator_calls = calls.clone();
-    let evaluator = EvaluatorFunc::new("echo", move |input| {
+    let evaluator = EvaluatorFunc::new("echo", move |input, _ctx| {
         let evaluator_calls = evaluator_calls.clone();
         Box::pin(async move {
             evaluator_calls.fetch_add(1, Ordering::SeqCst);
@@ -126,22 +124,41 @@ async fn middleware_caches_successes_and_times_only_successful_predictions() {
     assert_eq!(caching.name(), "echo");
     assert!(caching.is_available().await);
 
-    let first = caching.evaluate(b"same".to_vec()).await.unwrap();
-    let second = caching.evaluate(b"same".to_vec()).await.unwrap();
+    let first = caching
+        .evaluate(b"same".to_vec(), EvalContext::new(0))
+        .await
+        .unwrap();
+    let second = caching
+        .evaluate(b"same".to_vec(), EvalContext::new(0))
+        .await
+        .unwrap();
     assert_eq!(first.sample_id, "same");
     assert_eq!(second.sample_id, "same");
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     assert_eq!(caching.hit_count(), 1);
     assert_eq!(caching.miss_count(), 1);
-    assert!(caching.evaluate(b"fail".to_vec()).await.is_err());
+    assert!(
+        caching
+            .evaluate(b"fail".to_vec(), EvalContext::new(0))
+            .await
+            .is_err()
+    );
     assert_eq!(caching.miss_count(), 2);
 
     let timed = with_timing(Box::new(caching));
     assert_eq!(timed.average(), std::time::Duration::ZERO);
-    timed.evaluate(b"timed".to_vec()).await.unwrap();
+    timed
+        .evaluate(b"timed".to_vec(), EvalContext::new(0))
+        .await
+        .unwrap();
     assert_eq!(timed.timings().len(), 1);
     assert_eq!(timed.timings()[0].0, "timed");
-    assert!(timed.evaluate(b"fail".to_vec()).await.is_err());
+    assert!(
+        timed
+            .evaluate(b"fail".to_vec(), EvalContext::new(0))
+            .await
+            .is_err()
+    );
     assert_eq!(timed.timings().len(), 1);
 }
 

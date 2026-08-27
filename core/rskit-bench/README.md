@@ -14,8 +14,9 @@ ML benchmarking framework: evaluators, metrics, reports, and visualization.
 - `FileRunStorage` for persistent result storage and regression detection
 - ROC curves, confusion matrices, score distribution charts
 - `BenchClock` / `FixedClock` for deterministic timestamps and durations in tests
+- Reproducible runs: every result carries `RunProvenance` (seed, source commit, tool/host identity, order-independent dataset hash), gathered through an injected `ProvenanceProbe`
 
-Benchmark orchestration accepts injected clock and storage implementations. Production CLIs can choose `SystemClock` and `FileRunStorage`; tests and reproducible harnesses should inject `FixedClock` and an in-memory or tempdir storage implementation.
+Benchmark orchestration accepts injected clock, storage, and provenance implementations. Production CLIs can choose `SystemClock`, `FileRunStorage`, and the default `SystemProvenanceProbe` (which reads host/os/arch from the standard library and the commit from CI environment variables such as `GITHUB_SHA`). Tests and reproducible harnesses inject `FixedClock`, an in-memory or tempdir storage, and a `FixedProvenanceProbe` so a run's provenance is byte-for-byte deterministic. Set the run seed with `RunOptions::with_seed`; `RunOptions::seeded_rng` derives a reproducible RNG from it.
 
 ## Usage
 

@@ -30,6 +30,16 @@ pub struct DatasetLoader<L = String> {
     config: DatasetLoaderConfig,
 }
 
+/// A loaded dataset: its manifest identity plus the mapped samples.
+pub struct LoadedDataset<L = String> {
+    /// Dataset name from the manifest.
+    pub name: String,
+    /// Dataset version from the manifest.
+    pub version: String,
+    /// Samples that passed the loader's optional filter.
+    pub samples: Vec<BenchSample<L>>,
+}
+
 impl<L: Send + Clone + 'static> DatasetLoader<L> {
     /// Creates a loader rooted at `dir` using `mapper` to convert manifest labels.
     pub fn new(dir: impl Into<PathBuf>, mapper: LabelMapper<L>) -> Self {
@@ -54,6 +64,13 @@ impl<L: Send + Clone + 'static> DatasetLoader<L> {
 
     /// Loads all manifest samples that pass the optional filter.
     pub fn all(&self) -> AppResult<Vec<BenchSample<L>>> {
+        Ok(self.load()?.samples)
+    }
+
+    /// Loads the dataset, returning its manifest identity alongside the mapped samples.
+    ///
+    /// Prefer this over [`all`](Self::all) when the caller needs the manifest name and version — for example to record dataset identity in run provenance — so the manifest is read once.
+    pub fn load(&self) -> AppResult<LoadedDataset<L>> {
         let manifest = self.manifest()?;
         let mut samples = Vec::new();
         for s in &manifest.samples {
@@ -72,7 +89,11 @@ impl<L: Send + Clone + 'static> DatasetLoader<L> {
                 metadata: s.metadata.clone(),
             });
         }
-        Ok(samples)
+        Ok(LoadedDataset {
+            name: manifest.name,
+            version: manifest.version,
+            samples,
+        })
     }
 
     /// Sets a predicate that filters manifest samples before loading them.

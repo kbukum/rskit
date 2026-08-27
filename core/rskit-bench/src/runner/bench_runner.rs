@@ -6,9 +6,11 @@ use super::evaluation::{
 use super::options::RunOptions;
 use crate::compare::RunComparator;
 use crate::dataset_loader::DatasetLoader;
+use crate::eval_context::RNG_ALGORITHM;
 use crate::evaluator::Evaluator;
 use crate::execution::BenchExecutionPlan;
 use crate::metric::Suite;
+use crate::provenance::{ProvenanceProbe, RunProvenance, SystemProvenanceProbe, dataset_hash};
 use crate::report_gen::Reporter;
 use crate::result::{BenchRunResult, BenchSampleResult, BranchResult, DatasetInfo, MetricResult};
 use crate::run_id::generate_run_id;
@@ -37,6 +39,7 @@ pub struct BenchRunner<L> {
     reporters: Vec<Box<dyn Reporter>>,
     comparator: Option<RunComparator>,
     clock: SharedClock,
+    probe: Arc<dyn ProvenanceProbe>,
 }
 
 impl<L> Default for BenchRunner<L>
@@ -61,6 +64,7 @@ where
             reporters: Vec::new(),
             comparator: None,
             clock: system_clock(),
+            probe: Arc::new(SystemProvenanceProbe),
         }
     }
 
@@ -114,6 +118,15 @@ where
         self
     }
 
+    /// Sets the provenance probe used to record host and source-control identity.
+    ///
+    /// Defaults to [`SystemProvenanceProbe`]. Inject a [`FixedProvenanceProbe`](crate::FixedProvenanceProbe) for deterministic, offline reproducibility tests.
+    #[must_use]
+    pub fn with_provenance_probe(mut self, probe: Arc<dyn ProvenanceProbe>) -> Self {
+        self.probe = probe;
+        self
+    }
+
     /// Runs all registered evaluator branches over the loaded dataset and returns the benchmark result.
     pub async fn run(
         &self,
@@ -147,15 +160,16 @@ where
         execution: &BenchExecutionPlan,
     ) -> AppResult<BenchRunResult> {
         let start = self.clock.monotonic_millis();
-        let samples = loader.all()?;
+        let loaded = loader.load()?;
+        let samples = loaded.samples;
         let dataset_info = {
             let mut label_distribution: HashMap<String, usize> = HashMap::new();
             for s in &samples {
                 *label_distribution.entry(s.label.to_string()).or_insert(0) += 1;
             }
             DatasetInfo {
-                name: opts.tag.clone(),
-                version: String::new(),
+                name: loaded.name.clone(),
+                version: loaded.version.clone(),
                 sample_count: samples.len(),
                 label_distribution,
             }
@@ -172,6 +186,7 @@ where
                 branch_name: branch.name.clone(),
                 timeout_secs: opts.timeout_secs,
                 clock: Arc::clone(&self.clock),
+                seed: opts.seed,
             });
             let pool = Pool::new(handler, execution.pool_config_for(&branch.name));
             let mut branch_metrics: HashMap<String, f64> = HashMap::new();
@@ -318,6 +333,21 @@ where
             .and_then(format_rfc3339)
             .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string());
 
+        let provenance = RunProvenance {
+            seed: opts.seed,
+            rng_algorithm: RNG_ALGORITHM.to_string(),
+            git_commit: self.probe.git_commit(),
+            tool_version: env!("CARGO_PKG_VERSION").to_string(),
+            host: self.probe.host(),
+            os: self.probe.os(),
+            arch: self.probe.arch(),
+            dataset_hash: dataset_hash(&samples),
+            dataset_name: dataset_info.name.clone(),
+            dataset_version: dataset_info.version.clone(),
+            branches: self.branches.iter().map(|b| b.name.clone()).collect(),
+            metrics: metric_results.iter().map(|m| m.name.clone()).collect(),
+        };
+
         let result = BenchRunResult {
             id: run_id,
             schema: schema::schema_url(),
@@ -330,6 +360,7 @@ where
             branches: branch_results,
             samples: sample_results,
             curves: HashMap::new(),
+            provenance,
         };
 
         if let Some(ref storage) = self.storage {

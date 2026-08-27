@@ -88,24 +88,22 @@ fn make_run_result(
     metrics: Vec<MetricResult>,
     samples: Vec<BenchSampleResult>,
 ) -> BenchRunResult {
-    BenchRunResult {
-        id: id.into(),
-        schema: "https://gokit.dev/bench/v1/schema.json".into(),
+    let mut r = BenchRunResult::default();
+    r.id = id.into();
+    r.schema = "https://gokit.dev/bench/v1/schema.json".into();
+    r.version = "1.0".into();
+    r.timestamp = "2025-01-15T12:00:00Z".into();
+    r.tag = tag.into();
+    r.duration_ms = 42;
+    r.dataset = DatasetInfo {
+        name: "test-dataset".into(),
         version: "1.0".into(),
-        timestamp: "2025-01-15T12:00:00Z".into(),
-        tag: tag.into(),
-        duration_ms: 42,
-        dataset: DatasetInfo {
-            name: "test-dataset".into(),
-            version: "1.0".into(),
-            sample_count: samples.len(),
-            label_distribution: HashMap::new(),
-        },
-        metrics,
-        branches: HashMap::new(),
-        samples,
-        curves: HashMap::new(),
-    }
+        sample_count: samples.len(),
+        label_distribution: HashMap::new(),
+    };
+    r.metrics = metrics;
+    r.samples = samples;
+    r
 }
 
 /// Round an f64 to `d` decimal places (for stable snapshots).

@@ -172,6 +172,7 @@ mod tests {
             branches: HashMap::new(),
             samples: Vec::new(),
             curves: HashMap::new(),
+            provenance: crate::provenance::RunProvenance::default(),
         }
     }
 

@@ -22,32 +22,29 @@ fn exact_match_suite() -> Suite<String> {
 }
 
 fn previous_result(value: f64) -> BenchRunResult {
-    BenchRunResult {
-        id: "previous".to_owned(),
-        schema: rskit_bench::schema::schema_url(),
-        version: rskit_bench::schema::version(),
-        timestamp: "2026-01-01T00:00:00Z".to_owned(),
-        tag: "candidate".to_owned(),
-        duration_ms: 1,
-        dataset: DatasetInfo {
-            name: "candidate".to_owned(),
-            version: String::new(),
-            sample_count: 2,
-            label_distribution: HashMap::from([("yes".to_owned(), 1), ("no".to_owned(), 1)]),
-        },
-        metrics: vec![MetricResult {
-            name: "exact_match".to_owned(),
-            value,
-            values: HashMap::from([
-                ("correct".to_owned(), value * 2.0),
-                ("total".to_owned(), 2.0),
-            ]),
-            detail: None,
-        }],
-        branches: HashMap::new(),
-        samples: Vec::new(),
-        curves: HashMap::new(),
-    }
+    let mut r = BenchRunResult::default();
+    r.id = "previous".to_owned();
+    r.schema = rskit_bench::schema::schema_url();
+    r.version = rskit_bench::schema::version();
+    r.timestamp = "2026-01-01T00:00:00Z".to_owned();
+    r.tag = "candidate".to_owned();
+    r.duration_ms = 1;
+    r.dataset = DatasetInfo {
+        name: "candidate".to_owned(),
+        version: String::new(),
+        sample_count: 2,
+        label_distribution: HashMap::from([("yes".to_owned(), 1), ("no".to_owned(), 1)]),
+    };
+    r.metrics = vec![MetricResult {
+        name: "exact_match".to_owned(),
+        value,
+        values: HashMap::from([
+            ("correct".to_owned(), value * 2.0),
+            ("total".to_owned(), 2.0),
+        ]),
+        detail: None,
+    }];
+    r
 }
 
 #[derive(Clone, Default)]
@@ -175,7 +172,7 @@ async fn runner_records_successes_failures_metrics_and_storage() {
     let saved = storage.saved.clone();
     let reporter = RecordingReporter::default();
     let reporter_calls = reporter.calls.clone();
-    let evaluator = EvaluatorFunc::new("fixture-evaluator", |input| {
+    let evaluator = EvaluatorFunc::new("fixture-evaluator", |input, _ctx| {
         Box::pin(async move {
             let text = String::from_utf8_lossy(&input);
             if text.contains("no label") {
@@ -210,7 +207,7 @@ async fn runner_records_successes_failures_metrics_and_storage() {
 
     assert_eq!(result.id, "release-candidate-20240101-000000");
     assert_eq!(result.timestamp, "2024-01-01T00:00:00Z");
-    assert_eq!(result.dataset.name, "release candidate");
+    assert_eq!(result.dataset.name, "fixture-dataset");
     assert_eq!(result.dataset.sample_count, 2);
     assert_eq!(result.dataset.label_distribution["yes"], 1);
     assert_eq!(result.dataset.label_distribution["no"], 1);
@@ -235,7 +232,7 @@ async fn runner_records_successes_failures_metrics_and_storage() {
 async fn runner_surfaces_reporter_failure_instead_of_swallowing_it() {
     let loader = DatasetLoader::new(fixture_dataset_dir(), string_label_mapper())
         .with_manifest_file("custom-manifest.json");
-    let evaluator = EvaluatorFunc::new("fixture-evaluator", |_input| {
+    let evaluator = EvaluatorFunc::new("fixture-evaluator", |_input, _ctx| {
         Box::pin(async {
             Ok(Prediction {
                 label: "yes".to_owned(),
@@ -266,7 +263,7 @@ async fn runner_surfaces_reporter_failure_instead_of_swallowing_it() {
 async fn runner_fails_gate_when_baseline_load_errors_and_regression_gate_is_on() {
     let loader = DatasetLoader::new(fixture_dataset_dir(), string_label_mapper())
         .with_manifest_file("custom-manifest.json");
-    let evaluator = EvaluatorFunc::new("fixture-evaluator", |_input| {
+    let evaluator = EvaluatorFunc::new("fixture-evaluator", |_input, _ctx| {
         Box::pin(async {
             Ok(Prediction {
                 label: "yes".to_owned(),
@@ -298,7 +295,7 @@ async fn runner_fails_gate_when_baseline_load_errors_and_regression_gate_is_on()
 async fn runner_first_run_passes_gate_without_a_baseline() {
     let loader = DatasetLoader::new(fixture_dataset_dir(), string_label_mapper())
         .with_manifest_file("custom-manifest.json");
-    let evaluator = EvaluatorFunc::new("fixture-evaluator", |_input| {
+    let evaluator = EvaluatorFunc::new("fixture-evaluator", |_input, _ctx| {
         Box::pin(async {
             Ok(Prediction {
                 label: "yes".to_owned(),
@@ -326,7 +323,7 @@ async fn runner_first_run_passes_gate_without_a_baseline() {
 async fn runner_can_fail_release_gate_when_latest_run_regresses() {
     let loader = DatasetLoader::new(fixture_dataset_dir(), string_label_mapper())
         .with_manifest_file("custom-manifest.json");
-    let evaluator = EvaluatorFunc::new("regressing-evaluator", |_input| {
+    let evaluator = EvaluatorFunc::new("regressing-evaluator", |_input, _ctx| {
         Box::pin(async {
             Ok(Prediction {
                 label: "wrong".to_owned(),
@@ -356,4 +353,62 @@ async fn runner_can_fail_release_gate_when_latest_run_regresses() {
     assert_eq!(error.code(), ErrorCode::Internal);
     assert!(error.message().contains("Regression detected"));
     assert!(error.message().contains("exact_match"));
+}
+
+#[tokio::test]
+async fn runner_records_reproducible_provenance() {
+    async fn run_once() -> BenchRunResult {
+        let loader = DatasetLoader::new(fixture_dataset_dir(), string_label_mapper())
+            .with_manifest_file("custom-manifest.json");
+        let evaluator = EvaluatorFunc::new("fixture-evaluator", |_input, _ctx| {
+            Box::pin(async move {
+                Ok(Prediction {
+                    sample_id: "p".to_owned(),
+                    label: "yes".to_owned(),
+                    score: 0.9,
+                    ..Prediction::default()
+                })
+            })
+        });
+        let probe = Arc::new(
+            rskit_bench::FixedProvenanceProbe::new()
+                .with_git_commit("abc123")
+                .with_host("ci-runner")
+                .with_os("linux")
+                .with_arch("x86_64"),
+        );
+        BenchRunner::new()
+            .register("fixture", Box::new(evaluator), 1)
+            .with_metrics(exact_match_suite())
+            .with_clock(Arc::new(FixedClock::new(1_704_067_200, 42)))
+            .with_provenance_probe(probe)
+            .run(&loader, RunOptions::default().with_seed(7).with_tag("eval"))
+            .await
+            .unwrap()
+    }
+
+    let first = run_once().await;
+    let second = run_once().await;
+
+    let provenance = &first.provenance;
+    assert_eq!(provenance.seed, 7);
+    assert_eq!(provenance.rng_algorithm, rskit_bench::RNG_ALGORITHM);
+    assert_eq!(provenance.git_commit.as_deref(), Some("abc123"));
+    assert_eq!(provenance.host, "ci-runner");
+    assert_eq!(provenance.os, "linux");
+    assert_eq!(provenance.arch, "x86_64");
+    assert_eq!(provenance.dataset_name, "fixture-dataset");
+    assert_eq!(provenance.dataset_version, "2.1.0");
+    assert!(!provenance.dataset_hash.is_empty());
+    assert_eq!(provenance.branches, vec!["fixture".to_owned()]);
+    assert_eq!(provenance.metrics, vec!["exact_match".to_owned()]);
+    assert!(!provenance.tool_version.is_empty());
+
+    // Reproducibility: identical inputs (fixed clock + probe + seed) yield an
+    // identical full result, not just identical provenance. Compared structurally
+    // so unordered maps (e.g. label distribution) don't cause spurious failures.
+    assert_eq!(
+        serde_json::to_value(&first).unwrap(),
+        serde_json::to_value(&second).unwrap()
+    );
 }
