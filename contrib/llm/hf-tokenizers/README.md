@@ -19,7 +19,7 @@ let shared = counter("tokenizer.json")?;
 # Ok::<(), rskit_errors::AppError>(())
 ```
 
-A tokenizer can also be built from an in-memory definition with `HfTokenCounter::from_json`. Missing paths and malformed definitions are rejected with an `InvalidInput` error.
+A tokenizer can also be built from an in-memory definition with `HfTokenCounter::from_json`. Missing paths and malformed definitions are rejected with an `InvalidInput` error. `from_file` reads the definition under a bounded byte budget (`DEFAULT_MAX_DEFINITION_BYTES`); use `HfTokenCounter::from_file_with_max_bytes` to raise or lower the cap, and an over-budget file is rejected with `InvalidInput` before it is parsed.
 
 ## Feature flag
 

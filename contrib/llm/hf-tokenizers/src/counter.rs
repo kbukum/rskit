@@ -2,9 +2,19 @@
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_llm::TokenCounter;
+use std::io::Read;
 use std::path::Path;
 use std::sync::Arc;
 use tokenizers::Tokenizer;
+
+/// Default maximum size, in bytes, of a `tokenizer.json` definition loaded from
+/// disk.
+///
+/// Real tokenizer definitions are at most a few tens of megabytes; the cap
+/// keeps a malicious or accidentally-huge file from exhausting process memory
+/// before it is parsed. Callers with unusual needs can override it via
+/// [`HfTokenCounter::from_file_with_max_bytes`].
+pub const DEFAULT_MAX_DEFINITION_BYTES: u64 = 64 * 1024 * 1024;
 
 /// Counts tokens using a `HuggingFace` `tokenizer.json` via the `tokenizers` crate.
 ///
@@ -17,15 +27,22 @@ pub struct HfTokenCounter {
 
 impl HfTokenCounter {
     /// Loads a counter from a `HuggingFace` `tokenizer.json` file path.
+    ///
+    /// The file is read under [`DEFAULT_MAX_DEFINITION_BYTES`]; a larger file is
+    /// rejected with `InvalidInput` before it is parsed.
     pub fn from_file(path: impl AsRef<Path>) -> AppResult<Self> {
+        Self::from_file_with_max_bytes(path, DEFAULT_MAX_DEFINITION_BYTES)
+    }
+
+    /// Loads a counter from a `tokenizer.json` file path under a caller-supplied
+    /// byte budget.
+    ///
+    /// The read is bounded to `max_bytes`, so a definition that exceeds the
+    /// budget — even one that grows after the initial size probe — is rejected
+    /// with `InvalidInput` rather than being copied into memory.
+    pub fn from_file_with_max_bytes(path: impl AsRef<Path>, max_bytes: u64) -> AppResult<Self> {
         let path = path.as_ref();
-        let json = std::fs::read_to_string(path).map_err(|e| {
-            AppError::new(
-                ErrorCode::InvalidInput,
-                format!("failed to read tokenizer file {}", path.display()),
-            )
-            .with_cause(e)
-        })?;
+        let json = read_bounded(path, max_bytes)?;
         Self::from_json(&json)
     }
 
@@ -45,6 +62,49 @@ impl HfTokenCounter {
         })?;
         Ok(Self { tokenizer })
     }
+}
+
+/// Reads a UTF-8 tokenizer definition from `path`, rejecting anything larger
+/// than `max_bytes`.
+///
+/// The read is capped at `max_bytes + 1` so a file that grows between the
+/// metadata probe and the read (or one whose reported length lies) is still
+/// caught rather than streamed unbounded into memory.
+fn read_bounded(path: &Path, max_bytes: u64) -> AppResult<String> {
+    let file = std::fs::File::open(path).map_err(|e| {
+        AppError::new(
+            ErrorCode::InvalidInput,
+            format!("failed to open tokenizer file {}", path.display()),
+        )
+        .with_cause(e)
+    })?;
+    let mut buf = Vec::new();
+    let read = file
+        .take(max_bytes.saturating_add(1))
+        .read_to_end(&mut buf)
+        .map_err(|e| {
+            AppError::new(
+                ErrorCode::InvalidInput,
+                format!("failed to read tokenizer file {}", path.display()),
+            )
+            .with_cause(e)
+        })?;
+    if read as u64 > max_bytes {
+        return Err(AppError::new(
+            ErrorCode::InvalidInput,
+            format!(
+                "tokenizer file {} exceeds the {max_bytes}-byte limit",
+                path.display()
+            ),
+        ));
+    }
+    String::from_utf8(buf).map_err(|e| {
+        AppError::new(
+            ErrorCode::InvalidInput,
+            format!("tokenizer file {} is not valid UTF-8", path.display()),
+        )
+        .with_cause(e)
+    })
 }
 
 /// Rejects a definition whose BPE model enables nonzero dropout.
@@ -180,5 +240,31 @@ mod tests {
             .suffix(".json")
             .tempfile()
             .expect("temp file")
+    }
+
+    #[test]
+    fn oversized_file_is_rejected_before_parsing() {
+        use std::io::Write;
+        let mut file = tempfile_json();
+        file.write_all(FIXTURE.as_bytes()).unwrap();
+        file.flush().unwrap();
+        // A budget smaller than the fixture must be rejected as InvalidInput
+        // rather than parsed.
+        let max = (FIXTURE.len() as u64) - 1;
+        let err = HfTokenCounter::from_file_with_max_bytes(file.path(), max)
+            .err()
+            .expect("oversized file must error");
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn file_within_budget_loads() {
+        use std::io::Write;
+        let mut file = tempfile_json();
+        file.write_all(FIXTURE.as_bytes()).unwrap();
+        file.flush().unwrap();
+        let counter =
+            HfTokenCounter::from_file_with_max_bytes(file.path(), FIXTURE.len() as u64).unwrap();
+        assert_eq!(counter.count("hello world").unwrap(), 2);
     }
 }

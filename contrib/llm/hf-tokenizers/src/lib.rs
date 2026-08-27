@@ -9,4 +9,4 @@
 
 mod counter;
 
-pub use counter::{HfTokenCounter, counter};
+pub use counter::{DEFAULT_MAX_DEFINITION_BYTES, HfTokenCounter, counter};
