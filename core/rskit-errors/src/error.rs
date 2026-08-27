@@ -73,6 +73,21 @@ impl AppError {
         self
     }
 
+    /// Attach an already-boxed, type-erased error as the underlying cause.
+    ///
+    /// Use this when the source is a trait object (`Box<dyn Error + Send +
+    /// Sync>`, as produced by crates like `tokenizers` or `anyhow`) that does
+    /// not itself implement [`std::error::Error`] and so cannot be passed to
+    /// [`with_cause`](Self::with_cause).
+    #[must_use]
+    pub fn with_boxed_cause(
+        mut self,
+        cause: Box<dyn std::error::Error + Send + Sync + 'static>,
+    ) -> Self {
+        self.cause = Some(cause);
+        self
+    }
+
     /// Add a single key-value detail entry.
     #[must_use]
     pub fn with_detail(mut self, key: impl Into<String>, value: impl Into<Value>) -> Self {
@@ -434,6 +449,17 @@ mod tests {
         let io_err = io::Error::new(io::ErrorKind::ConnectionRefused, "refused");
         let err = AppError::new(ErrorCode::ConnectionFailed, "conn failed").with_cause(io_err);
         assert!(err.source().is_some());
+    }
+
+    #[test]
+    fn with_boxed_cause_stores_type_erased_source() {
+        use std::error::Error;
+        use std::io;
+        // A trait object that does not itself implement `Error`.
+        let boxed: Box<dyn Error + Send + Sync> = Box::new(io::Error::other("erased"));
+        let err = AppError::new(ErrorCode::Internal, "wrapped").with_boxed_cause(boxed);
+        assert!(err.cause.is_some());
+        assert_eq!(err.source().unwrap().to_string(), "erased");
     }
 
     // ── Convenience constructors ──────────────────────────────────────────────
