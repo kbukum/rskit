@@ -43,7 +43,7 @@ pub struct BenchRunResult {
     #[serde(default)]
     pub curves: HashMap<String, serde_json::Value>,
     /// Reproducibility provenance (seed, commit, tool/host identity, dataset hash).
-    #[serde(default, skip_serializing_if = "RunProvenance::is_empty")]
+    #[serde(default)]
     pub provenance: RunProvenance,
 }
 

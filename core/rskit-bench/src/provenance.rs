@@ -13,9 +13,8 @@ use crate::types::BenchSample;
 
 /// Reproducibility metadata captured for a benchmark run.
 ///
-/// Fields are individually omitted from serialization when empty so a run built
-/// without a probe (for example a hand-constructed fixture) serializes exactly as
-/// before this record existed.
+/// Individually empty fields (an unresolved commit, a zero seed) are omitted from
+/// serialization so the record stays sparse rather than padded with defaults.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RunProvenance {
     /// Deterministic run seed (see [`RunOptions::with_seed`](crate::RunOptions::with_seed)).
@@ -53,14 +52,6 @@ pub struct RunProvenance {
 #[allow(clippy::trivially_copy_pass_by_ref)]
 fn is_zero(value: &u64) -> bool {
     *value == 0
-}
-
-impl RunProvenance {
-    /// Returns `true` when no provenance has been recorded (all fields default).
-    #[must_use]
-    pub fn is_empty(&self) -> bool {
-        *self == Self::default()
-    }
 }
 
 /// Gathers host and source-control provenance for a benchmark run.
@@ -219,7 +210,6 @@ mod tests {
     #[test]
     fn empty_provenance_serializes_to_empty_object() {
         let provenance = RunProvenance::default();
-        assert!(provenance.is_empty());
         let json = serde_json::to_string(&provenance).expect("serialize");
         assert_eq!(json, "{}");
     }
@@ -238,7 +228,6 @@ mod tests {
             branches: vec!["primary".into()],
             metrics: vec!["exact_match".into()],
         };
-        assert!(!provenance.is_empty());
         let json = serde_json::to_string(&provenance).expect("serialize");
         let restored: RunProvenance = serde_json::from_str(&json).expect("deserialize");
         assert_eq!(provenance, restored);

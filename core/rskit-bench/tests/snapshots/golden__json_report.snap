@@ -1,5 +1,5 @@
 ---
-source: crates/rskit-bench/tests/golden.rs
+source: rskit-bench/tests/golden.rs
 expression: parsed
 ---
 {
@@ -28,6 +28,7 @@ expression: parsed
       }
     }
   ],
+  "provenance": {},
   "samples": [
     {
       "correct": true,
