@@ -27,6 +27,7 @@ Start here, then reconcile each low-level operation against that pass.
 | Encryption / security | `rskit-encryption` / `rskit-security` | ad-hoc crypto, custom header sets | current algorithms only |
 | Git operations | `rskit-git` | bare `Command::new("git")` | |
 | Validation | `rskit-validation` | inline boundary checks duplicated per crate | |
+| Tokenization / token counting | `rskit-llm` | ad-hoc `chars/4` counts, per-crate tiktoken/tokenizers wrappers | `TokenCounter` port + heuristic default in core; exact tokenizers in `contrib/llm/*` |
 
 ## How to use this map
 

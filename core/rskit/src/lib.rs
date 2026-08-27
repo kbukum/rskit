@@ -63,6 +63,8 @@
 //! | `llm-anthropic` | `Anthropic` LLM adapter |
 //! | `llm-ollama` | `Ollama` LLM adapter |
 //! | `llm-gemini` | `Gemini` LLM adapter |
+//! | `llm-tiktoken` | `OpenAI` BPE (tiktoken) token-counter adapter |
+//! | `llm-hf-tokenizers` | `HuggingFace` tokenizers token-counter adapter |
 //! | `embedding` | `rskit-embedding` (embedding abstractions) |
 //! | `inference` | `rskit-inference` (model-serving abstractions) |
 //! | `inference-triton` | Triton inference adapter |
@@ -280,6 +282,14 @@ pub use rskit_llm_ollama as llm_ollama;
 /// Gemini LLM adapter.
 #[cfg(feature = "llm-gemini")]
 pub use rskit_llm_gemini as llm_gemini;
+
+/// `OpenAI` BPE (tiktoken) token-counter adapter.
+#[cfg(feature = "llm-tiktoken")]
+pub use rskit_llm_tiktoken as llm_tiktoken;
+
+/// `HuggingFace` tokenizers token-counter adapter.
+#[cfg(feature = "llm-hf-tokenizers")]
+pub use rskit_llm_hf_tokenizers as llm_hf_tokenizers;
 
 /// Embedding provider abstractions and types.
 #[cfg(feature = "embedding")]

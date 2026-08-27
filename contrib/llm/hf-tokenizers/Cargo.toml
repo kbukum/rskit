@@ -1,0 +1,25 @@
+[package]
+name        = "rskit-llm-hf-tokenizers"
+description = "HuggingFace tokenizers TokenCounter adapter for rskit"
+readme      = "README.md"
+version = "0.2.0-alpha.1"
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation          = "https://docs.rs/rskit-llm-hf-tokenizers"
+categories             = ["api-bindings"]
+keywords               = ["tokenizers", "huggingface", "tokenizer", "llm"]
+
+[lints]
+workspace = true
+
+[dependencies]
+rskit-llm.workspace = true
+rskit-errors.workspace = true
+tokenizers = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
