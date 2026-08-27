@@ -125,6 +125,7 @@ fn make_bench_run_result(n_samples: usize) -> BenchRunResult {
         branches: HashMap::new(),
         samples,
         curves: HashMap::new(),
+        provenance: rskit_bench::RunProvenance::default(),
     }
 }
 

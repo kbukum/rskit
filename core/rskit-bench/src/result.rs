@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+use super::provenance::RunProvenance;
 use super::schema;
 
 /// Complete result of a benchmark run.
@@ -41,6 +42,9 @@ pub struct BenchRunResult {
     /// Optional visualization curves.
     #[serde(default)]
     pub curves: HashMap<String, serde_json::Value>,
+    /// Reproducibility provenance (seed, commit, tool/host identity, dataset hash).
+    #[serde(default, skip_serializing_if = "RunProvenance::is_empty")]
+    pub provenance: RunProvenance,
 }
 
 /// Dataset metadata included in run results.

@@ -23,6 +23,7 @@ tokio-util     = { workspace = true }
 tracing        = { workspace = true }
 async-trait    = { workspace = true }
 parking_lot    = { workspace = true }
+rand           = { workspace = true }
 
 # Internal
 rskit-errors = { workspace = true }

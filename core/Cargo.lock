@@ -5370,6 +5370,7 @@ dependencies = [
  "futures",
  "insta",
  "parking_lot",
+ "rand 0.9.5",
  "rskit-cli",
  "rskit-errors",
  "rskit-fs",

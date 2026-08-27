@@ -105,6 +105,7 @@ fn make_run_result(
         branches: HashMap::new(),
         samples,
         curves: HashMap::new(),
+        provenance: rskit_bench::RunProvenance::default(),
     }
 }
 

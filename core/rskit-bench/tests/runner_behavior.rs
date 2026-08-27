@@ -47,6 +47,7 @@ fn previous_result(value: f64) -> BenchRunResult {
         branches: HashMap::new(),
         samples: Vec::new(),
         curves: HashMap::new(),
+        provenance: rskit_bench::RunProvenance::default(),
     }
 }
 
@@ -356,4 +357,58 @@ async fn runner_can_fail_release_gate_when_latest_run_regresses() {
     assert_eq!(error.code(), ErrorCode::Internal);
     assert!(error.message().contains("Regression detected"));
     assert!(error.message().contains("exact_match"));
+}
+
+#[tokio::test]
+async fn runner_records_reproducible_provenance() {
+    async fn run_once() -> BenchRunResult {
+        let loader = DatasetLoader::new(fixture_dataset_dir(), string_label_mapper())
+            .with_manifest_file("custom-manifest.json");
+        let evaluator = EvaluatorFunc::new("fixture-evaluator", |_input| {
+            Box::pin(async move {
+                Ok(Prediction {
+                    sample_id: "p".to_owned(),
+                    label: "yes".to_owned(),
+                    score: 0.9,
+                    ..Prediction::default()
+                })
+            })
+        });
+        let probe = Arc::new(
+            rskit_bench::FixedProvenanceProbe::new()
+                .with_git_commit("abc123")
+                .with_host("ci-runner")
+                .with_os("linux")
+                .with_arch("x86_64"),
+        );
+        BenchRunner::new()
+            .register("fixture", Box::new(evaluator), 1)
+            .with_metrics(exact_match_suite())
+            .with_clock(Arc::new(FixedClock::new(1_704_067_200, 42)))
+            .with_provenance_probe(probe)
+            .run(&loader, RunOptions::default().with_seed(7).with_tag("eval"))
+            .await
+            .unwrap()
+    }
+
+    let first = run_once().await;
+    let second = run_once().await;
+
+    let provenance = &first.provenance;
+    assert_eq!(provenance.seed, 7);
+    assert_eq!(provenance.git_commit.as_deref(), Some("abc123"));
+    assert_eq!(provenance.host, "ci-runner");
+    assert_eq!(provenance.os, "linux");
+    assert_eq!(provenance.arch, "x86_64");
+    assert_eq!(provenance.dataset_name, "eval");
+    assert!(!provenance.dataset_hash.is_empty());
+    assert_eq!(provenance.branches, vec!["fixture".to_owned()]);
+    assert_eq!(provenance.metrics, vec!["exact_match".to_owned()]);
+    assert!(!provenance.tool_version.is_empty());
+
+    // Reproducibility: identical inputs (fixed clock + probe + seed) yield identical provenance.
+    assert_eq!(
+        serde_json::to_value(&first.provenance).unwrap(),
+        serde_json::to_value(&second.provenance).unwrap()
+    );
 }

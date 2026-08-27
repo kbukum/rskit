@@ -39,6 +39,7 @@ fn result(id: &str, timestamp: &str, tag: &str, f1: f64) -> BenchRunResult {
         branches: HashMap::new(),
         samples: Vec::new(),
         curves: HashMap::new(),
+        provenance: rskit_bench::RunProvenance::default(),
     }
 }
 

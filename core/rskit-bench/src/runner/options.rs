@@ -2,6 +2,9 @@
 
 use std::collections::HashMap;
 
+use rand::SeedableRng;
+use rand::rngs::StdRng;
+
 /// Options for configuring a benchmark run.
 pub struct RunOptions {
     /// Maximum number of in-flight sample evaluations per branch.
@@ -14,6 +17,9 @@ pub struct RunOptions {
     pub fail_on_regression: bool,
     /// Metric target thresholds keyed by metric name.
     pub targets: HashMap<String, f64>,
+    /// Deterministic seed recorded in run provenance and used to derive a
+    /// reproducible RNG via [`RunOptions::seeded_rng`].
+    pub seed: u64,
 }
 
 impl Default for RunOptions {
@@ -24,6 +30,7 @@ impl Default for RunOptions {
             tag: String::from("default"),
             fail_on_regression: false,
             targets: HashMap::new(),
+            seed: 0,
         }
     }
 }
@@ -62,5 +69,22 @@ impl RunOptions {
     pub fn with_target(mut self, metric: impl Into<String>, threshold: f64) -> Self {
         self.targets.insert(metric.into(), threshold);
         self
+    }
+
+    #[must_use]
+    /// Sets the deterministic run seed recorded in provenance and used by
+    /// [`RunOptions::seeded_rng`].
+    pub fn with_seed(mut self, seed: u64) -> Self {
+        self.seed = seed;
+        self
+    }
+
+    /// Returns a reproducible RNG derived from [`RunOptions::seed`].
+    ///
+    /// The same seed yields an identical sequence, so any sampling or shuffling an
+    /// evaluator or metric performs can be made deterministic across runs.
+    #[must_use]
+    pub fn seeded_rng(&self) -> StdRng {
+        StdRng::seed_from_u64(self.seed)
     }
 }

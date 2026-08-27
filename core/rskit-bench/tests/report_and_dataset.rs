@@ -121,6 +121,7 @@ fn bench_result() -> BenchRunResult {
             },
         ],
         curves,
+        provenance: rskit_bench::RunProvenance::default(),
     }
 }
 

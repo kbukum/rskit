@@ -9,6 +9,7 @@ use crate::dataset_loader::DatasetLoader;
 use crate::evaluator::Evaluator;
 use crate::execution::BenchExecutionPlan;
 use crate::metric::Suite;
+use crate::provenance::{ProvenanceProbe, RunProvenance, SystemProvenanceProbe, dataset_hash};
 use crate::report_gen::Reporter;
 use crate::result::{BenchRunResult, BenchSampleResult, BranchResult, DatasetInfo, MetricResult};
 use crate::run_id::generate_run_id;
@@ -37,6 +38,7 @@ pub struct BenchRunner<L> {
     reporters: Vec<Box<dyn Reporter>>,
     comparator: Option<RunComparator>,
     clock: SharedClock,
+    probe: Arc<dyn ProvenanceProbe>,
 }
 
 impl<L> Default for BenchRunner<L>
@@ -61,6 +63,7 @@ where
             reporters: Vec::new(),
             comparator: None,
             clock: system_clock(),
+            probe: Arc::new(SystemProvenanceProbe),
         }
     }
 
@@ -111,6 +114,17 @@ where
     #[must_use]
     pub fn with_clock(mut self, clock: SharedClock) -> Self {
         self.clock = clock;
+        self
+    }
+
+    /// Sets the provenance probe used to record host and source-control identity.
+    ///
+    /// Defaults to [`SystemProvenanceProbe`]. Inject a
+    /// [`FixedProvenanceProbe`](crate::FixedProvenanceProbe) for deterministic,
+    /// offline reproducibility tests.
+    #[must_use]
+    pub fn with_provenance_probe(mut self, probe: Arc<dyn ProvenanceProbe>) -> Self {
+        self.probe = probe;
         self
     }
 
@@ -318,6 +332,19 @@ where
             .and_then(format_rfc3339)
             .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string());
 
+        let provenance = RunProvenance {
+            seed: opts.seed,
+            git_commit: self.probe.git_commit(),
+            tool_version: env!("CARGO_PKG_VERSION").to_string(),
+            host: self.probe.host(),
+            os: self.probe.os(),
+            arch: self.probe.arch(),
+            dataset_hash: dataset_hash(&samples),
+            dataset_name: dataset_info.name.clone(),
+            branches: self.branches.iter().map(|b| b.name.clone()).collect(),
+            metrics: metric_results.iter().map(|m| m.name.clone()).collect(),
+        };
+
         let result = BenchRunResult {
             id: run_id,
             schema: schema::schema_url(),
@@ -330,6 +357,7 @@ where
             branches: branch_results,
             samples: sample_results,
             curves: HashMap::new(),
+            provenance,
         };
 
         if let Some(ref storage) = self.storage {
