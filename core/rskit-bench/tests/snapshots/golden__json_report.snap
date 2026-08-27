@@ -28,7 +28,9 @@ expression: parsed
       }
     }
   ],
-  "provenance": {},
+  "provenance": {
+    "seed": 0
+  },
   "samples": [
     {
       "correct": true,

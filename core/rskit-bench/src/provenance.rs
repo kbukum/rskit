@@ -9,16 +9,20 @@
 
 use serde::{Deserialize, Serialize};
 
+use rskit_util::hash::ContentHasher;
+
 use crate::types::BenchSample;
 
 /// Reproducibility metadata captured for a benchmark run.
 ///
-/// Individually empty fields (an unresolved commit, a zero seed) are omitted from
-/// serialization so the record stays sparse rather than padded with defaults.
+/// The seed always serializes — it drives reproducibility, so a run must record
+/// which seed produced it even when it is zero. Genuinely-absent fields (an
+/// unresolved commit, an unnamed dataset) are omitted so the record stays sparse
+/// rather than padded with empty placeholders.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RunProvenance {
     /// Deterministic run seed (see [`RunOptions::with_seed`](crate::RunOptions::with_seed)).
-    #[serde(default, skip_serializing_if = "is_zero")]
+    #[serde(default)]
     pub seed: u64,
     /// Source-control commit the run was built from, when resolvable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -47,11 +51,6 @@ pub struct RunProvenance {
     /// Metric names computed for the run, in suite order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub metrics: Vec<String>,
-}
-
-#[allow(clippy::trivially_copy_pass_by_ref)]
-fn is_zero(value: &u64) -> bool {
-    *value == 0
 }
 
 /// Gathers host and source-control provenance for a benchmark run.
@@ -179,16 +178,24 @@ impl ProvenanceProbe for FixedProvenanceProbe {
     }
 }
 
-/// Computes an order-independent SHA-256 content hash of a dataset from each
-/// sample's id and label, so the same dataset hashes identically regardless of load
-/// order.
+/// Computes an order-independent content hash of a dataset from each sample's id
+/// and label, so the same dataset hashes identically regardless of load order.
+///
+/// Each `(id, label)` pair is folded incrementally with length-prefixed framing via
+/// [`ContentHasher::update_framed`], so datasets whose ids or labels contain tabs,
+/// newlines, or other delimiters cannot collide, and no large intermediate string is
+/// materialized regardless of dataset size.
 pub(crate) fn dataset_hash<L: std::fmt::Display>(samples: &[BenchSample<L>]) -> String {
-    let mut lines: Vec<String> = samples
+    let mut records: Vec<(&str, String)> = samples
         .iter()
-        .map(|sample| format!("{}\t{}", sample.id, sample.label))
+        .map(|sample| (sample.id.as_str(), sample.label.to_string()))
         .collect();
-    lines.sort();
-    rskit_util::hash::sha256::sha256_hex(lines.join("\n").as_bytes())
+    records.sort();
+    let mut hasher = ContentHasher::new();
+    for (id, label) in &records {
+        hasher.update_framed(id.as_bytes(), label.as_bytes());
+    }
+    hasher.finalize_hex()
 }
 
 #[cfg(test)]
@@ -208,10 +215,10 @@ mod tests {
     }
 
     #[test]
-    fn empty_provenance_serializes_to_empty_object() {
+    fn default_provenance_records_the_seed() {
         let provenance = RunProvenance::default();
         let json = serde_json::to_string(&provenance).expect("serialize");
-        assert_eq!(json, "{}");
+        assert_eq!(json, "{\"seed\":0}");
     }
 
     #[test]
@@ -264,5 +271,18 @@ mod tests {
         let base = [sample("a", "yes")];
         let changed = [sample("a", "no")];
         assert_ne!(dataset_hash(&base), dataset_hash(&changed));
+    }
+
+    #[test]
+    fn dataset_hash_resists_delimiter_collision() {
+        // Ids/labels containing the delimiters a naive join would use must not
+        // alias distinct datasets.
+        let tab = [sample("a\tb", "c")];
+        let split = [sample("a", "b\tc")];
+        assert_ne!(dataset_hash(&tab), dataset_hash(&split));
+
+        let newline = [sample("a", "b"), sample("c", "d")];
+        let merged = [sample("a", "b\nc"), sample("", "d")];
+        assert_ne!(dataset_hash(&newline), dataset_hash(&merged));
     }
 }
