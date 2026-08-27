@@ -1,6 +1,7 @@
 use super::Metric;
 use crate::curves::{CalibrationCurve, RocCurve};
 use crate::{MetricResult, ScoredSample};
+use rskit_errors::AppResult;
 use std::collections::HashMap;
 
 fn empty_result(name: &str) -> MetricResult {
@@ -31,9 +32,9 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for AucRoc<L> {
         "aucroc"
     }
 
-    fn compute(&self, scored: &[ScoredSample<L>]) -> MetricResult {
+    fn compute(&self, scored: &[ScoredSample<L>]) -> AppResult<MetricResult> {
         if scored.is_empty() {
-            return empty_result("aucroc");
+            return Ok(empty_result("aucroc"));
         }
 
         let mut sorted: Vec<_> = scored.to_vec();
@@ -50,7 +51,7 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for AucRoc<L> {
             .count();
         let total_neg = sorted.len() - total_pos;
         if total_pos == 0 || total_neg == 0 {
-            return empty_result("aucroc");
+            return Ok(empty_result("aucroc"));
         }
 
         let mut fpr_vec = vec![0.0];
@@ -80,12 +81,12 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for AucRoc<L> {
             thresholds,
             auc,
         };
-        MetricResult {
+        Ok(MetricResult {
             name: "aucroc".into(),
             value: auc,
             values: HashMap::new(),
             detail: Some(serde_json::to_value(&detail).unwrap_or_default()),
-        }
+        })
     }
 }
 
@@ -108,9 +109,9 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for BrierScore<L> {
         "brier_score"
     }
 
-    fn compute(&self, scored: &[ScoredSample<L>]) -> MetricResult {
+    fn compute(&self, scored: &[ScoredSample<L>]) -> AppResult<MetricResult> {
         if scored.is_empty() {
-            return empty_result("brier_score");
+            return Ok(empty_result("brier_score"));
         }
         let sum: f64 = scored
             .iter()
@@ -123,12 +124,12 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for BrierScore<L> {
                 (s.prediction.score - actual).powi(2)
             })
             .sum();
-        MetricResult {
+        Ok(MetricResult {
             name: "brier_score".into(),
             value: sum / scored.len() as f64,
             values: HashMap::new(),
             detail: None,
-        }
+        })
     }
 }
 
@@ -151,9 +152,9 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for LogLoss<L> {
         "log_loss"
     }
 
-    fn compute(&self, scored: &[ScoredSample<L>]) -> MetricResult {
+    fn compute(&self, scored: &[ScoredSample<L>]) -> AppResult<MetricResult> {
         if scored.is_empty() {
-            return empty_result("log_loss");
+            return Ok(empty_result("log_loss"));
         }
         let eps = 1e-15;
         let sum: f64 = scored
@@ -168,12 +169,12 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for LogLoss<L> {
                 actual * p.ln() + (1.0 - actual) * (1.0 - p).ln()
             })
             .sum();
-        MetricResult {
+        Ok(MetricResult {
             name: "log_loss".into(),
             value: -sum / scored.len() as f64,
             values: HashMap::new(),
             detail: None,
-        }
+        })
     }
 }
 
@@ -198,9 +199,9 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for CalibrationMetr
         "calibration"
     }
 
-    fn compute(&self, scored: &[ScoredSample<L>]) -> MetricResult {
+    fn compute(&self, scored: &[ScoredSample<L>]) -> AppResult<MetricResult> {
         if scored.is_empty() {
-            return empty_result("calibration");
+            return Ok(empty_result("calibration"));
         }
         let bin_width = 1.0 / self.bins as f64;
         let mut bin_count = vec![0usize; self.bins];
@@ -234,11 +235,11 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for CalibrationMetr
             actual_frequency: actual_freq,
             bin_count,
         };
-        MetricResult {
+        Ok(MetricResult {
             name: "calibration".into(),
             value: ece,
             values: HashMap::new(),
             detail: Some(serde_json::to_value(&detail).unwrap_or_default()),
-        }
+        })
     }
 }

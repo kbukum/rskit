@@ -158,7 +158,7 @@ fn bench_regression(c: &mut Criterion) {
             |b, data| {
                 b.iter(|| {
                     for m in &metrics {
-                        m.compute(black_box(data));
+                        let _ = m.compute(black_box(data));
                     }
                 });
             },

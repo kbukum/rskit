@@ -1,5 +1,6 @@
 use super::Metric;
 use crate::{MetricResult, ScoredSample};
+use rskit_errors::AppResult;
 use std::collections::HashMap;
 
 /// Creates a composite metric that averages constituent metric values by their supplied weights.
@@ -19,13 +20,13 @@ impl<L: Send + Sync + 'static> Metric<L> for Weighted<L> {
         "weighted"
     }
 
-    fn compute(&self, scored: &[ScoredSample<L>]) -> MetricResult {
+    fn compute(&self, scored: &[ScoredSample<L>]) -> AppResult<MetricResult> {
         let mut total_weight = 0.0;
         let mut weighted_sum = 0.0;
         let mut values = HashMap::new();
 
         for (metric, weight) in &self.metrics {
-            let result = metric.compute(scored);
+            let result = metric.compute(scored)?;
             values.insert(result.name.clone(), result.value);
             weighted_sum += result.value * weight;
             total_weight += weight;
@@ -37,12 +38,12 @@ impl<L: Send + Sync + 'static> Metric<L> for Weighted<L> {
             weighted_sum / total_weight
         };
 
-        MetricResult {
+        Ok(MetricResult {
             name: "weighted".into(),
             value,
             values,
             detail: None,
-        }
+        })
     }
 }
 
@@ -61,13 +62,13 @@ mod tests {
             self.name
         }
 
-        fn compute(&self, _scored: &[ScoredSample<String>]) -> MetricResult {
-            MetricResult {
+        fn compute(&self, _scored: &[ScoredSample<String>]) -> AppResult<MetricResult> {
+            Ok(MetricResult {
                 name: self.name.into(),
                 value: self.value,
                 values: HashMap::new(),
                 detail: None,
-            }
+            })
         }
     }
 
@@ -108,7 +109,7 @@ mod tests {
                 1.0,
             ),
         ]);
-        let result = metric.compute(&[sample()]);
+        let result = metric.compute(&[sample()]).unwrap();
 
         assert_eq!(metric.name(), "weighted");
         assert_eq!(result.name, "weighted");
@@ -127,7 +128,7 @@ mod tests {
             }),
             0.0,
         )]);
-        let result = metric.compute(&[sample()]);
+        let result = metric.compute(&[sample()]).unwrap();
 
         assert_eq!(result.value, 0.0);
         assert_eq!(result.values.get("p"), Some(&0.9));
@@ -136,7 +137,7 @@ mod tests {
     #[test]
     fn no_constituent_metrics_yields_zero() {
         let metric = weighted::<String>(vec![]);
-        let result = metric.compute(&[sample()]);
+        let result = metric.compute(&[sample()]).unwrap();
 
         assert_eq!(result.value, 0.0);
         assert!(result.values.is_empty());

@@ -7,6 +7,7 @@
 
 use super::Metric;
 use crate::{MetricResult, ScoredSample};
+use rskit_errors::AppResult;
 use rskit_llm::TokenCounter;
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -20,9 +21,8 @@ use std::sync::Arc;
 /// tokens as the primary [`MetricResult::value`] and records totals and
 /// averages for both predicted and reference tokens in
 /// [`MetricResult::values`]. Empty input yields a zeroed result rather than a
-/// panic. A tokenization failure surfaces as a `NaN`-valued result carrying the
-/// error in [`MetricResult::detail`] rather than a fabricated count that would
-/// corrupt aggregate totals.
+/// panic. A tokenization failure is propagated as an error rather than
+/// collapsed into a fabricated count that would corrupt aggregate totals.
 pub fn token_stats<L>(counter: Arc<dyn TokenCounter>) -> Box<dyn Metric<L>>
 where
     L: Display + Clone + Send + Sync + 'static,
@@ -45,24 +45,16 @@ impl<L: Display + Clone + Send + Sync + 'static> Metric<L> for TokenStats<L> {
         NAME
     }
 
-    fn compute(&self, scored: &[ScoredSample<L>]) -> MetricResult {
+    fn compute(&self, scored: &[ScoredSample<L>]) -> AppResult<MetricResult> {
         if scored.is_empty() {
-            return zeroed_result();
+            return Ok(zeroed_result());
         }
 
         let mut predicted_total = 0usize;
         let mut reference_total = 0usize;
         for sample in scored {
-            let predicted = match self.counter.count(&sample.prediction.label.to_string()) {
-                Ok(tokens) => tokens,
-                Err(err) => return failed_result(&err),
-            };
-            let reference = match self.counter.count(&sample.sample.label.to_string()) {
-                Ok(tokens) => tokens,
-                Err(err) => return failed_result(&err),
-            };
-            predicted_total += predicted;
-            reference_total += reference;
+            predicted_total += self.counter.count(&sample.prediction.label.to_string())?;
+            reference_total += self.counter.count(&sample.sample.label.to_string())?;
         }
 
         let count = scored.len() as f64;
@@ -75,12 +67,12 @@ impl<L: Display + Clone + Send + Sync + 'static> Metric<L> for TokenStats<L> {
         values.insert("reference_tokens_total".into(), reference_total as f64);
         values.insert("reference_tokens_avg".into(), reference_avg);
 
-        MetricResult {
+        Ok(MetricResult {
             name: NAME.into(),
             value: predicted_avg,
             values,
             detail: None,
-        }
+        })
     }
 }
 
@@ -95,21 +87,6 @@ fn zeroed_result() -> MetricResult {
         value: 0.0,
         values,
         detail: None,
-    }
-}
-
-/// Surfaces a tokenization failure without fabricating a token count.
-///
-/// The [`Metric`] contract is infallible, so a counting error is reported as a
-/// `NaN`-valued result carrying the error in `detail`. This keeps a failed
-/// tokenization visible instead of collapsing it into a success-shaped zero
-/// that would silently corrupt aggregate totals.
-fn failed_result(err: &rskit_errors::AppError) -> MetricResult {
-    MetricResult {
-        name: NAME.into(),
-        value: f64::NAN,
-        values: HashMap::new(),
-        detail: Some(serde_json::json!({ "error": err.to_string() })),
     }
 }
 
@@ -141,7 +118,7 @@ mod tests {
     #[test]
     fn empty_input_is_zeroed_not_panicking() {
         let metric = token_stats::<String>(Arc::new(HeuristicTokenCounter));
-        let result = metric.compute(&[]);
+        let result = metric.compute(&[]).unwrap();
         assert_eq!(result.value, 0.0);
         assert_eq!(result.values["predicted_tokens_total"], 0.0);
         assert_eq!(result.values["reference_tokens_total"], 0.0);
@@ -152,7 +129,7 @@ mod tests {
         // "abcd" -> 1 token, "abcdefgh" -> 2 tokens under the heuristic.
         let metric = token_stats::<String>(Arc::new(HeuristicTokenCounter));
         let samples = vec![scored("abcd", "abcdefgh")];
-        let result = metric.compute(&samples);
+        let result = metric.compute(&samples).unwrap();
         assert_eq!(result.values["predicted_tokens_total"], 1.0);
         assert_eq!(result.values["reference_tokens_total"], 2.0);
         assert_eq!(result.value, 1.0);
@@ -162,7 +139,7 @@ mod tests {
     fn averages_across_samples() {
         let metric = token_stats::<String>(Arc::new(HeuristicTokenCounter));
         let samples = vec![scored("abcd", "abcd"), scored("abcdefgh", "abcd")];
-        let result = metric.compute(&samples);
+        let result = metric.compute(&samples).unwrap();
         // predicted totals: 1 + 2 = 3 over 2 samples -> avg 1.5
         assert_eq!(result.values["predicted_tokens_total"], 3.0);
         assert_eq!(result.values["predicted_tokens_avg"], 1.5);
@@ -180,7 +157,7 @@ mod tests {
         }
         let metric = token_stats::<String>(Arc::new(FixedCounter(7)));
         let samples = vec![scored("x", "y")];
-        let result = metric.compute(&samples);
+        let result = metric.compute(&samples).unwrap();
         assert_eq!(result.values["predicted_tokens_total"], 7.0);
         assert_eq!(result.values["reference_tokens_total"], 7.0);
     }
@@ -188,7 +165,7 @@ mod tests {
     #[test]
     fn counting_failure_is_surfaced_not_zeroed() {
         // A failing counter must not collapse into a success-shaped zero: the
-        // result is NaN and carries the error in `detail`.
+        // error propagates out of `compute` instead.
         struct FailingCounter;
         impl TokenCounter for FailingCounter {
             fn count(&self, _text: &str) -> rskit_errors::AppResult<usize> {
@@ -200,16 +177,11 @@ mod tests {
         }
         let metric = token_stats::<String>(Arc::new(FailingCounter));
         let samples = vec![scored("x", "y")];
-        let result = metric.compute(&samples);
-        assert!(result.value.is_nan());
-        assert!(result.values.is_empty());
-        let detail = result.detail.expect("failure detail present");
-        assert!(
-            detail["error"]
-                .as_str()
-                .unwrap()
-                .contains("tokenizer exploded")
-        );
+        let err = metric
+            .compute(&samples)
+            .expect_err("counting failure must propagate");
+        assert_eq!(err.code(), rskit_errors::ErrorCode::Internal);
+        assert!(err.to_string().contains("tokenizer exploded"));
     }
 
     #[test]

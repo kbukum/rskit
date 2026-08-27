@@ -1,5 +1,6 @@
 use super::Metric;
 use crate::{MetricResult, ScoredSample};
+use rskit_errors::AppResult;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::marker::PhantomData;
@@ -23,14 +24,14 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for ExactMatch<L> {
         "exact_match"
     }
 
-    fn compute(&self, scored: &[ScoredSample<L>]) -> MetricResult {
+    fn compute(&self, scored: &[ScoredSample<L>]) -> AppResult<MetricResult> {
         if scored.is_empty() {
-            return MetricResult {
+            return Ok(MetricResult {
                 name: "exact_match".into(),
                 value: 0.0,
                 values: HashMap::new(),
                 detail: None,
-            };
+            });
         }
         let correct = scored
             .iter()
@@ -40,12 +41,12 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for ExactMatch<L> {
         let mut values = HashMap::new();
         values.insert("correct".into(), correct as f64);
         values.insert("total".into(), scored.len() as f64);
-        MetricResult {
+        Ok(MetricResult {
             name: "exact_match".into(),
             value: val,
             values,
             detail: None,
-        }
+        })
     }
 }
 
@@ -104,14 +105,14 @@ impl<L: Display + Clone + Send + Sync + 'static> Metric<L> for FuzzyMatch<L> {
         "fuzzy_match"
     }
 
-    fn compute(&self, scored: &[ScoredSample<L>]) -> MetricResult {
+    fn compute(&self, scored: &[ScoredSample<L>]) -> AppResult<MetricResult> {
         if scored.is_empty() {
-            return MetricResult {
+            return Ok(MetricResult {
                 name: "fuzzy_match".into(),
                 value: 0.0,
                 values: HashMap::new(),
                 detail: None,
-            };
+            });
         }
 
         let mut total_sim = 0.0;
@@ -134,11 +135,11 @@ impl<L: Display + Clone + Send + Sync + 'static> Metric<L> for FuzzyMatch<L> {
         values.insert("match_rate".into(), match_rate);
         values.insert("threshold".into(), self.threshold);
 
-        MetricResult {
+        Ok(MetricResult {
             name: "fuzzy_match".into(),
             value: match_rate,
             values,
             detail: None,
-        }
+        })
     }
 }

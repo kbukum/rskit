@@ -1,5 +1,6 @@
 use super::Metric;
 use crate::{MetricResult, ScoredSample};
+use rskit_errors::AppResult;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 
@@ -37,9 +38,9 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for NdcgMetric<L> {
         "ndcg"
     }
 
-    fn compute(&self, scored: &[ScoredSample<L>]) -> MetricResult {
+    fn compute(&self, scored: &[ScoredSample<L>]) -> AppResult<MetricResult> {
         if scored.is_empty() {
-            return empty_result("ndcg");
+            return Ok(empty_result("ndcg"));
         }
 
         let mut sorted: Vec<_> = scored.to_vec();
@@ -86,12 +87,12 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for NdcgMetric<L> {
         values.insert("ideal_dcg".into(), ideal_dcg);
         values.insert("k".into(), n as f64);
 
-        MetricResult {
+        Ok(MetricResult {
             name: "ndcg".into(),
             value: val,
             values,
             detail: None,
-        }
+        })
     }
 }
 
@@ -114,9 +115,9 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for MeanAvgPrecisio
         "mean_average_precision"
     }
 
-    fn compute(&self, scored: &[ScoredSample<L>]) -> MetricResult {
+    fn compute(&self, scored: &[ScoredSample<L>]) -> AppResult<MetricResult> {
         if scored.is_empty() {
-            return empty_result("mean_average_precision");
+            return Ok(empty_result("mean_average_precision"));
         }
 
         let mut sorted: Vec<_> = scored.to_vec();
@@ -132,7 +133,7 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for MeanAvgPrecisio
             .filter(|s| s.sample.label == self.positive)
             .count();
         if total_relevant == 0 {
-            return empty_result("mean_average_precision");
+            return Ok(empty_result("mean_average_precision"));
         }
 
         let mut hits = 0usize;
@@ -145,12 +146,12 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for MeanAvgPrecisio
         }
 
         let map = sum_precision / total_relevant as f64;
-        MetricResult {
+        Ok(MetricResult {
             name: "mean_average_precision".into(),
             value: map,
             values: HashMap::new(),
             detail: None,
-        }
+        })
     }
 }
 
@@ -175,9 +176,9 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for PrecisionAtK<L>
         "precision_at_k"
     }
 
-    fn compute(&self, scored: &[ScoredSample<L>]) -> MetricResult {
+    fn compute(&self, scored: &[ScoredSample<L>]) -> AppResult<MetricResult> {
         if scored.is_empty() {
-            return empty_result("precision_at_k");
+            return Ok(empty_result("precision_at_k"));
         }
 
         let mut sorted: Vec<_> = scored.to_vec();
@@ -198,12 +199,12 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for PrecisionAtK<L>
         let mut values = HashMap::new();
         values.insert("k".into(), n as f64);
 
-        MetricResult {
+        Ok(MetricResult {
             name: "precision_at_k".into(),
             value: val,
             values,
             detail: None,
-        }
+        })
     }
 }
 
@@ -228,9 +229,9 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for RecallAtK<L> {
         "recall_at_k"
     }
 
-    fn compute(&self, scored: &[ScoredSample<L>]) -> MetricResult {
+    fn compute(&self, scored: &[ScoredSample<L>]) -> AppResult<MetricResult> {
         if scored.is_empty() {
-            return empty_result("recall_at_k");
+            return Ok(empty_result("recall_at_k"));
         }
 
         let mut sorted: Vec<_> = scored.to_vec();
@@ -246,7 +247,7 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for RecallAtK<L> {
             .filter(|s| s.sample.label == self.positive)
             .count();
         if total_relevant == 0 {
-            return empty_result("recall_at_k");
+            return Ok(empty_result("recall_at_k"));
         }
 
         let n = self.k.min(sorted.len());
@@ -259,11 +260,11 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for RecallAtK<L> {
         let mut values = HashMap::new();
         values.insert("k".into(), n as f64);
 
-        MetricResult {
+        Ok(MetricResult {
             name: "recall_at_k".into(),
             value: val,
             values,
             detail: None,
-        }
+        })
     }
 }
