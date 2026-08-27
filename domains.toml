@@ -48,4 +48,4 @@ depends_on = ["core", "patterns", "crosscutting", "composition", "data"]
 [domains.infra]
 description = "CLI, benchmarking, dataset, git, workload, test utilities, and facade"
 modules = ["bench", "cli", "dataset", "git", "testutil", "workload", "rskit"]
-depends_on = ["core", "patterns", "crosscutting", "composition"]
+depends_on = ["core", "patterns", "crosscutting", "composition", "ai"]

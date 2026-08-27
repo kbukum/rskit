@@ -108,6 +108,8 @@ See [Versioning](VERSIONING.md) for compatibility policy and [Releasing](RELEASI
 | [`rskit-llm-anthropic`](../contrib/llm/anthropic/README.md) | Anthropic provider implementation for `rskit-llm`. |
 | [`rskit-llm-gemini`](../contrib/llm/gemini/README.md) | Gemini provider implementation for `rskit-llm`. |
 | [`rskit-llm-ollama`](../contrib/llm/ollama/README.md) | Ollama provider implementation for `rskit-llm`. |
+| [`rskit-llm-tiktoken`](../contrib/llm/tiktoken/README.md) | OpenAI BPE (tiktoken) `TokenCounter` adapter for `rskit-llm`. |
+| [`rskit-llm-hf-tokenizers`](../contrib/llm/hf-tokenizers/README.md) | HuggingFace `tokenizer.json` `TokenCounter` adapter for `rskit-llm`. |
 | [`rskit-media-audio`](../contrib/media/audio/README.md) | Pure Rust audio backend for WAV I/O, waveform, silence detection, and loudness. |
 | [`rskit-media-ffmpeg`](../contrib/media/ffmpeg/README.md) | FFmpeg CLI backend for video and audio processing. |
 | [`rskit-media-image`](../contrib/media/image/README.md) | Native image processing backend built on the `image` crate. |

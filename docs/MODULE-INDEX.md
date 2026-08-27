@@ -24,7 +24,7 @@ auth · authz
 database · database-sqlite · cache · cache-redis · storage · storage-gcs · storage-s3 · storage-supabase · vectorstore · vectorstore-qdrant · messaging · messaging-kafka · messaging-nats · messaging-rabbitmq
 
 ## 🧠 AI  (`make check-ai`)
-ai · llm · llm-common · llm-openai · llm-anthropic · llm-ollama · llm-gemini · embedding · inference · inference-tgi · inference-triton · inference-vllm · agent · tool · mcp · skill
+ai · llm · llm-common · llm-openai · llm-anthropic · llm-ollama · llm-gemini · llm-tiktoken · llm-hf-tokenizers · embedding · inference · inference-tgi · inference-triton · inference-vllm · agent · tool · mcp · skill
 
 ## 🎬 Media  (`make check-media`)
 media · media-audio · media-ffmpeg · media-image
