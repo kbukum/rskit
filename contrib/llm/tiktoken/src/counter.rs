@@ -96,6 +96,42 @@ mod tests {
     }
 
     #[test]
+    fn all_encodings_load_and_count() {
+        for encoding in [
+            Encoding::O200kBase,
+            Encoding::Cl100kBase,
+            Encoding::P50kBase,
+            Encoding::R50kBase,
+        ] {
+            let counter = TiktokenCounter::new(encoding).unwrap();
+            assert_eq!(counter.encoding(), encoding);
+            assert!(counter.count("hello world") > 0);
+        }
+    }
+
+    #[test]
+    fn every_name_round_trips_to_its_encoding() {
+        for (name, expected) in [
+            ("o200k_base", Encoding::O200kBase),
+            ("cl100k_base", Encoding::Cl100kBase),
+            ("p50k_base", Encoding::P50kBase),
+            ("r50k_base", Encoding::R50kBase),
+        ] {
+            let encoding = Encoding::from_name(name).unwrap();
+            assert_eq!(encoding, expected);
+            assert_eq!(encoding.name(), name);
+        }
+    }
+
+    #[test]
+    fn gpt2_alias_maps_to_r50k_base() {
+        let counter = TiktokenCounter::from_name("gpt2").unwrap();
+        assert_eq!(counter.encoding(), Encoding::R50kBase);
+        // The canonical name for the alias is r50k_base.
+        assert_eq!(counter.encoding().name(), "r50k_base");
+    }
+
+    #[test]
     fn unknown_encoding_is_rejected() {
         let err = TiktokenCounter::from_name("does_not_exist")
             .err()
