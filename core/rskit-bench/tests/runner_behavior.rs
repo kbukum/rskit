@@ -23,6 +23,15 @@ fn exact_match_suite() -> Suite<String> {
     Suite::new(vec![exact_match()])
 }
 
+fn embedding_model() -> rskit_ai::Model {
+    rskit_ai::Model {
+        name: "embed-test".into(),
+        provider: rskit_ai::Provider::Custom("memory".into()),
+        version: None,
+        capabilities: rskit_ai::Capabilities::default(),
+    }
+}
+
 fn previous_result(value: f64) -> BenchRunResult {
     let mut r = BenchRunResult::default();
     r.id = "previous".to_owned();
@@ -414,4 +423,100 @@ async fn runner_records_reproducible_provenance() {
         serde_json::to_value(&first).unwrap(),
         serde_json::to_value(&second).unwrap()
     );
+}
+
+#[tokio::test]
+async fn runner_computes_async_metric_after_sync_metrics() {
+    use rskit_bench::metric::semantic_similarity;
+    use rskit_embedding::InMemoryProvider;
+
+    let loader = DatasetLoader::new(fixture_dataset_dir(), string_label_mapper())
+        .with_manifest_file("custom-manifest.json");
+    let evaluator = EvaluatorFunc::new("fixture-evaluator", |_input, _ctx| {
+        Box::pin(async {
+            Ok(Prediction {
+                label: "yes".to_owned(),
+                score: 0.9,
+                ..Prediction::default()
+            })
+        })
+    });
+
+    // A suite with a sync metric plus an injected async embedding metric; the deterministic in-memory provider keeps the run reproducible and offline.
+    let mut suite = exact_match_suite();
+    suite.add_async(Arc::new(semantic_similarity::<String>(
+        Arc::new(InMemoryProvider::new(8)),
+        embedding_model(),
+    )));
+
+    let result = BenchRunner::new()
+        .register("fixture", Box::new(evaluator), 1)
+        .with_metrics(suite)
+        .with_clock(Arc::new(FixedClock::new(1_704_067_200, 42)))
+        .run(&loader, RunOptions::default().with_concurrency(1))
+        .await
+        .expect("run with an async metric succeeds");
+
+    // Sync metrics come first in suite order, then async metrics.
+    let names: Vec<&str> = result.metrics.iter().map(|m| m.name.as_str()).collect();
+    assert_eq!(
+        names,
+        vec!["exact_match", "semantic_similarity[memory/embed-test]"]
+    );
+
+    let semantic = result
+        .metrics
+        .iter()
+        .find(|m| m.name == "semantic_similarity[memory/embed-test]")
+        .expect("semantic metric present");
+    assert!((0.0..=1.0).contains(&semantic.value));
+    assert!(semantic.values.contains_key("avg_similarity"));
+    assert!(semantic.values.contains_key("match_rate"));
+    assert!((semantic.values["threshold"] - 0.8).abs() < 1e-6);
+
+    // The async metric name is recorded in provenance alongside the sync one.
+    assert_eq!(
+        result.provenance.metrics,
+        vec![
+            "exact_match".to_owned(),
+            "semantic_similarity[memory/embed-test]".to_owned()
+        ]
+    );
+}
+
+#[tokio::test]
+async fn runner_surfaces_async_metric_provider_failure() {
+    use rskit_bench::metric::semantic_similarity;
+    use rskit_embedding::Provider;
+    use rskit_testutil::FakeEmbeddingProvider;
+
+    let loader = DatasetLoader::new(fixture_dataset_dir(), string_label_mapper())
+        .with_manifest_file("custom-manifest.json");
+    let evaluator = EvaluatorFunc::new("fixture-evaluator", |_input, _ctx| {
+        Box::pin(async {
+            Ok(Prediction {
+                label: "yes".to_owned(),
+                score: 0.9,
+                ..Prediction::default()
+            })
+        })
+    });
+
+    let provider = Arc::new(FakeEmbeddingProvider::new());
+    provider.will_fail(AppError::new(ErrorCode::ServiceUnavailable, "embed down"));
+    let mut suite = exact_match_suite();
+    suite.add_async(Arc::new(semantic_similarity::<String>(
+        provider as Arc<dyn Provider>,
+        embedding_model(),
+    )));
+
+    let error = BenchRunner::new()
+        .register("fixture", Box::new(evaluator), 1)
+        .with_metrics(suite)
+        .with_clock(Arc::new(FixedClock::new(1_704_067_200, 42)))
+        .run(&loader, RunOptions::default().with_concurrency(1))
+        .await
+        .expect_err("a failing async metric provider must fail the run");
+
+    assert_eq!(error.code(), ErrorCode::ServiceUnavailable);
 }

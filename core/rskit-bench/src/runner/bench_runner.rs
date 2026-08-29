@@ -320,7 +320,7 @@ where
         }
 
         let metric_results: Vec<MetricResult> = if let Some(ref suite) = self.metrics {
-            suite.compute(&all_scored)?
+            suite.compute_all(&all_scored).await?
         } else {
             Vec::new()
         };
