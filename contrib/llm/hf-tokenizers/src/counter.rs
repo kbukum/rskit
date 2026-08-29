@@ -227,6 +227,41 @@ mod tests {
     }
 
     #[test]
+    fn valid_json_that_is_not_a_tokenizer_is_rejected() {
+        // Parses as JSON (so the dropout probe passes) but is not a valid
+        // tokenizer definition, exercising the `Tokenizer::from_bytes` failure
+        // path rather than the earlier serde parse.
+        let err = HfTokenCounter::from_json(r#"{"not":"a tokenizer"}"#)
+            .err()
+            .expect("non-tokenizer json must error");
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn non_utf8_file_is_rejected() {
+        use std::io::Write;
+        let mut file = tempfile_json();
+        // Invalid UTF-8 byte sequence exercises the `from_utf8` failure path.
+        file.write_all(&[0xff, 0xfe, 0x00]).unwrap();
+        file.flush().unwrap();
+        let err = HfTokenCounter::from_file(file.path())
+            .err()
+            .expect("non-utf8 file must error");
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+    }
+
+    #[test]
+    fn unreadable_path_is_rejected() {
+        // A directory opens successfully but fails to read, exercising the
+        // read (not open) failure path in `read_bounded`.
+        let dir = tempfile::tempdir().expect("temp dir");
+        let err = HfTokenCounter::from_file(dir.path())
+            .err()
+            .expect("directory path must error");
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+    }
+
+    #[test]
     fn counter_returns_shared_token_counter() {
         use std::io::Write;
         let mut file = tempfile_json();
