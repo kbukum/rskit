@@ -35,7 +35,7 @@ type TextExtractor<L> = Arc<dyn Fn(&L) -> String + Send + Sync>;
 
 /// Creates a semantic-similarity metric over an injected embedding provider.
 ///
-/// The metric embeds each sample's reference and prediction labels (rendered to text via the label's [`Display`] by default) and scores them by cosine similarity. It reports the average similarity as the primary [`MetricResult::value`] and records the average, the match rate at the configured threshold, and the threshold itself in [`MetricResult::values`].
+/// The metric embeds each sample's reference and prediction labels (rendered to text via the label's [`Display`] by default) and scores them by cosine similarity. It reports the average similarity as the primary [`MetricResult::value`] and records the average similarity and the match rate at the configured threshold in [`MetricResult::values`]. The threshold itself is a configuration input rather than a quality signal, so it is recorded in [`MetricResult::detail`] provenance, not [`MetricResult::values`], where [`RunComparator`](crate::compare::RunComparator) would score a threshold change as an improvement or regression.
 ///
 /// The metric name embeds the embedding model's identity (for example `semantic_similarity[open_ai/text-embedding-3-small]`) and that identity is recorded in [`MetricResult::detail`], so runs scored with incompatible embedding models stay distinct in provenance and are never joined by [`RunComparator`](crate::compare::RunComparator) as if comparable.
 ///
@@ -149,7 +149,6 @@ impl<L> SemanticSimilarity<L> {
         let mut values = HashMap::new();
         values.insert("avg_similarity".to_string(), avg_similarity);
         values.insert("match_rate".to_string(), match_rate);
-        values.insert("threshold".to_string(), f64::from(self.threshold));
         MetricResult {
             name: self.name.clone(),
             value: avg_similarity,
@@ -159,9 +158,9 @@ impl<L> SemanticSimilarity<L> {
         }
     }
 
-    /// Records the embedding model's identity so a persisted result carries the scoring provenance, not just the similarity numbers.
+    /// Records the embedding model's identity and the configured threshold so a persisted result carries the scoring provenance, not just the similarity numbers. The threshold is a configuration input, not a quality signal, so it lives in provenance rather than [`MetricResult::values`], where [`RunComparator`](crate::compare::RunComparator) would score a threshold change as an improvement or regression.
     fn provenance(&self) -> serde_json::Value {
-        serde_json::json!({ "model": self.model_id })
+        serde_json::json!({ "model": self.model_id, "threshold": self.threshold })
     }
 
     /// Embeds one batch of samples and returns the ordered embeddings, two per sample (reference then prediction), under a single bounded provider call.
@@ -344,7 +343,12 @@ mod tests {
             .expect("compute");
         assert!((result.values["avg_similarity"] - 0.5).abs() < 1e-6);
         assert_eq!(result.values["match_rate"], 0.5);
-        assert_eq!(result.values["threshold"], 0.5);
+        assert!(
+            !result.values.contains_key("threshold"),
+            "threshold is a configuration input, not a quality signal, so it must not appear in values"
+        );
+        let detail = result.detail.expect("provenance detail present");
+        assert_eq!(detail["threshold"], 0.5);
     }
 
     #[tokio::test]
