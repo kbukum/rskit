@@ -214,6 +214,18 @@ impl<L> SemanticSimilarity<L> {
                     ),
                 ));
             }
+            // A zero-value or dimension-inconsistent embedding (for example an entry an adapter preallocated for a missing response item) would otherwise be scored as a spurious similarity, so reject it as a malformed untrusted response rather than trusting its vector.
+            if embedding.vector.is_empty() || embedding.dimensions != embedding.vector.len() {
+                return Err(AppError::new(
+                    ErrorCode::InvalidInput,
+                    format!(
+                        "semantic_similarity: embedding at index {position} has an empty or \
+                         dimension-inconsistent vector (dimensions {}, length {})",
+                        embedding.dimensions,
+                        embedding.vector.len()
+                    ),
+                ));
+            }
         }
         Ok(embeddings.into_iter().map(|e| e.vector).collect())
     }
@@ -511,6 +523,19 @@ mod tests {
             .compute(&[scored("a", "a")])
             .await
             .expect_err("invalid indices must error");
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+    }
+
+    #[tokio::test]
+    async fn provider_returned_empty_vector_is_rejected() {
+        // A provider (or an adapter preallocating for a missing item) may return a zero-value, empty-vector embedding. Accepting it would score a spurious similarity, so a correct-length, correctly-indexed response with an empty vector must still be rejected.
+        let provider = Arc::new(FakeEmbeddingProvider::new());
+        provider.will_return(vec![Vec::new(), vec![1.0, 0.0]]);
+        let metric = semantic_similarity::<String>(provider, model());
+        let err = metric
+            .compute(&[scored("a", "a")])
+            .await
+            .expect_err("empty-vector embedding must error");
         assert_eq!(err.code(), ErrorCode::InvalidInput);
     }
 
