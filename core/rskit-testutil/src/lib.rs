@@ -16,6 +16,9 @@ pub mod component;
 pub mod config;
 /// Process working-directory guard for tests.
 pub mod current_dir;
+/// Scriptable embedding provider fake (feature `embedding`).
+#[cfg(feature = "embedding")]
+pub mod embedding;
 /// Golden/snapshot verification: normalization, matcher tiers, bless.
 pub mod golden;
 /// Hook and event-bus test helpers.
@@ -31,6 +34,8 @@ pub use assertions::{assert_err_code, assert_ok};
 pub use component::FakeComponent;
 pub use config::TestAppConfig;
 pub use current_dir::CurrentDirGuard;
+#[cfg(feature = "embedding")]
+pub use embedding::FakeEmbeddingProvider;
 pub use golden::{BLESS_ENV, Golden, GoldenMode, GoldenOutcome, Match, Normalizer, Rule};
 pub use hook::TestEvent;
 pub use http_server::{CapturedRequest, FakeHttpServer, FakeResponse};
