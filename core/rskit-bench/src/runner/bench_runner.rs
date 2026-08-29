@@ -333,6 +333,7 @@ where
             .and_then(format_rfc3339)
             .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string());
 
+        let judges = crate::metric::judge_provenance_from_results(&metric_results);
         let provenance = RunProvenance {
             seed: opts.seed,
             rng_algorithm: RNG_ALGORITHM.to_string(),
@@ -346,6 +347,8 @@ where
             dataset_version: dataset_info.version.clone(),
             branches: self.branches.iter().map(|b| b.name.clone()).collect(),
             metrics: metric_results.iter().map(|m| m.name.clone()).collect(),
+            judges,
+            ..Default::default()
         };
 
         let result = BenchRunResult {

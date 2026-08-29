@@ -38,7 +38,10 @@ rskit-config = { workspace = true }
 rskit-validation = { workspace = true }
 rskit-ai = { workspace = true, optional = true }
 rskit-embedding = { workspace = true, optional = true }
+rskit-llm = { workspace = true, optional = true }
 
 [features]
 # Scriptable embedding provider fake ([`FakeEmbeddingProvider`]); off by default so consumers that only need core fakes do not compile the embedding stack.
 embedding = ["dep:rskit-ai", "dep:rskit-embedding"]
+# Scriptable LLM provider fake ([`FakeLlmProvider`]); off by default so consumers that only need core fakes do not compile the LLM stack.
+llm = ["dep:rskit-ai", "dep:rskit-llm"]

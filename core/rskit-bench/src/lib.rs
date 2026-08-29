@@ -30,8 +30,13 @@ pub mod viz;
 pub use eval_context::{EvalContext, RNG_ALGORITHM};
 pub use evaluator::{Evaluator, EvaluatorFunc, FromProvider};
 pub use execution::BenchExecutionPlan;
-pub use metric::{AsyncMetric, Metric, SemanticSimilarity, Suite, as_sync, semantic_similarity};
-pub use provenance::{FixedProvenanceProbe, ProvenanceProbe, RunProvenance, SystemProvenanceProbe};
+pub use metric::{
+    AsyncMetric, JudgePrompt, JudgeVerdict, LlmJudge, Metric, SemanticSimilarity, Suite, as_sync,
+    llm_judge, semantic_similarity,
+};
+pub use provenance::{
+    FixedProvenanceProbe, JudgeProvenance, ProvenanceProbe, RunProvenance, SystemProvenanceProbe,
+};
 pub use result::{BenchRunResult, MetricDirection, MetricResult};
 pub use rskit_util::time::{
     Clock as BenchClock, FixedClock, SharedClock, SystemClock, system_clock,

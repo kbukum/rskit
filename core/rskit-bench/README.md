@@ -9,13 +9,13 @@ ML benchmarking framework: evaluators, metrics, reports, and visualization.
 - `Evaluator<L>` trait + `EvaluatorFunc` closure wrapper + `FromProvider` adapter
 - `BenchRunner` — orchestrates evaluation with configurable concurrency
 - Classification metrics: accuracy, precision, recall, F1, AUC-ROC
-- Async metrics: `AsyncMetric` trait for I/O-backed scoring, awaited after the synchronous metrics; `semantic_similarity` scores predictions against references by embedding-cosine similarity through an injected `rskit-embedding` provider, with a per-call timeout and typed failure paths
+- Async metrics: `AsyncMetric` trait for I/O-backed scoring, awaited after the synchronous metrics; `semantic_similarity` scores predictions against references by embedding-cosine similarity through an injected `rskit-embedding` provider, and `llm_judge` grades them with an injected `rskit-llm` provider and a versioned prompt — both with a per-call timeout and typed failure paths
 - Multi-branch comparison for A/B model testing
 - Reports: JSON, CSV, Markdown, JUnit, Vega-Lite visualizations
 - `FileRunStorage` for persistent result storage and regression detection
 - ROC curves, confusion matrices, score distribution charts
 - `BenchClock` / `FixedClock` for deterministic timestamps and durations in tests
-- Reproducible runs: every result carries `RunProvenance` (seed, source commit, tool/host identity, order-independent dataset hash), gathered through an injected `ProvenanceProbe`
+- Reproducible runs: every result carries `RunProvenance` (seed, source commit, tool/host identity, order-independent dataset hash, and — when an `llm_judge` metric is present — the judge provider, model, and prompt identity), gathered through an injected `ProvenanceProbe`
 
 Benchmark orchestration accepts injected clock, storage, and provenance implementations. Production CLIs can choose `SystemClock`, `FileRunStorage`, and the default `SystemProvenanceProbe` (which reads host/os/arch from the standard library and the commit from CI environment variables such as `GITHUB_SHA`). Tests and reproducible harnesses inject `FixedClock`, an in-memory or tempdir storage, and a `FixedProvenanceProbe` so a run's provenance is byte-for-byte deterministic. Set the run seed with `RunOptions::with_seed`; `RunOptions::seeded_rng` derives a reproducible RNG from it.
 
@@ -60,6 +60,24 @@ let mut suite = Suite::<String>::new(Vec::new());
 suite.add_async(Arc::new(metric));
 
 // `compute_all` runs synchronous metrics first, then awaits the async ones.
+let results = suite.compute_all(&scored_samples).await?;
+```
+
+`llm_judge` is an `AsyncMetric` that grades each prediction against its reference with an injected `rskit-llm` provider and a **versioned** `JudgePrompt` built on the canonical `rskit-ai` prompt template. It reports the average score and a pass rate at a configurable threshold; the threshold is folded into the metric identity, so a pass rate computed under one cutoff is never compared against one computed under another. Each provider call is routed through an injected `rskit-resilience` policy (a per-call timeout by default) and capped to a bounded output (`with_max_tokens`, default 256), and the reply is additionally rejected if it exceeds a fixed byte bound or if the completion did not finish normally (truncated by the token limit, blocked by a content filter, or cancelled) — so an untrusted judge cannot force an unbounded parse or pass off an incomplete generation as a score. Calls are issued with bounded concurrency (`with_concurrency`) so a large run applies backpressure to the judge rather than flooding it. The model's reply is treated as **untrusted**: the judge requests a JSON object and parses it into a validated `JudgeVerdict { score, rationale }`. A malformed reply, an out-of-range score, a missing field, or non-JSON surrounding prose yields a typed error — never a fabricated success-shaped score and never a panic. This parsing enforces the verdict *shape* at the trust boundary; it is not a prompt-injection detector (a well-formed `{"score": 1}` still parses), so the injection defense is structural: the reference and prediction texts are embedded as data behind a system prompt that instructs the judge to treat them as data, not instructions. The judge provider, model (and the resolved model the provider reports, when it differs), and prompt identity are recorded in the result and lifted into `RunProvenance`, so scores are reproducible and never silently compared across prompt or model revisions; gate any prompt or model change on a re-run. Inject `rskit_testutil::FakeLlmProvider` (with the `llm` feature) to keep tests offline and deterministic.
+
+```rust
+use rskit_bench::{JudgePrompt, Suite, llm_judge};
+use std::sync::Arc;
+use std::time::Duration;
+
+// Inject any `rskit_llm::Provider`; the built-in prompt ships a versioned rubric.
+let metric = llm_judge::<String>(judge_provider, "gpt-4o-mini", JudgePrompt::default())
+    .with_threshold(0.7)
+    .with_timeout(Duration::from_secs(20))
+    .with_concurrency(4);
+
+let mut suite = Suite::<String>::new(Vec::new());
+suite.add_async(Arc::new(metric));
 let results = suite.compute_all(&scored_samples).await?;
 ```
 
