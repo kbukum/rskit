@@ -34,7 +34,9 @@ use rskit_bench::metric::{
     threshold_sweep,
 };
 use rskit_bench::report_gen::{JsonReporter, MarkdownReporter, Reporter};
-use rskit_bench::result::{BenchRunResult, BenchSampleResult, DatasetInfo, MetricResult};
+use rskit_bench::result::{
+    BenchRunResult, BenchSampleResult, DatasetInfo, MetricDirection, MetricResult,
+};
 use rskit_bench::types::{BenchSample, Prediction, ScoredSample};
 
 // ---------------------------------------------------------------------------
@@ -516,6 +518,7 @@ fn sample_run_result() -> BenchRunResult {
             name: "accuracy".into(),
             value: 0.85,
             values: HashMap::new(),
+            direction: MetricDirection::HigherIsBetter,
             detail: None,
         },
         MetricResult {
@@ -527,6 +530,7 @@ fn sample_run_result() -> BenchRunResult {
                 m.insert("recall".into(), 0.80);
                 m
             },
+            direction: MetricDirection::HigherIsBetter,
             detail: None,
         },
     ];
@@ -603,12 +607,14 @@ fn golden_run_comparison() {
                 m.insert("recall".into(), 0.78);
                 m
             },
+            direction: MetricDirection::HigherIsBetter,
             detail: None,
         },
         MetricResult {
             name: "accuracy".into(),
             value: 0.85,
             values: HashMap::new(),
+            direction: MetricDirection::HigherIsBetter,
             detail: None,
         },
     ];
@@ -657,12 +663,14 @@ fn golden_run_comparison() {
                 m.insert("recall".into(), 0.82);
                 m
             },
+            direction: MetricDirection::HigherIsBetter,
             detail: None,
         },
         MetricResult {
             name: "accuracy".into(),
             value: 0.83,
             values: HashMap::new(),
+            direction: MetricDirection::HigherIsBetter,
             detail: None,
         },
     ];

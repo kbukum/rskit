@@ -59,8 +59,7 @@ mod tests {
             Ok(MetricResult {
                 name: "stub".into(),
                 value: scored.len() as f64,
-                values: HashMap::new(),
-                detail: None,
+                ..Default::default()
             })
         }
     }

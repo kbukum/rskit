@@ -1,6 +1,6 @@
 use super::Metric;
 use crate::curves::{ConfusionMatrixDetail, ThresholdPoint};
-use crate::{MetricResult, ScoredSample};
+use crate::{MetricDirection, MetricResult, ScoredSample};
 use rskit_errors::AppResult;
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -77,6 +77,7 @@ impl<L: PartialEq + Display + Clone + Send + Sync + 'static> Metric<L> for Binar
         Ok(MetricResult {
             name: "classification".into(),
             value: f1,
+            direction: MetricDirection::HigherIsBetter,
             values,
             detail: Some(serde_json::to_value(&detail).unwrap_or_default()),
         })
@@ -121,6 +122,7 @@ impl<L: PartialEq + Display + Clone + Send + Sync + 'static> Metric<L>
         Ok(MetricResult {
             name: "confusion_matrix".into(),
             value: 0.0,
+            direction: MetricDirection::Neutral,
             values: HashMap::new(),
             detail: Some(serde_json::to_value(&detail).unwrap_or_default()),
         })
@@ -182,6 +184,7 @@ impl<L: PartialEq + Display + Clone + Send + Sync + 'static> Metric<L> for Thres
         Ok(MetricResult {
             name: "threshold_sweep".into(),
             value: best_f1,
+            direction: MetricDirection::HigherIsBetter,
             values: HashMap::new(),
             detail: Some(serde_json::to_value(&points).unwrap_or_default()),
         })
@@ -268,6 +271,7 @@ impl<L: PartialEq + Display + Clone + Send + Sync + 'static> Metric<L> for Multi
         Ok(MetricResult {
             name: "multi_class_classification".into(),
             value: macro_f1,
+            direction: MetricDirection::HigherIsBetter,
             values,
             detail: None,
         })

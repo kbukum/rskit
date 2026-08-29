@@ -65,6 +65,10 @@ impl TokenCounter for TiktokenCounter {
         // contract is fallible, so the count is returned as a success.
         Ok(self.bpe.encode_ordinary(text).len())
     }
+
+    fn id(&self) -> String {
+        format!("tiktoken:{}", self.encoding.name())
+    }
 }
 
 #[cfg(test)]

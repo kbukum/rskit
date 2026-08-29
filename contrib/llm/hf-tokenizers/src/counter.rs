@@ -23,6 +23,7 @@ pub const DEFAULT_MAX_DEFINITION_BYTES: u64 = 64 * 1024 * 1024;
 /// import-time side effects.
 pub struct HfTokenCounter {
     tokenizer: Tokenizer,
+    id: String,
 }
 
 impl HfTokenCounter {
@@ -60,8 +61,25 @@ impl HfTokenCounter {
             )
             .with_boxed_cause(e)
         })?;
-        Ok(Self { tokenizer })
+        let id = format!("hf-tokenizers:{}", fingerprint(json.as_bytes()));
+        Ok(Self { tokenizer, id })
     }
+}
+
+/// Computes a deterministic, dependency-free fingerprint of a tokenizer
+/// definition using the 64-bit FNV-1a hash.
+///
+/// The fingerprint is stable across processes and platforms for identical
+/// bytes, so two counters loaded from the same `tokenizer.json` share an
+/// identity while different definitions do not. It is an identity fingerprint,
+/// not a cryptographic digest.
+fn fingerprint(bytes: &[u8]) -> String {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for &b in bytes {
+        hash ^= u64::from(b);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("{hash:016x}")
 }
 
 /// Reads a UTF-8 tokenizer definition from `path`, rejecting anything larger
@@ -159,6 +177,10 @@ impl TokenCounter for HfTokenCounter {
             .with_boxed_cause(e)
         })?;
         Ok(encoding.get_ids().len())
+    }
+
+    fn id(&self) -> String {
+        self.id.clone()
     }
 }
 

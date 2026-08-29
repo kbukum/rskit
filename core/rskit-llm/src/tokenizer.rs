@@ -23,6 +23,17 @@ pub trait TokenCounter: Send + Sync {
     /// An empty string yields `0`. Returns an error if the underlying tokenizer
     /// fails to encode `text`.
     fn count(&self, text: &str) -> AppResult<usize>;
+
+    /// Returns a stable identifier for the tokenization strategy this counter
+    /// implements — for example `"heuristic"`, `"tiktoken:cl100k_base"`, or
+    /// `"hf-tokenizers:<fingerprint>"`.
+    ///
+    /// Consumers that persist token counts (benchmark metrics, run provenance)
+    /// use this to distinguish runs tokenized by incompatible strategies, so
+    /// counts produced by different tokenizers are never compared as if they
+    /// were equivalent. The identifier must be deterministic and stable across
+    /// processes for a given tokenizer configuration.
+    fn id(&self) -> String;
 }
 
 /// Dependency-free approximate [`TokenCounter`].
@@ -40,6 +51,10 @@ impl TokenCounter for HeuristicTokenCounter {
             return Ok(0);
         }
         Ok(text.chars().count().div_ceil(4))
+    }
+
+    fn id(&self) -> String {
+        "heuristic".to_string()
     }
 }
 

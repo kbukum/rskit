@@ -6,7 +6,7 @@
 //! injection rather than wired in here.
 
 use super::Metric;
-use crate::{MetricResult, ScoredSample};
+use crate::{MetricDirection, MetricResult, ScoredSample};
 use rskit_errors::AppResult;
 use rskit_llm::TokenCounter;
 use std::collections::HashMap;
@@ -23,31 +23,44 @@ use std::sync::Arc;
 /// [`MetricResult::values`]. Empty input yields a zeroed result rather than a
 /// panic. A tokenization failure is propagated as an error rather than
 /// collapsed into a fabricated count that would corrupt aggregate totals.
+///
+/// The metric name embeds the counter's [`TokenCounter::id`] (for example
+/// `token_stats[tiktoken:cl100k_base]`) and the identity is recorded in
+/// [`MetricResult::detail`], so runs tokenized by incompatible strategies stay
+/// distinct in provenance and are not compared as if equivalent. Token usage is
+/// descriptive, so the result is [`MetricDirection::Neutral`] — comparison never
+/// flags a change as an improvement or a regression.
 pub fn token_stats<L>(counter: Arc<dyn TokenCounter>) -> Box<dyn Metric<L>>
 where
     L: Display + Clone + Send + Sync + 'static,
 {
+    let counter_id = counter.id();
+    let name = format!("{BASE_NAME}[{counter_id}]");
     Box::new(TokenStats {
         counter,
+        counter_id,
+        name,
         _phantom: PhantomData,
     })
 }
 
 struct TokenStats<L> {
     counter: Arc<dyn TokenCounter>,
+    counter_id: String,
+    name: String,
     _phantom: PhantomData<L>,
 }
 
-const NAME: &str = "token_stats";
+const BASE_NAME: &str = "token_stats";
 
 impl<L: Display + Clone + Send + Sync + 'static> Metric<L> for TokenStats<L> {
     fn name(&self) -> &str {
-        NAME
+        &self.name
     }
 
     fn compute(&self, scored: &[ScoredSample<L>]) -> AppResult<MetricResult> {
         if scored.is_empty() {
-            return Ok(zeroed_result());
+            return Ok(self.zeroed_result());
         }
 
         let mut predicted_total = 0usize;
@@ -68,25 +81,35 @@ impl<L: Display + Clone + Send + Sync + 'static> Metric<L> for TokenStats<L> {
         values.insert("reference_tokens_avg".into(), reference_avg);
 
         Ok(MetricResult {
-            name: NAME.into(),
+            name: self.name.clone(),
             value: predicted_avg,
+            direction: MetricDirection::Neutral,
             values,
-            detail: None,
+            detail: Some(self.provenance()),
         })
     }
 }
 
-fn zeroed_result() -> MetricResult {
-    let mut values = HashMap::new();
-    values.insert("predicted_tokens_total".into(), 0.0);
-    values.insert("predicted_tokens_avg".into(), 0.0);
-    values.insert("reference_tokens_total".into(), 0.0);
-    values.insert("reference_tokens_avg".into(), 0.0);
-    MetricResult {
-        name: NAME.into(),
-        value: 0.0,
-        values,
-        detail: None,
+impl<L> TokenStats<L> {
+    fn zeroed_result(&self) -> MetricResult {
+        let mut values = HashMap::new();
+        values.insert("predicted_tokens_total".into(), 0.0);
+        values.insert("predicted_tokens_avg".into(), 0.0);
+        values.insert("reference_tokens_total".into(), 0.0);
+        values.insert("reference_tokens_avg".into(), 0.0);
+        MetricResult {
+            name: self.name.clone(),
+            value: 0.0,
+            direction: MetricDirection::Neutral,
+            values,
+            detail: Some(self.provenance()),
+        }
+    }
+
+    /// Records the injected counter's identity so a persisted result carries the
+    /// tokenization provenance, not just the counts.
+    fn provenance(&self) -> serde_json::Value {
+        serde_json::json!({ "counter": self.counter_id })
     }
 }
 
@@ -154,6 +177,9 @@ mod tests {
             fn count(&self, _text: &str) -> rskit_errors::AppResult<usize> {
                 Ok(self.0)
             }
+            fn id(&self) -> String {
+                "fixed".to_string()
+            }
         }
         let metric = token_stats::<String>(Arc::new(FixedCounter(7)));
         let samples = vec![scored("x", "y")];
@@ -174,6 +200,9 @@ mod tests {
                     "tokenizer exploded",
                 ))
             }
+            fn id(&self) -> String {
+                "failing".to_string()
+            }
         }
         let metric = token_stats::<String>(Arc::new(FailingCounter));
         let samples = vec![scored("x", "y")];
@@ -185,8 +214,43 @@ mod tests {
     }
 
     #[test]
-    fn metric_name_is_stable() {
+    fn metric_name_embeds_counter_identity() {
+        // The name carries the counter id so runs tokenized differently do not
+        // collide under a single "token_stats" name.
         let metric = token_stats::<String>(Arc::new(HeuristicTokenCounter));
-        assert_eq!(metric.name(), "token_stats");
+        assert_eq!(metric.name(), "token_stats[heuristic]");
+    }
+
+    #[test]
+    fn result_is_neutral_and_records_provenance() {
+        let metric = token_stats::<String>(Arc::new(HeuristicTokenCounter));
+        // Both the populated and the empty paths carry direction + provenance.
+        for result in [
+            metric.compute(&[scored("abcd", "abcd")]).unwrap(),
+            metric.compute(&[]).unwrap(),
+        ] {
+            assert_eq!(result.direction, MetricDirection::Neutral);
+            assert_eq!(result.name, "token_stats[heuristic]");
+            let detail = result.detail.expect("provenance detail present");
+            assert_eq!(detail["counter"], "heuristic");
+        }
+    }
+
+    #[test]
+    fn distinct_counters_produce_distinct_metric_names() {
+        // Two counters with different identities must not share a metric name,
+        // so run comparison never treats them as the same metric.
+        struct Fixed(&'static str);
+        impl TokenCounter for Fixed {
+            fn count(&self, _text: &str) -> rskit_errors::AppResult<usize> {
+                Ok(1)
+            }
+            fn id(&self) -> String {
+                self.0.to_string()
+            }
+        }
+        let a = token_stats::<String>(Arc::new(Fixed("a")));
+        let b = token_stats::<String>(Arc::new(Fixed("b")));
+        assert_ne!(a.name(), b.name());
     }
 }

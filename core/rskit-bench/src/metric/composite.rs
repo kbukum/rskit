@@ -1,5 +1,5 @@
 use super::Metric;
-use crate::{MetricResult, ScoredSample};
+use crate::{MetricDirection, MetricResult, ScoredSample};
 use rskit_errors::AppResult;
 use std::collections::HashMap;
 
@@ -41,6 +41,7 @@ impl<L: Send + Sync + 'static> Metric<L> for Weighted<L> {
         Ok(MetricResult {
             name: "weighted".into(),
             value,
+            direction: MetricDirection::HigherIsBetter,
             values,
             detail: None,
         })
@@ -66,8 +67,7 @@ mod tests {
             Ok(MetricResult {
                 name: self.name.into(),
                 value: self.value,
-                values: HashMap::new(),
-                detail: None,
+                ..Default::default()
             })
         }
     }

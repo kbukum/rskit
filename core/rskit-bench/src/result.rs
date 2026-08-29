@@ -69,18 +69,71 @@ pub struct DatasetInfo {
 }
 
 /// Result of a single metric computation.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct MetricResult {
     /// Metric name.
     pub name: String,
     /// Primary scalar result.
     pub value: f64,
+    /// Optimization direction of [`value`](Self::value) and every entry in
+    /// [`values`](Self::values): whether higher or lower is better, or whether
+    /// the metric is purely descriptive.
+    ///
+    /// Defaults to [`MetricDirection::HigherIsBetter`] so results predating this
+    /// field (and the many accuracy-style metrics for which higher is better)
+    /// are classified correctly by [`RunComparator`](crate::compare::RunComparator).
+    #[serde(default)]
+    pub direction: MetricDirection,
     /// Per-label or secondary metrics.
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub values: HashMap<String, f64>,
     /// Complex metric structure (confusion matrix, ROC curve, etc.).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub detail: Option<serde_json::Value>,
+}
+
+/// Optimization direction of a metric: whether higher or lower values are
+/// better, or whether the metric is descriptive with no preferred direction.
+///
+/// Run comparison uses this to classify a metric change as an improvement or a
+/// regression. Without it, every increase would be treated as an improvement —
+/// wrong for error metrics (lower is better) and meaningless for descriptive
+/// metrics such as token usage.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum MetricDirection {
+    /// Higher values are better (accuracy, F1, AUC, nDCG). The default.
+    #[default]
+    HigherIsBetter,
+    /// Lower values are better (error rates, loss, calibration error).
+    LowerIsBetter,
+    /// Descriptive metric with no optimization direction (token usage, counts).
+    Neutral,
+}
+
+impl MetricDirection {
+    /// Classifies a signed value delta (`new - old`) as an improvement in this
+    /// direction. A [`Neutral`](Self::Neutral) metric is never an improvement.
+    #[must_use]
+    pub fn is_improvement(self, delta: f64) -> bool {
+        match self {
+            Self::HigherIsBetter => delta > 0.0,
+            Self::LowerIsBetter => delta < 0.0,
+            Self::Neutral => false,
+        }
+    }
+
+    /// Classifies a signed value delta (`new - old`) as a regression in this
+    /// direction. A [`Neutral`](Self::Neutral) metric never regresses.
+    #[must_use]
+    pub fn is_regression(self, delta: f64) -> bool {
+        match self {
+            Self::HigherIsBetter => delta < 0.0,
+            Self::LowerIsBetter => delta > 0.0,
+            Self::Neutral => false,
+        }
+    }
 }
 
 /// Per-branch evaluation results.

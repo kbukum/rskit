@@ -1,5 +1,5 @@
 use super::Metric;
-use crate::{MetricResult, ScoredSample};
+use crate::{MetricDirection, MetricResult, ScoredSample};
 use rskit_errors::AppResult;
 use std::collections::HashMap;
 use std::marker::PhantomData;
@@ -12,6 +12,7 @@ fn empty_result(name: &str) -> MetricResult {
     MetricResult {
         name: name.into(),
         value: 0.0,
+        direction: MetricDirection::HigherIsBetter,
         values: HashMap::new(),
         detail: None,
     }
@@ -90,6 +91,7 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for NdcgMetric<L> {
         Ok(MetricResult {
             name: "ndcg".into(),
             value: val,
+            direction: MetricDirection::HigherIsBetter,
             values,
             detail: None,
         })
@@ -149,6 +151,7 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for MeanAvgPrecisio
         Ok(MetricResult {
             name: "mean_average_precision".into(),
             value: map,
+            direction: MetricDirection::HigherIsBetter,
             values: HashMap::new(),
             detail: None,
         })
@@ -202,6 +205,7 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for PrecisionAtK<L>
         Ok(MetricResult {
             name: "precision_at_k".into(),
             value: val,
+            direction: MetricDirection::HigherIsBetter,
             values,
             detail: None,
         })
@@ -263,6 +267,7 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for RecallAtK<L> {
         Ok(MetricResult {
             name: "recall_at_k".into(),
             value: val,
+            direction: MetricDirection::HigherIsBetter,
             values,
             detail: None,
         })

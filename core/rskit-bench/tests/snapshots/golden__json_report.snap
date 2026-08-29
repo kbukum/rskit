@@ -16,10 +16,12 @@ expression: parsed
   "id": "run-golden-001",
   "metrics": [
     {
+      "direction": "higher_is_better",
       "name": "accuracy",
       "value": 0.85
     },
     {
+      "direction": "higher_is_better",
       "name": "f1",
       "value": 0.82,
       "values": {

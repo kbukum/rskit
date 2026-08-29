@@ -1,13 +1,14 @@
 use super::Metric;
 use crate::curves::{CalibrationCurve, RocCurve};
-use crate::{MetricResult, ScoredSample};
+use crate::{MetricDirection, MetricResult, ScoredSample};
 use rskit_errors::AppResult;
 use std::collections::HashMap;
 
-fn empty_result(name: &str) -> MetricResult {
+fn empty_result(name: &str, direction: MetricDirection) -> MetricResult {
     MetricResult {
         name: name.into(),
         value: 0.0,
+        direction,
         values: HashMap::new(),
         detail: None,
     }
@@ -34,7 +35,7 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for AucRoc<L> {
 
     fn compute(&self, scored: &[ScoredSample<L>]) -> AppResult<MetricResult> {
         if scored.is_empty() {
-            return Ok(empty_result("aucroc"));
+            return Ok(empty_result("aucroc", MetricDirection::HigherIsBetter));
         }
 
         let mut sorted: Vec<_> = scored.to_vec();
@@ -51,7 +52,7 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for AucRoc<L> {
             .count();
         let total_neg = sorted.len() - total_pos;
         if total_pos == 0 || total_neg == 0 {
-            return Ok(empty_result("aucroc"));
+            return Ok(empty_result("aucroc", MetricDirection::HigherIsBetter));
         }
 
         let mut fpr_vec = vec![0.0];
@@ -84,6 +85,7 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for AucRoc<L> {
         Ok(MetricResult {
             name: "aucroc".into(),
             value: auc,
+            direction: MetricDirection::HigherIsBetter,
             values: HashMap::new(),
             detail: Some(serde_json::to_value(&detail).unwrap_or_default()),
         })
@@ -111,7 +113,7 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for BrierScore<L> {
 
     fn compute(&self, scored: &[ScoredSample<L>]) -> AppResult<MetricResult> {
         if scored.is_empty() {
-            return Ok(empty_result("brier_score"));
+            return Ok(empty_result("brier_score", MetricDirection::LowerIsBetter));
         }
         let sum: f64 = scored
             .iter()
@@ -127,6 +129,7 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for BrierScore<L> {
         Ok(MetricResult {
             name: "brier_score".into(),
             value: sum / scored.len() as f64,
+            direction: MetricDirection::LowerIsBetter,
             values: HashMap::new(),
             detail: None,
         })
@@ -154,7 +157,7 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for LogLoss<L> {
 
     fn compute(&self, scored: &[ScoredSample<L>]) -> AppResult<MetricResult> {
         if scored.is_empty() {
-            return Ok(empty_result("log_loss"));
+            return Ok(empty_result("log_loss", MetricDirection::LowerIsBetter));
         }
         let eps = 1e-15;
         let sum: f64 = scored
@@ -172,6 +175,7 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for LogLoss<L> {
         Ok(MetricResult {
             name: "log_loss".into(),
             value: -sum / scored.len() as f64,
+            direction: MetricDirection::LowerIsBetter,
             values: HashMap::new(),
             detail: None,
         })
@@ -201,7 +205,7 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for CalibrationMetr
 
     fn compute(&self, scored: &[ScoredSample<L>]) -> AppResult<MetricResult> {
         if scored.is_empty() {
-            return Ok(empty_result("calibration"));
+            return Ok(empty_result("calibration", MetricDirection::LowerIsBetter));
         }
         let bin_width = 1.0 / self.bins as f64;
         let mut bin_count = vec![0usize; self.bins];
@@ -238,6 +242,7 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for CalibrationMetr
         Ok(MetricResult {
             name: "calibration".into(),
             value: ece,
+            direction: MetricDirection::LowerIsBetter,
             values: HashMap::new(),
             detail: Some(serde_json::to_value(&detail).unwrap_or_default()),
         })

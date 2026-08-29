@@ -1,5 +1,5 @@
 ---
-source: crates/rskit-bench/tests/golden.rs
+source: rskit-bench/tests/golden.rs
 expression: "&diff"
 ---
 {
@@ -11,6 +11,7 @@ expression: "&diff"
       "old_value": 0.85,
       "new_value": 0.83,
       "delta": -0.020000000000000018,
+      "direction": "higher_is_better",
       "improved": false,
       "significant": true
     },
@@ -19,6 +20,7 @@ expression: "&diff"
       "old_value": 0.8,
       "new_value": 0.84,
       "delta": 0.039999999999999925,
+      "direction": "higher_is_better",
       "improved": true,
       "significant": true
     },
@@ -27,6 +29,7 @@ expression: "&diff"
       "old_value": 0.82,
       "new_value": 0.86,
       "delta": 0.040000000000000036,
+      "direction": "higher_is_better",
       "improved": true,
       "significant": true
     },
@@ -35,6 +38,7 @@ expression: "&diff"
       "old_value": 0.78,
       "new_value": 0.82,
       "delta": 0.039999999999999925,
+      "direction": "higher_is_better",
       "improved": true,
       "significant": true
     }

@@ -7,7 +7,9 @@ use rskit_bench::dataset_loader::DatasetLoader;
 use rskit_bench::evaluator::EvaluatorFunc;
 use rskit_bench::metric::{Suite, exact_match};
 use rskit_bench::report_gen::Reporter;
-use rskit_bench::result::{BenchRunResult, BenchRunSummary, DatasetInfo, MetricResult};
+use rskit_bench::result::{
+    BenchRunResult, BenchRunSummary, DatasetInfo, MetricDirection, MetricResult,
+};
 use rskit_bench::run_storage::{ListOptions, RunStorage};
 use rskit_bench::types::{Prediction, string_label_mapper};
 use rskit_bench::{BenchRunner, FixedClock, RunOptions};
@@ -42,6 +44,7 @@ fn previous_result(value: f64) -> BenchRunResult {
             ("correct".to_owned(), value * 2.0),
             ("total".to_owned(), 2.0),
         ]),
+        direction: MetricDirection::HigherIsBetter,
         detail: None,
     }];
     r

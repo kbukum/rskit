@@ -1,5 +1,5 @@
 use super::Metric;
-use crate::{MetricResult, ScoredSample};
+use crate::{MetricDirection, MetricResult, ScoredSample};
 use rskit_errors::AppResult;
 use std::collections::HashMap;
 
@@ -7,10 +7,11 @@ fn safe_divide(a: f64, b: f64) -> f64 {
     if b == 0.0 { 0.0 } else { a / b }
 }
 
-fn empty_result(name: &str) -> MetricResult {
+fn empty_result(name: &str, direction: MetricDirection) -> MetricResult {
     MetricResult {
         name: name.into(),
         value: 0.0,
+        direction,
         values: HashMap::new(),
         detail: None,
     }
@@ -30,7 +31,7 @@ impl Metric<f64> for Mae {
 
     fn compute(&self, scored: &[ScoredSample<f64>]) -> AppResult<MetricResult> {
         if scored.is_empty() {
-            return Ok(empty_result("mae"));
+            return Ok(empty_result("mae", MetricDirection::LowerIsBetter));
         }
         let sum: f64 = scored
             .iter()
@@ -39,6 +40,7 @@ impl Metric<f64> for Mae {
         Ok(MetricResult {
             name: "mae".into(),
             value: sum / scored.len() as f64,
+            direction: MetricDirection::LowerIsBetter,
             values: HashMap::new(),
             detail: None,
         })
@@ -59,7 +61,7 @@ impl Metric<f64> for Mse {
 
     fn compute(&self, scored: &[ScoredSample<f64>]) -> AppResult<MetricResult> {
         if scored.is_empty() {
-            return Ok(empty_result("mse"));
+            return Ok(empty_result("mse", MetricDirection::LowerIsBetter));
         }
         let sum: f64 = scored
             .iter()
@@ -68,6 +70,7 @@ impl Metric<f64> for Mse {
         Ok(MetricResult {
             name: "mse".into(),
             value: sum / scored.len() as f64,
+            direction: MetricDirection::LowerIsBetter,
             values: HashMap::new(),
             detail: None,
         })
@@ -88,7 +91,7 @@ impl Metric<f64> for Rmse {
 
     fn compute(&self, scored: &[ScoredSample<f64>]) -> AppResult<MetricResult> {
         if scored.is_empty() {
-            return Ok(empty_result("rmse"));
+            return Ok(empty_result("rmse", MetricDirection::LowerIsBetter));
         }
         let sum: f64 = scored
             .iter()
@@ -98,6 +101,7 @@ impl Metric<f64> for Rmse {
         Ok(MetricResult {
             name: "rmse".into(),
             value: val,
+            direction: MetricDirection::LowerIsBetter,
             values: HashMap::new(),
             detail: None,
         })
@@ -118,7 +122,7 @@ impl Metric<f64> for RSquared {
 
     fn compute(&self, scored: &[ScoredSample<f64>]) -> AppResult<MetricResult> {
         if scored.is_empty() {
-            return Ok(empty_result("r_squared"));
+            return Ok(empty_result("r_squared", MetricDirection::HigherIsBetter));
         }
         let mean: f64 = scored.iter().map(|s| s.sample.label).sum::<f64>() / scored.len() as f64;
         let ss_res: f64 = scored
@@ -133,6 +137,7 @@ impl Metric<f64> for RSquared {
         Ok(MetricResult {
             name: "r_squared".into(),
             value: val,
+            direction: MetricDirection::HigherIsBetter,
             values,
             detail: None,
         })

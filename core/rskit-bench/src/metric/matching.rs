@@ -1,5 +1,5 @@
 use super::Metric;
-use crate::{MetricResult, ScoredSample};
+use crate::{MetricDirection, MetricResult, ScoredSample};
 use rskit_errors::AppResult;
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -29,6 +29,7 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for ExactMatch<L> {
             return Ok(MetricResult {
                 name: "exact_match".into(),
                 value: 0.0,
+                direction: MetricDirection::HigherIsBetter,
                 values: HashMap::new(),
                 detail: None,
             });
@@ -44,6 +45,7 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for ExactMatch<L> {
         Ok(MetricResult {
             name: "exact_match".into(),
             value: val,
+            direction: MetricDirection::HigherIsBetter,
             values,
             detail: None,
         })
@@ -110,6 +112,7 @@ impl<L: Display + Clone + Send + Sync + 'static> Metric<L> for FuzzyMatch<L> {
             return Ok(MetricResult {
                 name: "fuzzy_match".into(),
                 value: 0.0,
+                direction: MetricDirection::HigherIsBetter,
                 values: HashMap::new(),
                 detail: None,
             });
@@ -138,6 +141,7 @@ impl<L: Display + Clone + Send + Sync + 'static> Metric<L> for FuzzyMatch<L> {
         Ok(MetricResult {
             name: "fuzzy_match".into(),
             value: match_rate,
+            direction: MetricDirection::HigherIsBetter,
             values,
             detail: None,
         })

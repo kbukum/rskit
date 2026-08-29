@@ -36,6 +36,7 @@ fn result(id: &str, timestamp: &str, tag: &str, f1: f64) -> BenchRunResult {
         value: f1,
         values: HashMap::from([("f1".to_owned(), f1)]),
         detail: None,
+        ..Default::default()
     }];
     r
 }
