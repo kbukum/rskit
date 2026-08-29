@@ -16,6 +16,7 @@ use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_resilience::Policy;
 
 use super::AsyncMetric;
+use super::identity::escape_component;
 use crate::{MetricDirection, MetricResult, ScoredSample};
 
 /// Base metric name; the embedding model's identity is appended to form the full, comparison-safe name.
@@ -61,8 +62,6 @@ where
 }
 
 /// Renders an embedding model to a stable identity string used in the metric name and provenance, so incompatible models never collide under a shared name.
-///
-/// Each component is escaped before the `/` and `@` delimiters are applied, so the join is unambiguous: `Custom("a/b")` + name `c` and `Custom("a")` + name `b/c` yield distinct identities rather than a colliding `a/b/c`.
 fn model_identity(model: &Model) -> String {
     let provider = escape_component(&provider_tag(&model.provider));
     let name = escape_component(&model.name);
@@ -70,14 +69,6 @@ fn model_identity(model: &Model) -> String {
         Some(version) => format!("{provider}/{name}@{}", escape_component(version)),
         None => format!("{provider}/{name}"),
     }
-}
-
-/// Escapes `\`, `/`, and `@` so an identity component can never be confused with the delimiters that join components.
-fn escape_component(component: &str) -> String {
-    component
-        .replace('\\', "\\\\")
-        .replace('/', "\\/")
-        .replace('@', "\\@")
 }
 
 /// Renders a model provider to a stable, human-readable tag.

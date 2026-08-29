@@ -25,6 +25,9 @@ pub mod golden;
 pub mod hook;
 /// In-process HTTP server fake for transport tests.
 pub mod http_server;
+/// Scriptable LLM provider fake (feature `llm`).
+#[cfg(feature = "llm")]
+pub mod llm;
 /// Generic mock provider for testing.
 pub mod mock_provider;
 /// Temporary workspace and fixture helpers.
@@ -39,6 +42,8 @@ pub use embedding::FakeEmbeddingProvider;
 pub use golden::{BLESS_ENV, Golden, GoldenMode, GoldenOutcome, Match, Normalizer, Rule};
 pub use hook::TestEvent;
 pub use http_server::{CapturedRequest, FakeHttpServer, FakeResponse};
+#[cfg(feature = "llm")]
+pub use llm::FakeLlmProvider;
 pub use mock_provider::MockProvider;
 pub use workspace::TestWorkspace;
 

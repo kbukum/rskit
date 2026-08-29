@@ -4,6 +4,8 @@ mod adapter;
 mod async_metric;
 mod classification;
 mod composite;
+mod identity;
+mod judge;
 mod matching;
 mod probability;
 mod ranking;
@@ -17,12 +19,15 @@ pub use classification::{
     binary_classification, confusion_matrix, multi_class_classification, threshold_sweep,
 };
 pub use composite::weighted;
+pub use judge::{JudgePrompt, JudgeVerdict, LlmJudge, llm_judge};
 pub use matching::{exact_match, fuzzy_match};
 pub use probability::{auc_roc, brier_score, calibration, log_loss};
 pub use ranking::{mean_average_precision, ndcg, precision_at_k, recall_at_k};
 pub use regression::{mae, mse, r_squared, rmse};
 pub use semantic::{SemanticSimilarity, semantic_similarity};
 pub use tokens::token_stats;
+
+pub(crate) use judge::judges_from_results as judge_provenance_from_results;
 
 mod suite;
 

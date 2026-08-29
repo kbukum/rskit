@@ -2,16 +2,66 @@
 //!
 //! A [`RunProvenance`] record captures everything needed to reproduce and audit a benchmark run — the deterministic seed and RNG algorithm, the source-control commit, the tool and host identity, and an order-independent content hash of the evaluated dataset. Host and commit values are gathered through an injected [`ProvenanceProbe`], so unit tests can supply fixed values with no process, environment, or network access.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 use rskit_util::hash::ContentHasher;
 
 use crate::types::BenchSample;
 
+/// Provenance metadata for an LLM judge metric.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct JudgeProvenance {
+    /// Provider that served the judge model.
+    pub provider: String,
+    /// Model name used by the judge.
+    pub model: String,
+    /// Stable identifier of the versioned judge prompt.
+    pub prompt_id: String,
+    /// Version of the judge prompt, so scores map to the exact prompt revision that produced them.
+    pub prompt_version: String,
+    /// Content fingerprint of the complete rubric (template body plus system instruction), so scores only ever compare against an identical rubric even under the same prompt id and version.
+    pub prompt_fingerprint: String,
+    /// Model the provider reported as actually generating the verdicts, when it differs from the requested [`model`](Self::model) (an alias or backend route). `None` when the provider reported no model or reported the requested one, so a run records the true scoring model rather than only the requested name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolved_model: Option<String>,
+}
+
+impl JudgeProvenance {
+    /// Creates a new judge provenance record.
+    #[must_use]
+    pub fn new(
+        provider: impl Into<String>,
+        model: impl Into<String>,
+        prompt_id: impl Into<String>,
+        prompt_version: impl Into<String>,
+        prompt_fingerprint: impl Into<String>,
+    ) -> Self {
+        Self {
+            provider: provider.into(),
+            model: model.into(),
+            prompt_id: prompt_id.into(),
+            prompt_version: prompt_version.into(),
+            prompt_fingerprint: prompt_fingerprint.into(),
+            resolved_model: None,
+        }
+    }
+
+    /// Records the model the provider reported as actually generating the verdicts, when it differs from the requested model.
+    #[must_use]
+    pub fn with_resolved_model(mut self, resolved_model: impl Into<String>) -> Self {
+        self.resolved_model = Some(resolved_model.into());
+        self
+    }
+}
+
 /// Reproducibility metadata captured for a benchmark run.
 ///
 /// The seed always serializes — it drives reproducibility, so a run must record which seed produced it even when it is zero. Genuinely-absent fields (an unresolved commit, an unnamed dataset) are omitted so the record stays sparse rather than padded with empty placeholders.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct RunProvenance {
     /// Deterministic run seed (see [`RunOptions::with_seed`](crate::RunOptions::with_seed)).
     #[serde(default)]
@@ -49,6 +99,9 @@ pub struct RunProvenance {
     /// Metric names computed for the run, in suite order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub metrics: Vec<String>,
+    /// Judge identities for LLM-judge metrics, keyed by metric name.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub judges: BTreeMap<String, JudgeProvenance>,
 }
 
 /// Gathers host and source-control provenance for a benchmark run.
@@ -223,6 +276,17 @@ mod tests {
 
     #[test]
     fn populated_provenance_round_trips() {
+        let mut judges = BTreeMap::new();
+        judges.insert(
+            "llm_judge[openai/gpt-judge@rskit.builtin.judge@1.0.0]".to_string(),
+            JudgeProvenance::new(
+                "openai",
+                "gpt-judge",
+                "rskit.builtin.judge",
+                "1.0.0",
+                "0123456789abcdef",
+            ),
+        );
         let provenance = RunProvenance {
             seed: 42,
             rng_algorithm: "rand_chacha:ChaCha8Rng".into(),
@@ -236,6 +300,8 @@ mod tests {
             dataset_version: "2.1.0".into(),
             branches: vec!["primary".into()],
             metrics: vec!["exact_match".into()],
+            judges,
+            ..Default::default()
         };
         let json = serde_json::to_string(&provenance).expect("serialize");
         let restored: RunProvenance = serde_json::from_str(&json).expect("deserialize");

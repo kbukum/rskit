@@ -520,3 +520,78 @@ async fn runner_surfaces_async_metric_provider_failure() {
 
     assert_eq!(error.code(), ErrorCode::ServiceUnavailable);
 }
+
+#[tokio::test]
+async fn runner_records_judge_model_and_prompt_version_in_provenance() {
+    use rskit_bench::metric::{JudgePrompt, llm_judge};
+    use rskit_testutil::FakeLlmProvider;
+
+    let loader = DatasetLoader::new(fixture_dataset_dir(), string_label_mapper())
+        .with_manifest_file("custom-manifest.json");
+    let evaluator = EvaluatorFunc::new("fixture-evaluator", |_input, _ctx| {
+        Box::pin(async {
+            Ok(Prediction {
+                label: "yes".to_owned(),
+                score: 0.9,
+                ..Prediction::default()
+            })
+        })
+    });
+
+    // Canned judge replies keep the run deterministic and offline.
+    let provider1 = Arc::new(FakeLlmProvider::new());
+    provider1
+        .will_reply("{\"score\": 0.8}")
+        .will_reply("{\"score\": 0.8}");
+    let provider2 = Arc::new(FakeLlmProvider::new());
+    provider2
+        .will_reply("{\"score\": 0.9}")
+        .will_reply("{\"score\": 0.9}");
+
+    let mut suite = exact_match_suite();
+    suite.add_async(Arc::new(llm_judge::<String>(
+        provider1,
+        "judge-model-1",
+        JudgePrompt::default(),
+    )));
+    suite.add_async(Arc::new(llm_judge::<String>(
+        provider2,
+        "judge-model-2",
+        JudgePrompt::default(),
+    )));
+
+    let result = BenchRunner::new()
+        .register("fixture", Box::new(evaluator), 1)
+        .with_metrics(suite)
+        .with_clock(Arc::new(FixedClock::new(1_704_067_200, 42)))
+        .run(&loader, RunOptions::default().with_concurrency(1))
+        .await
+        .expect("run with judge metrics succeeds");
+
+    let judge1 = result
+        .provenance
+        .judges
+        .values()
+        .find(|judge| judge.model == "judge-model-1")
+        .expect("judge 1 recorded");
+    assert_eq!(judge1.provider, "fake_llm");
+    assert_eq!(judge1.model, "judge-model-1");
+    assert_eq!(judge1.prompt_id, "rskit.builtin.judge");
+    assert_eq!(judge1.prompt_version, "1.0.0");
+    assert!(!judge1.prompt_fingerprint.is_empty());
+
+    let judge2 = result
+        .provenance
+        .judges
+        .values()
+        .find(|judge| judge.model == "judge-model-2")
+        .expect("judge 2 recorded");
+    assert_eq!(judge2.provider, "fake_llm");
+    assert_eq!(judge2.model, "judge-model-2");
+    assert_eq!(judge2.prompt_id, "rskit.builtin.judge");
+    assert_eq!(judge2.prompt_version, "1.0.0");
+    // Same built-in rubric for both judges, so the fingerprint matches; only the model differs.
+    assert_eq!(judge1.prompt_fingerprint, judge2.prompt_fingerprint);
+
+    assert_eq!(result.provenance.judges.len(), 2);
+}
