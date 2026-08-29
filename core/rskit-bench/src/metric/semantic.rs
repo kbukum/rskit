@@ -35,9 +35,9 @@ type TextExtractor<L> = Arc<dyn Fn(&L) -> String + Send + Sync>;
 
 /// Creates a semantic-similarity metric over an injected embedding provider.
 ///
-/// The metric embeds each sample's reference and prediction labels (rendered to text via the label's [`Display`] by default) and scores them by cosine similarity. It reports the average similarity as the primary [`MetricResult::value`] and records the average, the match rate at the configured threshold, and the threshold itself in [`MetricResult::values`].
+/// The metric embeds each sample's reference and prediction labels (rendered to text via the label's [`Display`] by default) and scores them by cosine similarity. It reports the average similarity as the primary [`MetricResult::value`] and records the average and the match rate at the configured threshold in [`MetricResult::values`]. The threshold itself is a configuration input, not a quality signal, so it is recorded in [`MetricResult::detail`] rather than [`MetricResult::values`] — the comparator diffs every entry in `values` directionally, so a threshold change there would falsely register as a regression or improvement.
 ///
-/// The metric name embeds the embedding model's identity (for example `semantic_similarity[open_ai/text-embedding-3-small]`) and that identity is recorded in [`MetricResult::detail`], so runs scored with incompatible embedding models stay distinct in provenance and are never joined by [`RunComparator`](crate::compare::RunComparator) as if comparable.
+/// The metric name embeds the embedding model's identity and the configured threshold (for example `semantic_similarity[open_ai/text-embedding-3-small:t0.8]`) and that identity is recorded in [`MetricResult::detail`], so runs scored with incompatible embedding models or thresholds stay distinct in provenance and are never joined by [`RunComparator`](crate::compare::RunComparator) as if comparable — `match_rate` is a fraction at a fixed cutoff, so comparing it across thresholds would be unsound.
 ///
 /// Samples are embedded in bounded batches (see [`with_batch_size`](SemanticSimilarity::with_batch_size)); each provider call runs through an injected [`rskit_resilience::Policy`] (see [`with_policy`](SemanticSimilarity::with_policy)) whose default is a per-call timeout, so a large run neither exceeds provider batch limits nor rides on a single dataset-wide deadline.
 ///
@@ -47,7 +47,7 @@ where
     L: Display + Send + Sync + 'static,
 {
     let model_id = model_identity(&model);
-    let name = format!("{NAME}[{model_id}]");
+    let name = build_name(&model_id, DEFAULT_THRESHOLD);
     SemanticSimilarity {
         provider,
         model,
@@ -59,6 +59,13 @@ where
         batch_size: DEFAULT_BATCH_SIZE,
         _phantom: PhantomData,
     }
+}
+
+/// Builds the comparison-safe metric name from the model identity and the configured threshold.
+///
+/// The threshold is part of the identity because `match_rate` is a fraction at a fixed cutoff: two runs that used different thresholds must never join under a shared name, or the comparator would score an incomparable pass-rate delta as a regression or improvement.
+fn build_name(model_id: &str, threshold: f32) -> String {
+    format!("{NAME}[{model_id}:t{threshold}]")
 }
 
 /// Renders an embedding model to a stable identity string used in the metric name and provenance, so incompatible models never collide under a shared name.
@@ -98,9 +105,12 @@ pub struct SemanticSimilarity<L> {
 
 impl<L> SemanticSimilarity<L> {
     /// Sets the cosine-similarity threshold at or above which a pair counts as a match.
+    ///
+    /// Must be finite and in `[-1, 1]` (cosine similarity); an invalid value is rejected as a typed [`ErrorCode::InvalidInput`] error when the metric is computed, rather than being silently coerced or serialized as a `null` provenance value.
     #[must_use]
     pub fn with_threshold(mut self, threshold: f32) -> Self {
         self.threshold = threshold;
+        self.name = build_name(&self.model_id, threshold);
         self
     }
 
@@ -149,7 +159,6 @@ impl<L> SemanticSimilarity<L> {
         let mut values = HashMap::new();
         values.insert("avg_similarity".to_string(), avg_similarity);
         values.insert("match_rate".to_string(), match_rate);
-        values.insert("threshold".to_string(), f64::from(self.threshold));
         MetricResult {
             name: self.name.clone(),
             value: avg_similarity,
@@ -159,9 +168,9 @@ impl<L> SemanticSimilarity<L> {
         }
     }
 
-    /// Records the embedding model's identity so a persisted result carries the scoring provenance, not just the similarity numbers.
+    /// Records the embedding model's identity and the configured threshold so a persisted result carries the scoring provenance, not just the similarity numbers. The threshold lives here — not in [`MetricResult::values`] — because it is a configuration input, not a quality signal the comparator should diff directionally.
     fn provenance(&self) -> serde_json::Value {
-        serde_json::json!({ "model": self.model_id })
+        serde_json::json!({ "model": self.model_id, "threshold": self.threshold })
     }
 
     /// Embeds one batch of samples and returns the ordered embeddings, two per sample (reference then prediction), under a single bounded provider call.
@@ -229,6 +238,15 @@ where
     }
 
     async fn compute(&self, scored: &[ScoredSample<L>]) -> AppResult<MetricResult> {
+        if !self.threshold.is_finite() || !(-1.0..=1.0).contains(&self.threshold) {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                format!(
+                    "semantic_similarity: threshold {} must be a finite cosine similarity in [-1, 1]",
+                    self.threshold
+                ),
+            ));
+        }
         if scored.is_empty() {
             return Ok(self.zeroed_result());
         }
@@ -344,7 +362,32 @@ mod tests {
             .expect("compute");
         assert!((result.values["avg_similarity"] - 0.5).abs() < 1e-6);
         assert_eq!(result.values["match_rate"], 0.5);
-        assert_eq!(result.values["threshold"], 0.5);
+        // Threshold is a configuration input recorded in provenance, never a directional value.
+        assert!(!result.values.contains_key("threshold"));
+        let detail = result.detail.expect("detail");
+        assert!((detail["threshold"].as_f64().expect("threshold") - 0.5).abs() < 1e-6);
+    }
+
+    #[tokio::test]
+    async fn non_finite_or_out_of_range_threshold_is_rejected() {
+        // An invalid threshold must fail before any provider call, empty-input path, or
+        // `tNaN`/`tinf` identity, rather than producing a meaningless match rate.
+        for bad in [f32::NAN, f32::INFINITY, -1.1, 1.1] {
+            let provider = Arc::new(FakeEmbeddingProvider::new());
+            let metric = semantic_similarity::<String>(provider, model()).with_threshold(bad);
+            let err = metric
+                .compute(&[scored("a", "a")])
+                .await
+                .expect_err("out-of-range threshold must be rejected");
+            assert_eq!(err.code(), ErrorCode::InvalidInput);
+        }
+        // A negative but in-range cosine threshold is a legitimate configuration.
+        let provider = Arc::new(FakeEmbeddingProvider::new());
+        semantic_similarity::<String>(provider, model())
+            .with_threshold(-0.2)
+            .compute(&[])
+            .await
+            .expect("in-range negative cosine threshold must be accepted");
     }
 
     #[tokio::test]
@@ -465,7 +508,17 @@ mod tests {
         // The name carries the model identity so runs scored with incompatible embedding models never collide under a bare "semantic_similarity" name.
         let provider = Arc::new(FakeEmbeddingProvider::new());
         let metric = semantic_similarity::<String>(provider, model());
-        assert_eq!(metric.name(), "semantic_similarity[memory/embed-test]");
+        assert_eq!(metric.name(), "semantic_similarity[memory/embed-test:t0.8]");
+    }
+
+    #[tokio::test]
+    async fn threshold_is_part_of_metric_identity() {
+        // The pass rate is a fraction at a fixed cutoff, so two thresholds must yield distinct names and never join under comparison.
+        let a = semantic_similarity::<String>(Arc::new(FakeEmbeddingProvider::new()), model());
+        let b = semantic_similarity::<String>(Arc::new(FakeEmbeddingProvider::new()), model())
+            .with_threshold(0.5);
+        assert_ne!(a.name(), b.name());
+        assert_eq!(b.name(), "semantic_similarity[memory/embed-test:t0.5]");
     }
 
     #[tokio::test]
@@ -496,7 +549,7 @@ mod tests {
         provider.will_return(vec![vec![1.0, 0.0], vec![1.0, 0.0]]);
         let metric = semantic_similarity::<String>(provider, model());
         let result = metric.compute(&[scored("a", "a")]).await.expect("compute");
-        assert_eq!(result.name, "semantic_similarity[memory/embed-test]");
+        assert_eq!(result.name, "semantic_similarity[memory/embed-test:t0.8]");
         let detail = result.detail.expect("provenance detail present");
         assert_eq!(detail["model"], "memory/embed-test");
     }

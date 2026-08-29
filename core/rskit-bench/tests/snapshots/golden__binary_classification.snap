@@ -3,7 +3,7 @@ source: crates/rskit-bench/tests/golden.rs
 expression: stable_metric(&result)
 ---
 {
-  "name": "classification",
+  "name": "classification[t0.5]",
   "value": 0.736842,
   "values": {
     "accuracy": 0.75,
@@ -13,7 +13,6 @@ expression: stable_metric(&result)
     "fpr": 0.2,
     "precision": 0.777778,
     "recall": 0.7,
-    "threshold": 0.5,
     "tn": 8.0,
     "tp": 7.0
   }
