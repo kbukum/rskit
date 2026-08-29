@@ -79,6 +79,8 @@ rskit-llm-openai = { workspace = true, optional = true }
 rskit-llm-anthropic = { workspace = true, optional = true }
 rskit-llm-ollama = { workspace = true, optional = true }
 rskit-llm-gemini = { workspace = true, optional = true }
+rskit-llm-tiktoken = { workspace = true, optional = true }
+rskit-llm-hf-tokenizers = { workspace = true, optional = true }
 rskit-embedding = { workspace = true, optional = true }
 rskit-inference = { workspace = true, optional = true }
 rskit-inference-triton = { workspace = true, optional = true }
@@ -147,6 +149,8 @@ llm-openai    = ["llm", "dep:rskit-llm-openai"]
 llm-anthropic = ["llm", "dep:rskit-llm-anthropic"]
 llm-ollama    = ["llm", "dep:rskit-llm-ollama"]
 llm-gemini    = ["llm", "dep:rskit-llm-gemini"]
+llm-tiktoken  = ["llm", "dep:rskit-llm-tiktoken"]
+llm-hf-tokenizers = ["llm", "dep:rskit-llm-hf-tokenizers"]
 embedding     = ["genai", "dep:rskit-embedding"]
 inference     = ["dep:rskit-inference"]
 inference-triton = ["inference", "dep:rskit-inference-triton"]
@@ -185,7 +189,7 @@ full          = [
     "server", "grpc", "encryption", "http", "httpclient", "auth", "di", "database", "database-sqlite", "cache", "messaging",
     "cache-fs", "cache-redis", "messaging-kafka", "messaging-nats", "messaging-rabbitmq",
     "observability", "authz", "security", "discovery", "sse", "dag", "genai", "llm",
-    "llm-openai", "llm-anthropic", "llm-ollama", "llm-gemini", "embedding",
+    "llm-openai", "llm-anthropic", "llm-ollama", "llm-gemini", "llm-tiktoken", "llm-hf-tokenizers", "embedding",
     "inference", "inference-triton", "inference-vllm", "inference-tgi",
     "prompt", "skill", "tool", "agent", "mcp", "media-full", "storage", "storage-s3", "storage-gcs", "storage-supabase",
     "cli", "git", "dataset", "dataset-image", "bench", "vectorstore", "vectorstore-qdrant", "chain", "process", "stateful",

@@ -29,6 +29,7 @@ rand_chacha    = { workspace = true }
 # Internal
 rskit-errors = { workspace = true }
 rskit-fs = { workspace = true }
+rskit-llm = { workspace = true }
 rskit-provider = { workspace = true }
 rskit-util = { workspace = true }
 rskit-worker = { workspace = true }

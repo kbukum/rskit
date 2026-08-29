@@ -27,6 +27,7 @@ Start here, then reconcile each low-level operation against that pass.
 | Encryption / security | `rskit-encryption` / `rskit-security` | ad-hoc crypto, custom header sets | current algorithms only |
 | Git operations | `rskit-git` | bare `Command::new("git")` | |
 | Validation | `rskit-validation` | inline boundary checks duplicated per crate | |
+| Tokenization / raw-text token counting | `rskit-llm` | per-crate tiktoken/tokenizers wrappers, ad-hoc `chars/4` counts scattered across crates | `TokenCounter` port (pluggable, deterministic `&str -> tokens`) + heuristic default in core; exact tokenizers in `contrib/llm/*`. Message-framing chat-budget estimation (`count_tokens_approx`) is a distinct helper owned by `rskit-ai::chat`, layered below `rskit-llm` |
 
 ## How to use this map
 

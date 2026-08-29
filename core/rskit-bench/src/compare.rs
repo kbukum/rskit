@@ -1,6 +1,6 @@
 //! Run comparison and regression detection.
 
-use crate::result::{BenchRunResult, MetricResult};
+use crate::result::{BenchRunResult, MetricDirection, MetricResult};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -38,7 +38,8 @@ impl RunComparator {
                     old_value: bm.value,
                     new_value: tm.value,
                     delta,
-                    improved: delta > 0.0,
+                    direction: tm.direction,
+                    improved: tm.direction.is_improvement(delta),
                     significant,
                 });
 
@@ -51,7 +52,8 @@ impl RunComparator {
                                 old_value: old_val,
                                 new_value: new_val,
                                 delta: d,
-                                improved: d > 0.0,
+                                direction: tm.direction,
+                                improved: tm.direction.is_improvement(d),
                                 significant: d.abs() >= self.threshold,
                             });
                         }
@@ -115,7 +117,11 @@ impl RunDiff {
         let mut lines = Vec::new();
         lines.push(format!("Comparison: {} → {}", self.base_id, self.target_id));
         for c in &self.changes {
-            let icon = if c.improved { "✅" } else { "⚠️" };
+            let icon = match c.direction {
+                MetricDirection::Neutral => "≈",
+                _ if c.improved => "✅",
+                _ => "⚠️",
+            };
             let sign = if c.delta >= 0.0 { "+" } else { "" };
             lines.push(format!(
                 "  {} {}: {:.4} → {:.4} ({}{:.4})",
@@ -131,9 +137,13 @@ impl RunDiff {
         lines.join("\n")
     }
 
-    /// Returns true when any significant metric change moved in the negative direction.
+    /// Returns true when any significant metric change moved in its metric's
+    /// worse direction. Descriptive ([`MetricDirection::Neutral`]) changes never
+    /// count as regressions.
     pub fn has_regression(&self) -> bool {
-        self.changes.iter().any(|c| !c.improved && c.significant)
+        self.changes
+            .iter()
+            .any(|c| c.significant && c.direction.is_regression(c.delta))
     }
 }
 
@@ -148,8 +158,86 @@ pub struct MetricChange {
     pub new_value: f64,
     /// Difference computed as `new_value - old_value`.
     pub delta: f64,
-    /// Whether the metric value increased in the target run.
+    /// Optimization direction of the metric, inherited by dotted sub-metric entries.
+    #[serde(default)]
+    pub direction: MetricDirection,
+    /// Whether the change moved in the metric's better direction. Always false
+    /// for a [`MetricDirection::Neutral`] metric.
     pub improved: bool,
     /// Whether the absolute delta meets the comparator significance threshold.
     pub significant: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::result::MetricResult;
+
+    fn run_with(id: &str, name: &str, value: f64, direction: MetricDirection) -> BenchRunResult {
+        BenchRunResult {
+            id: id.to_owned(),
+            metrics: vec![MetricResult {
+                name: name.to_owned(),
+                value,
+                direction,
+                ..Default::default()
+            }],
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn lower_is_better_decrease_is_improvement_and_not_regression() {
+        let base = run_with("base", "mae", 0.30, MetricDirection::LowerIsBetter);
+        let target = run_with("target", "mae", 0.20, MetricDirection::LowerIsBetter);
+        let diff = RunComparator::new().compare(&base, &target);
+
+        let change = &diff.changes[0];
+        assert!(change.delta < 0.0);
+        assert!(
+            change.improved,
+            "a decrease in a lower-is-better metric improves"
+        );
+        assert!(!diff.has_regression());
+    }
+
+    #[test]
+    fn lower_is_better_increase_is_regression() {
+        let base = run_with("base", "mae", 0.20, MetricDirection::LowerIsBetter);
+        let target = run_with("target", "mae", 0.30, MetricDirection::LowerIsBetter);
+        let diff = RunComparator::new().compare(&base, &target);
+
+        let change = &diff.changes[0];
+        assert!(change.delta > 0.0);
+        assert!(
+            !change.improved,
+            "an increase in a lower-is-better metric is not an improvement"
+        );
+        assert!(diff.has_regression());
+    }
+
+    #[test]
+    fn higher_is_better_still_classifies_by_increase() {
+        let base = run_with("base", "accuracy", 0.80, MetricDirection::HigherIsBetter);
+        let up = run_with("target", "accuracy", 0.90, MetricDirection::HigherIsBetter);
+        let down = run_with("target", "accuracy", 0.70, MetricDirection::HigherIsBetter);
+
+        assert!(RunComparator::new().compare(&base, &up).changes[0].improved);
+        assert!(!RunComparator::new().compare(&base, &down).changes[0].improved);
+        assert!(RunComparator::new().compare(&base, &down).has_regression());
+    }
+
+    #[test]
+    fn neutral_metric_never_improves_or_regresses() {
+        let base = run_with("base", "token_stats", 1000.0, MetricDirection::Neutral);
+        let more = run_with("target", "token_stats", 2000.0, MetricDirection::Neutral);
+        let less = run_with("target", "token_stats", 500.0, MetricDirection::Neutral);
+
+        let up = RunComparator::new().compare(&base, &more);
+        let dn = RunComparator::new().compare(&base, &less);
+        assert!(!up.changes[0].improved);
+        assert!(!dn.changes[0].improved);
+        assert!(!up.has_regression());
+        assert!(!dn.has_regression());
+    }
 }

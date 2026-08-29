@@ -68,6 +68,10 @@ skip = [
     { name = "sha2", reason = "AWS/AMQP/PKI transitive stacks and direct workspace code use different stable sha2 lines" },
     { name = "syn", reason = "proc-macro crates are mid-migration from syn 2 to syn 3; async-trait and other derives pull syn 3 while the wider ecosystem still uses syn 2" },
     { name = "spin", reason = "ring and PKI parser stacks depend on different stable spin lines" },
+    { name = "base64", reason = "tokenizers' spm_precompiled dep still uses base64 0.13 while the shared stack uses base64 0.22" },
+    { name = "darling", reason = "tokenizers' derive_builder uses darling 0.20 while other adapter derives use darling 0.23" },
+    { name = "darling_core", reason = "tokenizers' derive_builder uses darling_core 0.20 while other adapter derives use darling_core 0.23" },
+    { name = "darling_macro", reason = "tokenizers' derive_builder uses darling_macro 0.20 while other adapter derives use darling_macro 0.23" },
 ]
 
 # L7 dependency direction: rskit-ai is the only shared AI/ML vocabulary crate.
@@ -83,7 +87,13 @@ skip = [
 db-urls = ["https://github.com/rustsec/advisory-db"]
 version = 2
 # Deny all unmaintained crates (upgrade or replace them).
-ignore = []
+ignore = [
+    # `paste` is archived/unmaintained but still pulled transitively by
+    # `tokenizers` (HuggingFace) via its proc-macro deps. It is a compile-time
+    # macro with no runtime/network surface and no safe upgrade exists yet; the
+    # HuggingFace adapter is opt-in and off by default.
+    "RUSTSEC-2024-0436",
+]
 
 # ---------------------------------------------------------------------------
 # Sources

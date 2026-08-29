@@ -75,6 +75,10 @@ base64 = "0.22"
 criterion = { version = "0.8", features = ["html_reports", "async_tokio"] }
 insta = { version = "1.47", features = ["json", "yaml", "redactions"] }
 
+# Tokenizers
+tiktoken-rs = "0.12"
+tokenizers = { version = "0.23", default-features = false, features = ["fancy-regex"] }
+
 # Messaging adapters
 rdkafka = { version = "0.39", features = ["tokio"] }
 async-nats = "0.49"

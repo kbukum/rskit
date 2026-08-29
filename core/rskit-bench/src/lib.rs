@@ -29,7 +29,7 @@ pub use eval_context::{EvalContext, RNG_ALGORITHM};
 pub use evaluator::{Evaluator, EvaluatorFunc, FromProvider};
 pub use execution::BenchExecutionPlan;
 pub use provenance::{FixedProvenanceProbe, ProvenanceProbe, RunProvenance, SystemProvenanceProbe};
-pub use result::{BenchRunResult, MetricResult};
+pub use result::{BenchRunResult, MetricDirection, MetricResult};
 pub use rskit_util::time::{
     Clock as BenchClock, FixedClock, SharedClock, SystemClock, system_clock,
 };

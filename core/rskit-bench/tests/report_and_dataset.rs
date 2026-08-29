@@ -96,6 +96,7 @@ fn bench_result() -> BenchRunResult {
             "labels": ["yes", "no"],
             "matrix": [[1, 0], [1, 0]]
         })),
+        ..Default::default()
     }];
     r.branches = branches;
     r.samples = vec![

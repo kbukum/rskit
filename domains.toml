@@ -37,7 +37,7 @@ depends_on = ["core", "patterns", "crosscutting", "composition", "transport", "a
 
 [domains.ai]
 description = "LLM, inference, embedding, agent, tool, MCP, skill"
-modules = ["ai", "llm", "llm-common", "llm-openai", "llm-anthropic", "llm-ollama", "llm-gemini", "embedding", "inference", "inference-tgi", "inference-triton", "inference-vllm", "agent", "tool", "mcp", "skill"]
+modules = ["ai", "llm", "llm-common", "llm-openai", "llm-anthropic", "llm-ollama", "llm-gemini", "llm-tiktoken", "llm-hf-tokenizers", "embedding", "inference", "inference-tgi", "inference-triton", "inference-vllm", "agent", "tool", "mcp", "skill"]
 depends_on = ["core", "patterns", "crosscutting", "transport", "auth"]
 
 [domains.media]
@@ -48,4 +48,4 @@ depends_on = ["core", "patterns", "crosscutting", "composition", "data"]
 [domains.infra]
 description = "CLI, benchmarking, dataset, git, workload, test utilities, and facade"
 modules = ["bench", "cli", "dataset", "git", "testutil", "workload", "rskit"]
-depends_on = ["core", "patterns", "crosscutting", "composition"]
+depends_on = ["core", "patterns", "crosscutting", "composition", "ai"]

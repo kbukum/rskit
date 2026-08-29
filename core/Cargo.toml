@@ -245,8 +245,10 @@ rskit-inference-vllm = { path = "../contrib/inference/vllm", version = "0.2.0-al
 rskit-llm = { path = "rskit-llm", version = "0.2.0-alpha.1" }
 rskit-llm-anthropic = { path = "../contrib/llm/anthropic", version = "0.2.0-alpha.1" }
 rskit-llm-gemini = { path = "../contrib/llm/gemini", version = "0.2.0-alpha.1" }
+rskit-llm-hf-tokenizers = { path = "../contrib/llm/hf-tokenizers", version = "0.2.0-alpha.1" }
 rskit-llm-ollama = { path = "../contrib/llm/ollama", version = "0.2.0-alpha.1" }
 rskit-llm-openai = { path = "../contrib/llm/openai", version = "0.2.0-alpha.1" }
+rskit-llm-tiktoken = { path = "../contrib/llm/tiktoken", version = "0.2.0-alpha.1" }
 rskit-logging = { path = "rskit-logging", version = "0.2.0-alpha.1", default-features = false }
 rskit-mcp = { path = "rskit-mcp", version = "0.2.0-alpha.1" }
 rskit-media = { path = "rskit-media", version = "0.2.0-alpha.1" }

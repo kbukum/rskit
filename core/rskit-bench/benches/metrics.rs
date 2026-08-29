@@ -79,6 +79,7 @@ fn make_bench_run_result(n_samples: usize) -> BenchRunResult {
             value: 0.85,
             values: HashMap::new(),
             detail: None,
+            ..Default::default()
         },
         MetricResult {
             name: "f1".into(),
@@ -90,6 +91,7 @@ fn make_bench_run_result(n_samples: usize) -> BenchRunResult {
                 m
             },
             detail: None,
+            ..Default::default()
         },
     ];
     let samples: Vec<BenchSampleResult> = (0..n_samples)
@@ -158,7 +160,7 @@ fn bench_regression(c: &mut Criterion) {
             |b, data| {
                 b.iter(|| {
                     for m in &metrics {
-                        m.compute(black_box(data));
+                        let _ = m.compute(black_box(data));
                     }
                 });
             },

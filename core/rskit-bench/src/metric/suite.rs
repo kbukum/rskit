@@ -1,12 +1,18 @@
 use crate::result::MetricResult;
 use crate::types::ScoredSample;
+use rskit_errors::AppResult;
 
 /// Computes one benchmark metric from scored samples.
 pub trait Metric<L = String>: Send + Sync {
     /// Returns the stable metric name used in benchmark results.
     fn name(&self) -> &str;
     /// Computes the metric result from scored samples.
-    fn compute(&self, scored: &[ScoredSample<L>]) -> MetricResult;
+    ///
+    /// Returns an error when the metric cannot produce a faithful result — for
+    /// example when an injected dependency such as a tokenizer fails — rather
+    /// than fabricating a success-shaped or `NaN` value that would corrupt
+    /// aggregate totals.
+    fn compute(&self, scored: &[ScoredSample<L>]) -> AppResult<MetricResult>;
 }
 
 /// Ordered collection of metrics evaluated for a benchmark run.
@@ -26,7 +32,10 @@ impl<L> Suite<L> {
     }
 
     /// Computes every metric in suite order for the supplied scored samples.
-    pub fn compute(&self, scored: &[ScoredSample<L>]) -> Vec<MetricResult> {
+    ///
+    /// Fails fast if any metric returns an error, propagating it rather than
+    /// recording a partial or fabricated result set.
+    pub fn compute(&self, scored: &[ScoredSample<L>]) -> AppResult<Vec<MetricResult>> {
         self.metrics.iter().map(|m| m.compute(scored)).collect()
     }
 }

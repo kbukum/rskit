@@ -1,13 +1,17 @@
 use super::Metric;
 use crate::result::MetricResult;
 use crate::types::ScoredSample;
+use rskit_errors::AppResult;
 
 /// Object-safe metric interface used by run-level benchmark orchestration.
 pub trait RunMetric<L = String>: Send + Sync {
     /// Returns the stable metric name used in benchmark results.
     fn name(&self) -> &str;
     /// Computes the metric from scored samples.
-    fn compute(&self, scored: &[ScoredSample<L>]) -> MetricResult;
+    ///
+    /// Propagates an error when the underlying metric cannot produce a faithful
+    /// result rather than fabricating a value.
+    fn compute(&self, scored: &[ScoredSample<L>]) -> AppResult<MetricResult>;
 }
 
 /// Adapts a metric suite metric into the run-level metric trait.
@@ -33,7 +37,7 @@ impl<L: Send + Sync + 'static> RunMetric<L> for RunMetricAdapter<L> {
         self.0.name()
     }
 
-    fn compute(&self, scored: &[ScoredSample<L>]) -> MetricResult {
+    fn compute(&self, scored: &[ScoredSample<L>]) -> AppResult<MetricResult> {
         self.0.compute(scored)
     }
 }
@@ -51,13 +55,12 @@ mod tests {
             "stub"
         }
 
-        fn compute(&self, scored: &[ScoredSample<String>]) -> MetricResult {
-            MetricResult {
+        fn compute(&self, scored: &[ScoredSample<String>]) -> AppResult<MetricResult> {
+            Ok(MetricResult {
                 name: "stub".into(),
                 value: scored.len() as f64,
-                values: HashMap::new(),
-                detail: None,
-            }
+                ..Default::default()
+            })
         }
     }
 
@@ -83,7 +86,7 @@ mod tests {
     #[test]
     fn as_run_metric_delegates_name_and_compute() {
         let run_metric = as_run_metric(Box::new(Stub));
-        let result = run_metric.compute(&[sample(), sample()]);
+        let result = run_metric.compute(&[sample(), sample()]).unwrap();
 
         assert_eq!(run_metric.name(), "stub");
         assert_eq!(result.name, "stub");
@@ -98,7 +101,7 @@ mod tests {
         assert_eq!(run_metrics.len(), 2);
         for run_metric in &run_metrics {
             assert_eq!(run_metric.name(), "stub");
-            assert_eq!(run_metric.compute(&[sample()]).value, 1.0);
+            assert_eq!(run_metric.compute(&[sample()]).unwrap().value, 1.0);
         }
     }
 }

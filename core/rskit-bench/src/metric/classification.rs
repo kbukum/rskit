@@ -1,6 +1,7 @@
 use super::Metric;
 use crate::curves::{ConfusionMatrixDetail, ThresholdPoint};
-use crate::{MetricResult, ScoredSample};
+use crate::{MetricDirection, MetricResult, ScoredSample};
+use rskit_errors::AppResult;
 use std::collections::HashMap;
 use std::fmt::Display;
 
@@ -29,7 +30,7 @@ impl<L: PartialEq + Display + Clone + Send + Sync + 'static> Metric<L> for Binar
         "classification"
     }
 
-    fn compute(&self, scored: &[ScoredSample<L>]) -> MetricResult {
+    fn compute(&self, scored: &[ScoredSample<L>]) -> AppResult<MetricResult> {
         let (mut tp, mut fp, mut tn, mut fn_) = (0i64, 0i64, 0i64, 0i64);
         for s in scored {
             let actual = s.sample.label == self.positive;
@@ -73,12 +74,13 @@ impl<L: PartialEq + Display + Clone + Send + Sync + 'static> Metric<L> for Binar
             orientation: "row=actual, col=predicted".into(),
         };
 
-        MetricResult {
+        Ok(MetricResult {
             name: "classification".into(),
             value: f1,
+            direction: MetricDirection::HigherIsBetter,
             values,
             detail: Some(serde_json::to_value(&detail).unwrap_or_default()),
-        }
+        })
     }
 }
 
@@ -101,7 +103,7 @@ impl<L: PartialEq + Display + Clone + Send + Sync + 'static> Metric<L>
         "confusion_matrix"
     }
 
-    fn compute(&self, scored: &[ScoredSample<L>]) -> MetricResult {
+    fn compute(&self, scored: &[ScoredSample<L>]) -> AppResult<MetricResult> {
         let n = self.labels.len();
         let mut matrix = vec![vec![0i64; n]; n];
         for s in scored {
@@ -117,12 +119,13 @@ impl<L: PartialEq + Display + Clone + Send + Sync + 'static> Metric<L>
             matrix,
             orientation: "row=actual, col=predicted".into(),
         };
-        MetricResult {
+        Ok(MetricResult {
             name: "confusion_matrix".into(),
             value: 0.0,
+            direction: MetricDirection::Neutral,
             values: HashMap::new(),
             detail: Some(serde_json::to_value(&detail).unwrap_or_default()),
-        }
+        })
     }
 }
 
@@ -148,7 +151,7 @@ impl<L: PartialEq + Display + Clone + Send + Sync + 'static> Metric<L> for Thres
         "threshold_sweep"
     }
 
-    fn compute(&self, scored: &[ScoredSample<L>]) -> MetricResult {
+    fn compute(&self, scored: &[ScoredSample<L>]) -> AppResult<MetricResult> {
         let mut best_f1 = 0.0f64;
         let mut points = Vec::new();
         for &t in &self.thresholds {
@@ -178,12 +181,13 @@ impl<L: PartialEq + Display + Clone + Send + Sync + 'static> Metric<L> for Thres
                 accuracy: acc,
             });
         }
-        MetricResult {
+        Ok(MetricResult {
             name: "threshold_sweep".into(),
             value: best_f1,
+            direction: MetricDirection::HigherIsBetter,
             values: HashMap::new(),
             detail: Some(serde_json::to_value(&points).unwrap_or_default()),
-        }
+        })
     }
 }
 
@@ -204,7 +208,7 @@ impl<L: PartialEq + Display + Clone + Send + Sync + 'static> Metric<L> for Multi
         "multi_class_classification"
     }
 
-    fn compute(&self, scored: &[ScoredSample<L>]) -> MetricResult {
+    fn compute(&self, scored: &[ScoredSample<L>]) -> AppResult<MetricResult> {
         let n = self.labels.len();
         let mut tp = vec![0usize; n];
         let mut fp = vec![0usize; n];
@@ -264,11 +268,12 @@ impl<L: PartialEq + Display + Clone + Send + Sync + 'static> Metric<L> for Multi
         values.insert("micro_f1".into(), micro_f1);
         values.insert("accuracy".into(), accuracy);
 
-        MetricResult {
+        Ok(MetricResult {
             name: "multi_class_classification".into(),
             value: macro_f1,
+            direction: MetricDirection::HigherIsBetter,
             values,
             detail: None,
-        }
+        })
     }
 }

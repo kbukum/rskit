@@ -1,0 +1,23 @@
+{
+  "version": "1.0",
+  "truncation": null,
+  "padding": null,
+  "added_tokens": [
+    { "id": 2, "content": "[UNK]", "single_word": false, "lstrip": false, "rstrip": false, "normalized": false, "special": true }
+  ],
+  "normalizer": null,
+  "pre_tokenizer": { "type": "WhitespaceSplit" },
+  "post_processor": null,
+  "decoder": null,
+  "model": {
+    "type": "WordLevel",
+    "vocab": {
+      "[UNK]": 2,
+      "hello": 0,
+      "world": 1,
+      "foo": 3,
+      "bar": 4
+    },
+    "unk_token": "[UNK]"
+  }
+}

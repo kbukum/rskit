@@ -34,7 +34,9 @@ use rskit_bench::metric::{
     threshold_sweep,
 };
 use rskit_bench::report_gen::{JsonReporter, MarkdownReporter, Reporter};
-use rskit_bench::result::{BenchRunResult, BenchSampleResult, DatasetInfo, MetricResult};
+use rskit_bench::result::{
+    BenchRunResult, BenchSampleResult, DatasetInfo, MetricDirection, MetricResult,
+};
 use rskit_bench::types::{BenchSample, Prediction, ScoredSample};
 
 // ---------------------------------------------------------------------------
@@ -186,7 +188,7 @@ fn classification_data() -> Vec<ScoredSample<String>> {
 fn golden_binary_classification() {
     let data = classification_data();
     let m = binary_classification("pos".to_string(), 0.5);
-    let result = m.compute(&data);
+    let result = m.compute(&data).unwrap();
     insta::assert_json_snapshot!("binary_classification", stable_metric(&result));
 }
 
@@ -194,7 +196,7 @@ fn golden_binary_classification() {
 fn golden_confusion_matrix() {
     let data = classification_data();
     let m = confusion_matrix(vec!["pos".to_string(), "neg".to_string()]);
-    let result = m.compute(&data);
+    let result = m.compute(&data).unwrap();
     // detail has the matrix; snapshot the whole result
     insta::assert_json_snapshot!("confusion_matrix", stable_metric(&result));
 }
@@ -203,7 +205,7 @@ fn golden_confusion_matrix() {
 fn golden_threshold_sweep() {
     let data = classification_data();
     let m = threshold_sweep("pos".to_string(), None);
-    let result = m.compute(&data);
+    let result = m.compute(&data).unwrap();
     // Snapshot value (best F1) and the detail array of ThresholdPoints
     let detail_val: serde_json::Value = result.detail.clone().unwrap_or_default();
     insta::assert_json_snapshot!(
@@ -239,7 +241,7 @@ fn golden_multi_class_classification() {
         "dog".to_string(),
         "bird".to_string(),
     ]);
-    let result = m.compute(&samples);
+    let result = m.compute(&samples).unwrap();
     insta::assert_json_snapshot!("multi_class_classification", stable_metric(&result));
 }
 
@@ -267,7 +269,7 @@ fn regression_data() -> Vec<ScoredSample<f64>> {
 fn golden_mae() {
     let data = regression_data();
     let m = mae();
-    let result = m.compute(&data);
+    let result = m.compute(&data).unwrap();
     insta::assert_json_snapshot!("mae", stable_metric(&result));
 }
 
@@ -275,7 +277,7 @@ fn golden_mae() {
 fn golden_mse() {
     let data = regression_data();
     let m = mse();
-    let result = m.compute(&data);
+    let result = m.compute(&data).unwrap();
     insta::assert_json_snapshot!("mse", stable_metric(&result));
 }
 
@@ -283,7 +285,7 @@ fn golden_mse() {
 fn golden_rmse() {
     let data = regression_data();
     let m = rmse();
-    let result = m.compute(&data);
+    let result = m.compute(&data).unwrap();
     insta::assert_json_snapshot!("rmse", stable_metric(&result));
 }
 
@@ -291,7 +293,7 @@ fn golden_rmse() {
 fn golden_r_squared() {
     let data = regression_data();
     let m = r_squared();
-    let result = m.compute(&data);
+    let result = m.compute(&data).unwrap();
     insta::assert_json_snapshot!("r_squared", stable_metric(&result));
 }
 
@@ -320,7 +322,7 @@ fn ranking_data() -> Vec<ScoredSample<String>> {
 fn golden_ndcg_at_5() {
     let data = ranking_data();
     let m = ndcg::<String>(5);
-    let result = m.compute(&data);
+    let result = m.compute(&data).unwrap();
     insta::assert_json_snapshot!("ndcg_at_5", stable_metric(&result));
 }
 
@@ -328,7 +330,7 @@ fn golden_ndcg_at_5() {
 fn golden_ndcg_at_10() {
     let data = ranking_data();
     let m = ndcg::<String>(10);
-    let result = m.compute(&data);
+    let result = m.compute(&data).unwrap();
     insta::assert_json_snapshot!("ndcg_at_10", stable_metric(&result));
 }
 
@@ -336,7 +338,7 @@ fn golden_ndcg_at_10() {
 fn golden_mean_average_precision() {
     let data = ranking_data();
     let m = mean_average_precision("pos".to_string());
-    let result = m.compute(&data);
+    let result = m.compute(&data).unwrap();
     insta::assert_json_snapshot!("mean_average_precision", stable_metric(&result));
 }
 
@@ -344,7 +346,7 @@ fn golden_mean_average_precision() {
 fn golden_precision_at_k() {
     let data = ranking_data();
     let m = precision_at_k("pos".to_string(), 5);
-    let result = m.compute(&data);
+    let result = m.compute(&data).unwrap();
     insta::assert_json_snapshot!("precision_at_k_5", stable_metric(&result));
 }
 
@@ -352,7 +354,7 @@ fn golden_precision_at_k() {
 fn golden_recall_at_k() {
     let data = ranking_data();
     let m = recall_at_k("pos".to_string(), 5);
-    let result = m.compute(&data);
+    let result = m.compute(&data).unwrap();
     insta::assert_json_snapshot!("recall_at_k_5", stable_metric(&result));
 }
 
@@ -394,7 +396,7 @@ fn probability_data() -> Vec<ScoredSample<String>> {
 fn golden_auc_roc() {
     let data = probability_data();
     let m = auc_roc("pos".to_string());
-    let result = m.compute(&data);
+    let result = m.compute(&data).unwrap();
     // Snapshot the scalar AUC value
     insta::assert_json_snapshot!(
         "auc_roc",
@@ -409,7 +411,7 @@ fn golden_auc_roc() {
 fn golden_brier_score() {
     let data = probability_data();
     let m = brier_score("pos".to_string());
-    let result = m.compute(&data);
+    let result = m.compute(&data).unwrap();
     insta::assert_json_snapshot!("brier_score", stable_metric(&result));
 }
 
@@ -417,7 +419,7 @@ fn golden_brier_score() {
 fn golden_log_loss() {
     let data = probability_data();
     let m = log_loss("pos".to_string());
-    let result = m.compute(&data);
+    let result = m.compute(&data).unwrap();
     insta::assert_json_snapshot!("log_loss", stable_metric(&result));
 }
 
@@ -425,7 +427,7 @@ fn golden_log_loss() {
 fn golden_calibration() {
     let data = probability_data();
     let m = calibration("pos".to_string(), 5);
-    let result = m.compute(&data);
+    let result = m.compute(&data).unwrap();
     // ECE value + calibration curve detail
     let detail_val = result.detail.clone().unwrap_or_default();
     insta::assert_json_snapshot!(
@@ -452,7 +454,7 @@ fn golden_exact_match() {
         binary_sample("em05", "abc", "xyz", 0.2),
     ];
     let m = exact_match::<String>();
-    let result = m.compute(&data);
+    let result = m.compute(&data).unwrap();
     insta::assert_json_snapshot!("exact_match", stable_metric(&result));
 }
 
@@ -466,7 +468,7 @@ fn golden_fuzzy_match() {
         binary_sample("fm05", "abc", "abc", 1.0),    // exact
     ];
     let m = fuzzy_match::<String>(0.7);
-    let result = m.compute(&data);
+    let result = m.compute(&data).unwrap();
     insta::assert_json_snapshot!("fuzzy_match", stable_metric(&result));
 }
 
@@ -492,7 +494,7 @@ fn classification_metric_matches_legacy_threshold_formula() {
         .collect();
 
     let metric = binary_classification("pos".to_owned(), 0.5);
-    let result = metric.compute(&data);
+    let result = metric.compute(&data).unwrap();
 
     assert_eq!(result.values["tp"], 4.0);
     assert_eq!(result.values["fp"], 1.0);
@@ -516,6 +518,7 @@ fn sample_run_result() -> BenchRunResult {
             name: "accuracy".into(),
             value: 0.85,
             values: HashMap::new(),
+            direction: MetricDirection::HigherIsBetter,
             detail: None,
         },
         MetricResult {
@@ -527,6 +530,7 @@ fn sample_run_result() -> BenchRunResult {
                 m.insert("recall".into(), 0.80);
                 m
             },
+            direction: MetricDirection::HigherIsBetter,
             detail: None,
         },
     ];
@@ -603,12 +607,14 @@ fn golden_run_comparison() {
                 m.insert("recall".into(), 0.78);
                 m
             },
+            direction: MetricDirection::HigherIsBetter,
             detail: None,
         },
         MetricResult {
             name: "accuracy".into(),
             value: 0.85,
             values: HashMap::new(),
+            direction: MetricDirection::HigherIsBetter,
             detail: None,
         },
     ];
@@ -657,12 +663,14 @@ fn golden_run_comparison() {
                 m.insert("recall".into(), 0.82);
                 m
             },
+            direction: MetricDirection::HigherIsBetter,
             detail: None,
         },
         MetricResult {
             name: "accuracy".into(),
             value: 0.83,
             values: HashMap::new(),
+            direction: MetricDirection::HigherIsBetter,
             detail: None,
         },
     ];
@@ -720,7 +728,7 @@ fn golden_suite_binary() {
     suite.add(binary_classification("pos".to_string(), 0.5));
     suite.add(exact_match::<String>());
 
-    let results = suite.compute(&data);
+    let results = suite.compute(&data).unwrap();
     let stable: Vec<serde_json::Value> = results.iter().map(stable_metric).collect();
     insta::assert_json_snapshot!("suite_binary", stable);
 }

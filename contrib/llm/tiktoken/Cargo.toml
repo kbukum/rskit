@@ -1,0 +1,22 @@
+[package]
+name        = "rskit-llm-tiktoken"
+description = "OpenAI BPE (tiktoken) TokenCounter adapter for rskit"
+readme      = "README.md"
+version = "0.2.0-alpha.1"
+edition.workspace      = true
+license.workspace      = true
+rust-version.workspace = true
+authors.workspace      = true
+repository.workspace   = true
+homepage.workspace     = true
+documentation          = "https://docs.rs/rskit-llm-tiktoken"
+categories             = ["api-bindings"]
+keywords               = ["tiktoken", "tokenizer", "openai", "llm"]
+
+[lints]
+workspace = true
+
+[dependencies]
+rskit-llm.workspace = true
+rskit-errors.workspace = true
+tiktoken-rs = { workspace = true }
