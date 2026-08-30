@@ -12,7 +12,7 @@ Production-ready structured logging built on the [tracing](https://docs.rs/traci
 - Rate-based log sampling (burst + thereafter)
 - Per-module log level overrides via `EnvFilter`
 - OpenTelemetry Logs bridge (OTLP export, behind `otlp` feature flag)
-- Unified log schema (consistent across gokit, pykit, rskit)
+- Unified structured log schema (stable field names)
 - Drop-based guard ensures all buffered logs are flushed on shutdown
 - `RUST_LOG` env-filter support
 
@@ -202,7 +202,7 @@ let _guard = init_logging_with_masking(&cfg, &masking)?;
 
 ### Output-Level Masking
 
-Unlike gokit and pykit (which mask at the field level), rskit masks at the **output writer** level. The `MaskingMakeWriter` wraps the underlying `io::Write` and applies both field-name regex patterns (matching JSON `"field":"value"` and text `field=value` formats) and value-pattern regexes to complete log lines. This ensures nothing leaks regardless of how fields are formatted.
+rskit masks at the **output writer** level. The `MaskingMakeWriter` wraps the underlying `io::Write` and applies both field-name regex patterns (matching JSON `"field":"value"` and text `field=value` formats) and value-pattern regexes to complete log lines. This ensures nothing leaks regardless of how fields are formatted.
 
 ```rust
 use std::sync::Arc;
@@ -328,7 +328,7 @@ fn main() -> rskit_logging::LoggingResult<()> {
 
 ## Unified Schema
 
-All three kits (gokit, pykit, rskit) share the same structured field names, defined in `rskit_logging::fields::names`:
+The stable structured field-name schema, defined in `rskit_logging::fields::names`:
 
 | Field | Constant | Description |
 |-------|----------|-------------|

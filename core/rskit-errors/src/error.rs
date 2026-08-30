@@ -109,7 +109,7 @@ impl AppError {
         self
     }
 
-    // ── Convenience constructors (mirror gokit's API surface) ───────────
+    // ── Convenience constructors ────────────────────────────────────────
 
     /// Create a `ServiceUnavailable` error for the named service.
     pub fn service_unavailable(service: impl Into<String>) -> Self {

@@ -1,6 +1,6 @@
 //! Lifecycle-managed discovery component.
 //!
-//! Mirrors gokit's `discovery.Component` — handles provider creation, service registration on start,
+//! Handles provider creation, service registration on start,
 //! deregistration on stop, and health reporting.
 //! Services only need to add this component to the app registry.
 

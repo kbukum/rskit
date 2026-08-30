@@ -163,7 +163,7 @@ pub(crate) fn draw_axes(svg: &mut Svg, pad_left: usize, pad_top: usize, plot_w: 
     svg.line(left, top, left, top + plot_h, "#333", 1.0, "");
 }
 
-/// 8-color palette matching gokit exactly.
+/// 8-color categorical palette for series colors.
 pub(crate) const PALETTE: &[&str] = &[
     "#4285F4", "#EA4335", "#34A853", "#FBBC05", "#9C27B0", "#FF6D00", "#00BCD4", "#795548",
 ];

@@ -1,6 +1,5 @@
 //! CPU and memory quantity parsing and formatting.
 //!
-//! Mirrors gokit's `workload` resource helpers.
 //! Memory parsing is delegated to the canonical [`rskit_util::bytes`] parser (binary suffixes `k`/`ki` … `t`/`ti`);
 //! CPU is expressed in cores or millicores and normalized to nanocores.
 //! Formatting produces the compact single-letter representation the workload vocabulary uses (`512m`, `2g`).

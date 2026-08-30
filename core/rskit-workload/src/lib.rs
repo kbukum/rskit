@@ -1,6 +1,6 @@
 //! Provider-based workload orchestration.
 //!
-//! `rskit-workload` mirrors gokit's `workload` package:
+//! `rskit-workload` provides
 //! a provider-agnostic [`Manager`] contract for deploying
 //! and managing workloads (containers, pods, or any long-running unit),
 //! an explicit backend [`WorkloadRegistry`],

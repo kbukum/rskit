@@ -10,7 +10,7 @@ Canonical RBAC + ABAC authorization engine with role hierarchy, deny override, a
 - explicit deny policies always win
 - unmatched requests resolve to `default deny`
 - `AuthorizationLayer` composes policy checks as Tower middleware and denies missing request context
-- `match_pattern` / `match_any` mirror gokit and pykit wildcard semantics
+- `match_pattern` / `match_any` provide glob-style wildcard matching for resource/action semantics
 
 ## Example
 

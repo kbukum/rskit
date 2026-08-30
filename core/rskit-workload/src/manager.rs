@@ -1,8 +1,7 @@
 //! Workload lifecycle manager and optional capability traits.
 //!
 //! Every backend implements [`Manager`].
-//! Backends opt into extra capabilities (exec, stats, log streaming, event watching) by implementing the focused capability traits,
-//! mirroring gokit's optional provider interfaces.
+//! Backends opt into extra capabilities (exec, stats, log streaming, event watching) by implementing the focused capability traits.
 
 use async_trait::async_trait;
 use futures::stream::BoxStream;

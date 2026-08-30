@@ -1,7 +1,6 @@
 //! Provider-agnostic workload configuration.
 //!
-//! Mirrors gokit's `workload.Config` — the same shape across kits
-//! so a workload app is structurally identical regardless of language.
+//! A single provider-agnostic shape so a workload app is structurally identical regardless of backend.
 
 use std::collections::HashMap;
 
