@@ -1,4 +1,5 @@
 use super::Metric;
+use super::identity::format_threshold;
 use crate::{MetricDirection, MetricResult, ScoredSample};
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use std::collections::HashMap;
@@ -27,6 +28,7 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for ExactMatch<L> {
     fn compute(&self, scored: &[ScoredSample<L>]) -> AppResult<MetricResult> {
         if scored.is_empty() {
             return Ok(MetricResult {
+                directions: Default::default(),
                 name: "exact_match".into(),
                 value: 0.0,
                 direction: MetricDirection::HigherIsBetter,
@@ -43,6 +45,7 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for ExactMatch<L> {
         values.insert("correct".into(), correct as f64);
         values.insert("total".into(), scored.len() as f64);
         Ok(MetricResult {
+            directions: Default::default(),
             name: "exact_match".into(),
             value: val,
             direction: MetricDirection::HigherIsBetter,
@@ -70,7 +73,7 @@ where
 ///
 /// The threshold is part of the identity because `match_rate` (the primary value) is a fraction at a fixed cutoff: two runs scored at different thresholds must never join under a shared name, or [`RunComparator`](crate::compare::RunComparator) would score an incomparable pass-rate delta as a regression or improvement.
 fn build_name(threshold: f64) -> String {
-    format!("fuzzy_match[t{threshold}]")
+    format!("fuzzy_match[t{}]", format_threshold(threshold))
 }
 
 struct FuzzyMatch<L> {
@@ -130,6 +133,7 @@ impl<L: Display + Clone + Send + Sync + 'static> Metric<L> for FuzzyMatch<L> {
         }
         if scored.is_empty() {
             return Ok(MetricResult {
+                directions: Default::default(),
                 name: self.name.clone(),
                 value: 0.0,
                 direction: MetricDirection::HigherIsBetter,
@@ -159,6 +163,7 @@ impl<L: Display + Clone + Send + Sync + 'static> Metric<L> for FuzzyMatch<L> {
 
         // The threshold is a configuration input, not a quality signal, so it lives in provenance detail rather than `values`, where `RunComparator` would score a threshold change as an improvement or regression.
         Ok(MetricResult {
+            directions: Default::default(),
             name: self.name.clone(),
             value: match_rate,
             direction: MetricDirection::HigherIsBetter,

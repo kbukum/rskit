@@ -24,12 +24,25 @@ impl<L: Send + Sync + 'static> Metric<L> for Weighted<L> {
         let mut total_weight = 0.0;
         let mut weighted_sum = 0.0;
         let mut values = HashMap::new();
+        let mut directions = HashMap::new();
+        // effective collects each nonzero-weight component's contribution
+        // direction — its own direction, flipped when the weight is negative — to
+        // derive the composite's headline direction after the sum.
+        let mut effective: Vec<MetricDirection> = Vec::new();
 
         for (metric, weight) in &self.metrics {
             let result = metric.compute(scored)?;
             values.insert(result.name.clone(), result.value);
+            directions.insert(result.name.clone(), result.direction);
             weighted_sum += result.value * weight;
             total_weight += weight;
+            if *weight != 0.0 {
+                let mut eff = result.direction;
+                if *weight < 0.0 {
+                    eff = flip_direction(eff);
+                }
+                effective.push(eff);
+            }
         }
 
         let value = if total_weight == 0.0 {
@@ -41,10 +54,41 @@ impl<L: Send + Sync + 'static> Metric<L> for Weighted<L> {
         Ok(MetricResult {
             name: "weighted".into(),
             value,
-            direction: MetricDirection::HigherIsBetter,
+            // Each constituent value keeps its own direction; the composite's
+            // headline direction is derived from how the weighted sum moves.
+            direction: composite_direction(&effective),
+            directions,
             values,
             detail: None,
         })
+    }
+}
+
+/// Derives the optimization direction of a weighted sum from the contribution
+/// directions of its nonzero-weight components. If any component is descriptive,
+/// or the components disagree on direction, the sum has no single optimization
+/// direction and is [`MetricDirection::Neutral`].
+fn composite_direction(effective: &[MetricDirection]) -> MetricDirection {
+    let mut resolved: Option<MetricDirection> = None;
+    for &eff in effective {
+        if eff == MetricDirection::Neutral {
+            return MetricDirection::Neutral;
+        }
+        match resolved {
+            None => resolved = Some(eff),
+            Some(r) if r != eff => return MetricDirection::Neutral,
+            Some(_) => {}
+        }
+    }
+    resolved.unwrap_or_default()
+}
+
+/// Swaps higher-is-better and lower-is-better; a neutral direction is unchanged.
+fn flip_direction(d: MetricDirection) -> MetricDirection {
+    match d {
+        MetricDirection::HigherIsBetter => MetricDirection::LowerIsBetter,
+        MetricDirection::LowerIsBetter => MetricDirection::HigherIsBetter,
+        MetricDirection::Neutral => MetricDirection::Neutral,
     }
 }
 
@@ -141,5 +185,58 @@ mod tests {
 
         assert_eq!(result.value, 0.0);
         assert!(result.values.is_empty());
+    }
+
+    struct DirConstant {
+        name: &'static str,
+        direction: MetricDirection,
+    }
+
+    impl Metric<String> for DirConstant {
+        fn name(&self) -> &str {
+            self.name
+        }
+
+        fn compute(&self, _scored: &[ScoredSample<String>]) -> AppResult<MetricResult> {
+            Ok(MetricResult {
+                name: self.name.into(),
+                value: 1.0,
+                direction: self.direction,
+                ..Default::default()
+            })
+        }
+    }
+
+    #[test]
+    fn composite_direction_and_per_component_directions() {
+        let lower = |name| -> Box<dyn Metric<String>> {
+            Box::new(DirConstant {
+                name,
+                direction: MetricDirection::LowerIsBetter,
+            })
+        };
+
+        // Two lower-is-better components with positive weights → lower-is-better,
+        // and each component keeps its own direction.
+        let r = weighted::<String>(vec![(lower("mae"), 0.5), (lower("mse"), 0.5)])
+            .compute(&[sample()])
+            .unwrap();
+        assert_eq!(r.direction, MetricDirection::LowerIsBetter);
+        assert_eq!(
+            r.directions.get("mae"),
+            Some(&MetricDirection::LowerIsBetter)
+        );
+
+        // A negative weight flips one contribution → mixed → neutral.
+        let mixed = weighted::<String>(vec![(lower("mae"), -0.5), (lower("mse"), 0.5)])
+            .compute(&[sample()])
+            .unwrap();
+        assert_eq!(mixed.direction, MetricDirection::Neutral);
+
+        // Both negative → both flip to higher-is-better → higher-is-better.
+        let both_neg = weighted::<String>(vec![(lower("mae"), -0.5), (lower("mse"), -0.5)])
+            .compute(&[sample()])
+            .unwrap();
+        assert_eq!(both_neg.direction, MetricDirection::HigherIsBetter);
     }
 }

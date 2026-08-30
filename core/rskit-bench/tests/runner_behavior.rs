@@ -47,6 +47,7 @@ fn previous_result(value: f64) -> BenchRunResult {
         label_distribution: HashMap::from([("yes".to_owned(), 1), ("no".to_owned(), 1)]),
     };
     r.metrics = vec![MetricResult {
+        directions: Default::default(),
         name: "exact_match".to_owned(),
         value,
         values: HashMap::from([

@@ -1,8 +1,9 @@
 //! Report generation for bench results.
 //!
-//! Multiple output formats: Markdown, JSON, CSV, JUnit, Table, VegaLite.
+//! Multiple output formats: Markdown, JSON, CSV, JUnit, Table, VegaLite, HTML.
 
 mod csv;
+mod html;
 mod json;
 mod junit;
 mod markdown;
@@ -11,6 +12,7 @@ mod table;
 mod vegalite;
 
 pub use self::csv::CsvReporter;
+pub use self::html::HtmlReporter;
 pub use self::json::JsonReporter;
 pub use self::junit::JUnitReporter;
 pub use self::markdown::MarkdownReporter;

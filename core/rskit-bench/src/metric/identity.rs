@@ -14,9 +14,69 @@ pub(crate) fn escape_component(component: &str) -> String {
         .replace(':', "\\:")
 }
 
+/// A floating-point threshold that can be rendered into a metric identity.
+///
+/// Implemented for `f64` and `f32` so [`format_threshold`] can canonicalize either width without converting between them — an `f32`→`f64` widening would turn a clean `0.8` cutoff into `0.800000011920929`, splitting one identity in two.
+pub(crate) trait Threshold: Copy + std::fmt::Display + PartialEq {
+    /// The additive identity for this width, used to fold signed zero.
+    fn zero() -> Self;
+}
+
+impl Threshold for f64 {
+    fn zero() -> Self {
+        0.0
+    }
+}
+
+impl Threshold for f32 {
+    fn zero() -> Self {
+        0.0
+    }
+}
+
+/// Renders a range-validated threshold into its single canonical identity string.
+///
+/// A cutoff has exactly one textual identity: negative zero is folded to positive zero (`-0.0` and `0.0` are the same threshold, but `f64`'s `Display` renders them as `-0` and `0`, which would split one cutoff into two metric names and let [`RunComparator`](crate::compare::RunComparator) diff an incomparable delta). Every other value uses the default `Display`, which is already the shortest round-trippable decimal, so distinct cutoffs stay distinct. This mirrors gokit's `formatThreshold` so both kits render the same identity for the same cutoff.
+pub(crate) fn format_threshold<T: Threshold>(threshold: T) -> String {
+    // `-0.0 == 0.0` is true for floats, so this folds signed zero to `+0.0`.
+    let canonical = if threshold == T::zero() {
+        T::zero()
+    } else {
+        threshold
+    };
+    format!("{canonical}")
+}
+
 #[cfg(test)]
 mod tests {
-    use super::escape_component;
+    use super::{escape_component, format_threshold};
+
+    #[test]
+    fn format_threshold_renders_shortest_round_trippable() {
+        assert_eq!(format_threshold(0.5_f64), "0.5");
+        assert_eq!(format_threshold(0.8_f64), "0.8");
+        assert_eq!(format_threshold(1.0_f64), "1");
+        assert_eq!(format_threshold(0.8_f32), "0.8");
+    }
+
+    #[test]
+    fn format_threshold_folds_negative_zero() {
+        assert_eq!(format_threshold(-0.0_f64), "0");
+        assert_eq!(format_threshold(0.0_f64), "0");
+        assert_eq!(format_threshold(-0.0_f32), "0");
+    }
+
+    #[test]
+    fn format_threshold_keeps_distinct_cutoffs_distinct() {
+        assert_ne!(format_threshold(0.50001_f64), format_threshold(0.50002_f64));
+    }
+
+    #[test]
+    fn negative_zero_and_zero_yield_identical_names() {
+        let zero = format!("classification[t{}]", format_threshold(0.0_f64));
+        let neg_zero = format!("classification[t{}]", format_threshold(-0.0_f64));
+        assert_eq!(zero, neg_zero);
+    }
 
     #[test]
     fn escapes_all_identity_delimiters() {

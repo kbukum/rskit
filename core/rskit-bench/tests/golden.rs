@@ -93,8 +93,8 @@ fn make_run_result(
 ) -> BenchRunResult {
     let mut r = BenchRunResult::default();
     r.id = id.into();
-    r.schema = "https://gokit.dev/bench/v1/schema.json".into();
-    r.version = "1.0".into();
+    r.schema = rskit_bench::schema::schema_url();
+    r.version = rskit_bench::schema::version();
     r.timestamp = "2025-01-15T12:00:00Z".into();
     r.tag = tag.into();
     r.duration_ms = 42;
@@ -622,6 +622,7 @@ fn fuzzy_match_rejects_non_finite_threshold() {
 fn sample_run_result() -> BenchRunResult {
     let metrics = vec![
         MetricResult {
+            directions: Default::default(),
             name: "accuracy".into(),
             value: 0.85,
             values: HashMap::new(),
@@ -629,6 +630,7 @@ fn sample_run_result() -> BenchRunResult {
             detail: None,
         },
         MetricResult {
+            directions: Default::default(),
             name: "f1".into(),
             value: 0.82,
             values: {
@@ -689,6 +691,50 @@ fn golden_json_report() {
 }
 
 #[test]
+fn emitted_result_carries_the_agreed_cross_kit_schema_contract() {
+    // The bench result JSON is a shared gokit/rskit contract: the version, schema URL, and the
+    // metric optimization-sense field must match byte-for-byte across kits, so this asserts the
+    // exact emitted values and fails if the contract drifts.
+    let result = sample_run_result();
+    let mut buf = Cursor::new(Vec::new());
+    JsonReporter.generate(&mut buf, &result).unwrap();
+    let json: serde_json::Value =
+        serde_json::from_slice(&buf.into_inner()).expect("valid JSON output");
+
+    assert_eq!(json["version"], "1.0");
+    assert_eq!(json["$schema"], "https://gokit.dev/bench/v1/schema.json");
+    assert_eq!(json["version"], rskit_bench::schema::SCHEMA_VERSION);
+    assert_eq!(json["$schema"], rskit_bench::schema::SCHEMA_URL);
+
+    let metric = &json["metrics"][0];
+    assert_eq!(
+        metric["direction"], "higher_is_better",
+        "metrics carry the snake_case direction enum shared with gokit"
+    );
+    let raw = serde_json::to_string(&json).unwrap();
+    assert!(
+        !raw.contains("descriptive"),
+        "the retired `descriptive` bool must never appear in rskit output"
+    );
+}
+
+#[test]
+fn result_round_trips_through_the_agreed_contract() {
+    let result = sample_run_result();
+    let json = serde_json::to_string(&result).expect("serialize");
+    let restored: rskit_bench::result::BenchRunResult =
+        serde_json::from_str(&json).expect("deserialize");
+    assert_eq!(restored.version, "1.0");
+    assert_eq!(restored.schema, "https://gokit.dev/bench/v1/schema.json");
+    let original_value: serde_json::Value = serde_json::from_str(&json).expect("parse original");
+    let restored_value = serde_json::to_value(&restored).expect("re-serialize");
+    assert_eq!(
+        restored_value, original_value,
+        "the result round-trips through the agreed contract with no field loss"
+    );
+}
+
+#[test]
 fn golden_markdown_report() {
     let result = sample_run_result();
     let mut buf = Cursor::new(Vec::new());
@@ -706,6 +752,7 @@ fn golden_markdown_report() {
 fn golden_run_comparison() {
     let base_metrics = vec![
         MetricResult {
+            directions: Default::default(),
             name: "f1".into(),
             value: 0.80,
             values: {
@@ -718,6 +765,7 @@ fn golden_run_comparison() {
             detail: None,
         },
         MetricResult {
+            directions: Default::default(),
             name: "accuracy".into(),
             value: 0.85,
             values: HashMap::new(),
@@ -762,6 +810,7 @@ fn golden_run_comparison() {
     // Target: F1 improved, accuracy regressed; sample s2 fixed, s3 regressed
     let target_metrics = vec![
         MetricResult {
+            directions: Default::default(),
             name: "f1".into(),
             value: 0.84,
             values: {
@@ -774,6 +823,7 @@ fn golden_run_comparison() {
             detail: None,
         },
         MetricResult {
+            directions: Default::default(),
             name: "accuracy".into(),
             value: 0.83,
             values: HashMap::new(),

@@ -16,7 +16,7 @@ use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_resilience::Policy;
 
 use super::AsyncMetric;
-use super::identity::escape_component;
+use super::identity::{escape_component, format_threshold};
 use crate::{MetricDirection, MetricResult, ScoredSample};
 
 /// Base metric name; the embedding model's identity is appended to form the full, comparison-safe name.
@@ -65,7 +65,7 @@ where
 ///
 /// The threshold is part of the identity because `match_rate` is a fraction at a fixed cutoff: two runs that used different thresholds must never join under a shared name, or the comparator would score an incomparable pass-rate delta as a regression or improvement.
 fn build_name(model_id: &str, threshold: f32) -> String {
-    format!("{NAME}[{model_id}:t{threshold}]")
+    format!("{NAME}[{model_id}:t{}]", format_threshold(threshold))
 }
 
 /// Renders an embedding model to a stable identity string used in the metric name and provenance, so incompatible models never collide under a shared name.
@@ -160,6 +160,7 @@ impl<L> SemanticSimilarity<L> {
         values.insert("avg_similarity".to_string(), avg_similarity);
         values.insert("match_rate".to_string(), match_rate);
         MetricResult {
+            directions: Default::default(),
             name: self.name.clone(),
             value: avg_similarity,
             direction: MetricDirection::HigherIsBetter,

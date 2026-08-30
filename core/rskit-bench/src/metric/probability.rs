@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 fn empty_result(name: &str, direction: MetricDirection) -> MetricResult {
     MetricResult {
+        directions: Default::default(),
         name: name.into(),
         value: 0.0,
         direction,
@@ -83,6 +84,7 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for AucRoc<L> {
             auc,
         };
         Ok(MetricResult {
+            directions: Default::default(),
             name: "aucroc".into(),
             value: auc,
             direction: MetricDirection::HigherIsBetter,
@@ -127,6 +129,7 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for BrierScore<L> {
             })
             .sum();
         Ok(MetricResult {
+            directions: Default::default(),
             name: "brier_score".into(),
             value: sum / scored.len() as f64,
             direction: MetricDirection::LowerIsBetter,
@@ -173,6 +176,7 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for LogLoss<L> {
             })
             .sum();
         Ok(MetricResult {
+            directions: Default::default(),
             name: "log_loss".into(),
             value: -sum / scored.len() as f64,
             direction: MetricDirection::LowerIsBetter,
@@ -240,6 +244,7 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for CalibrationMetr
             bin_count,
         };
         Ok(MetricResult {
+            directions: Default::default(),
             name: "calibration".into(),
             value: ece,
             direction: MetricDirection::LowerIsBetter,
