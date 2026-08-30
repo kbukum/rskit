@@ -1,6 +1,6 @@
 use super::Metric;
 use crate::{MetricDirection, MetricResult, ScoredSample};
-use rskit_errors::AppResult;
+use rskit_errors::{AppError, AppResult, ErrorCode};
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::marker::PhantomData;
@@ -53,18 +53,29 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for ExactMatch<L> {
 }
 
 /// Fuzzy match metric using Levenshtein distance (string labels only).
+///
+/// The configured threshold is folded into the metric name (for example `fuzzy_match[t0.7]`) and recorded in [`MetricResult::detail`] provenance rather than [`MetricResult::values`]: it is a configuration input, not a quality signal. Because `match_rate` (the primary value) is a fraction at this cutoff, embedding the threshold in the identity keeps runs scored at different thresholds distinct under [`RunComparator`](crate::compare::RunComparator) instead of joining them and scoring an incomparable delta as an improvement or regression. The threshold must be finite and in `[0, 1]`; an invalid value is rejected as a typed [`ErrorCode::InvalidInput`] error when the metric is computed, rather than yielding a `tNaN` identity and a `null` provenance value.
 pub fn fuzzy_match<L>(threshold: f64) -> Box<dyn Metric<L>>
 where
     L: Display + Clone + Send + Sync + 'static,
 {
     Box::new(FuzzyMatch::<L> {
         threshold,
+        name: build_name(threshold),
         _phantom: PhantomData,
     })
 }
 
+/// Builds the comparison-safe metric name from the configured threshold.
+///
+/// The threshold is part of the identity because `match_rate` (the primary value) is a fraction at a fixed cutoff: two runs scored at different thresholds must never join under a shared name, or [`RunComparator`](crate::compare::RunComparator) would score an incomparable pass-rate delta as a regression or improvement.
+fn build_name(threshold: f64) -> String {
+    format!("fuzzy_match[t{threshold}]")
+}
+
 struct FuzzyMatch<L> {
     threshold: f64,
+    name: String,
     _phantom: PhantomData<L>,
 }
 
@@ -104,17 +115,26 @@ fn similarity(a: &str, b: &str) -> f64 {
 
 impl<L: Display + Clone + Send + Sync + 'static> Metric<L> for FuzzyMatch<L> {
     fn name(&self) -> &str {
-        "fuzzy_match"
+        &self.name
     }
 
     fn compute(&self, scored: &[ScoredSample<L>]) -> AppResult<MetricResult> {
+        if !self.threshold.is_finite() || !(0.0..=1.0).contains(&self.threshold) {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                format!(
+                    "fuzzy_match: threshold {} is out of the required range [0, 1]",
+                    self.threshold
+                ),
+            ));
+        }
         if scored.is_empty() {
             return Ok(MetricResult {
-                name: "fuzzy_match".into(),
+                name: self.name.clone(),
                 value: 0.0,
                 direction: MetricDirection::HigherIsBetter,
                 values: HashMap::new(),
-                detail: None,
+                detail: Some(serde_json::json!({ "threshold": self.threshold })),
             });
         }
 
@@ -136,14 +156,14 @@ impl<L: Display + Clone + Send + Sync + 'static> Metric<L> for FuzzyMatch<L> {
         let mut values = HashMap::new();
         values.insert("average_similarity".into(), avg_sim);
         values.insert("match_rate".into(), match_rate);
-        values.insert("threshold".into(), self.threshold);
 
+        // The threshold is a configuration input, not a quality signal, so it lives in provenance detail rather than `values`, where `RunComparator` would score a threshold change as an improvement or regression.
         Ok(MetricResult {
-            name: "fuzzy_match".into(),
+            name: self.name.clone(),
             value: match_rate,
             direction: MetricDirection::HigherIsBetter,
             values,
-            detail: None,
+            detail: Some(serde_json::json!({ "threshold": self.threshold })),
         })
     }
 }

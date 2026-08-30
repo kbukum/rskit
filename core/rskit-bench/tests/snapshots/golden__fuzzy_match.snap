@@ -3,11 +3,10 @@ source: crates/rskit-bench/tests/golden.rs
 expression: stable_metric(&result)
 ---
 {
-  "name": "fuzzy_match",
+  "name": "fuzzy_match[t0.7]",
   "value": 0.6,
   "values": {
     "average_similarity": 0.774286,
-    "match_rate": 0.6,
-    "threshold": 0.7
+    "match_rate": 0.6
   }
 }

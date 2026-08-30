@@ -10,7 +10,7 @@ description: >-
 
 # Reviewing rskit against its engineering baseline
 
-rskit is shared foundation infrastructure and the **reference kit** that gokit and pykit mirror: a defect in a core crate propagates to the `rskit` facade, the other core crates, every `contrib/` adapter, and every downstream consumer (the parity kits, Toven, and services that depend on rskit). The standard is correspondingly high — security, concurrency, and composition each get their own pass. This skill encodes rskit's permanent review baseline as eight focused passes plus three orchestrators.
+rskit is shared foundation infrastructure that its sibling kits (gokit, pykit) and downstream consumers (Toven and services that depend on rskit) mirror or build on: a defect in a core crate propagates to the `rskit` facade, the other core crates, every `contrib/` adapter, and every downstream consumer. The standard is correspondingly high — security, concurrency, and composition each get their own pass. This skill encodes rskit's permanent review baseline as eight focused passes plus three orchestrators.
 
 The authoritative baseline lives in [`.github/copilot-instructions.md`](../../copilot-instructions.md) (and `docs/DESIGN.md`). A plan, spec, issue, or roadmap (e.g. an ADR under `docs/adr/`) may be passed in **as a scope checklist only** — it defines intended scope, never excuses a baseline violation. If the code diverges from the plan, report the divergence; the baseline wins.
 

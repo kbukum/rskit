@@ -1,7 +1,7 @@
 use super::Metric;
 use crate::curves::{ConfusionMatrixDetail, ThresholdPoint};
 use crate::{MetricDirection, MetricResult, ScoredSample};
-use rskit_errors::AppResult;
+use rskit_errors::{AppError, AppResult, ErrorCode};
 use std::collections::HashMap;
 use std::fmt::Display;
 
@@ -10,6 +10,8 @@ fn safe_divide(a: f64, b: f64) -> f64 {
 }
 
 /// Creates a binary classification metric that reports precision, recall, F1, accuracy, false-positive rate, and confusion detail.
+///
+/// The configured threshold is folded into the metric name (for example `classification[t0.5]`) and recorded in [`MetricResult::detail`] provenance rather than [`MetricResult::values`]: it is a configuration input, not a quality signal. Because `f1` (the primary value) and every confusion-derived value are computed at this cutoff, embedding the threshold in the identity keeps runs scored at different thresholds distinct under [`RunComparator`](crate::compare::RunComparator) instead of joining them and scoring an incomparable delta as an improvement or regression. The threshold must be finite and in `[0, 1]`; an invalid value is rejected as a typed [`ErrorCode::InvalidInput`] error when the metric is computed, rather than yielding a `tNaN` identity and a `null` provenance value.
 pub fn binary_classification<L>(positive_label: L, threshold: f64) -> Box<dyn Metric<L>>
 where
     L: PartialEq + Display + Clone + Send + Sync + 'static,
@@ -17,20 +19,38 @@ where
     Box::new(BinaryClassification {
         positive: positive_label,
         threshold,
+        name: build_name(threshold),
     })
+}
+
+/// Builds the comparison-safe metric name from the configured threshold.
+///
+/// The threshold is part of the identity because `f1` (the primary value) and every confusion-derived value are computed at this cutoff: two runs scored at different thresholds must never join under a shared name, or [`RunComparator`](crate::compare::RunComparator) would score an incomparable delta as a regression or improvement.
+fn build_name(threshold: f64) -> String {
+    format!("classification[t{threshold}]")
 }
 
 struct BinaryClassification<L> {
     positive: L,
     threshold: f64,
+    name: String,
 }
 
 impl<L: PartialEq + Display + Clone + Send + Sync + 'static> Metric<L> for BinaryClassification<L> {
     fn name(&self) -> &str {
-        "classification"
+        &self.name
     }
 
     fn compute(&self, scored: &[ScoredSample<L>]) -> AppResult<MetricResult> {
+        if !self.threshold.is_finite() || !(0.0..=1.0).contains(&self.threshold) {
+            return Err(AppError::new(
+                ErrorCode::InvalidInput,
+                format!(
+                    "classification: threshold {} is out of the required range [0, 1]",
+                    self.threshold
+                ),
+            ));
+        }
         let (mut tp, mut fp, mut tn, mut fn_) = (0i64, 0i64, 0i64, 0i64);
         for s in scored {
             let actual = s.sample.label == self.positive;
@@ -66,20 +86,24 @@ impl<L: PartialEq + Display + Clone + Send + Sync + 'static> Metric<L> for Binar
         values.insert("fp".into(), fp as f64);
         values.insert("tn".into(), tn as f64);
         values.insert("fn".into(), fn_ as f64);
-        values.insert("threshold".into(), self.threshold);
 
         let detail = ConfusionMatrixDetail {
             labels: vec![format!("{}", self.positive), neg_label],
             matrix: vec![vec![tp, fn_], vec![fp, tn]],
             orientation: "row=actual, col=predicted".into(),
         };
+        // The threshold is a configuration input, not a quality signal, so it lives in provenance detail rather than `values`, where `RunComparator` would score a threshold change as an improvement or regression.
+        let mut detail = serde_json::to_value(&detail).unwrap_or_default();
+        if let Some(obj) = detail.as_object_mut() {
+            obj.insert("threshold".into(), serde_json::json!(self.threshold));
+        }
 
         Ok(MetricResult {
-            name: "classification".into(),
+            name: self.name.clone(),
             value: f1,
             direction: MetricDirection::HigherIsBetter,
             values,
-            detail: Some(serde_json::to_value(&detail).unwrap_or_default()),
+            detail: Some(detail),
         })
     }
 }

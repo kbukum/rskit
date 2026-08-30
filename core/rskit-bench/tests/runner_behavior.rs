@@ -461,25 +461,28 @@ async fn runner_computes_async_metric_after_sync_metrics() {
     let names: Vec<&str> = result.metrics.iter().map(|m| m.name.as_str()).collect();
     assert_eq!(
         names,
-        vec!["exact_match", "semantic_similarity[memory/embed-test]"]
+        vec!["exact_match", "semantic_similarity[memory/embed-test:t0.8]"]
     );
 
     let semantic = result
         .metrics
         .iter()
-        .find(|m| m.name == "semantic_similarity[memory/embed-test]")
+        .find(|m| m.name == "semantic_similarity[memory/embed-test:t0.8]")
         .expect("semantic metric present");
     assert!((0.0..=1.0).contains(&semantic.value));
     assert!(semantic.values.contains_key("avg_similarity"));
     assert!(semantic.values.contains_key("match_rate"));
-    assert!((semantic.values["threshold"] - 0.8).abs() < 1e-6);
+    // Threshold is provenance, not a directional value.
+    assert!(!semantic.values.contains_key("threshold"));
+    let semantic_detail = semantic.detail.as_ref().expect("semantic provenance");
+    assert!((semantic_detail["threshold"].as_f64().expect("threshold") - 0.8).abs() < 1e-6);
 
     // The async metric name is recorded in provenance alongside the sync one.
     assert_eq!(
         result.provenance.metrics,
         vec![
             "exact_match".to_owned(),
-            "semantic_similarity[memory/embed-test]".to_owned()
+            "semantic_similarity[memory/embed-test:t0.8]".to_owned()
         ]
     );
 }

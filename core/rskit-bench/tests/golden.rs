@@ -38,6 +38,7 @@ use rskit_bench::result::{
     BenchRunResult, BenchSampleResult, DatasetInfo, MetricDirection, MetricResult,
 };
 use rskit_bench::types::{BenchSample, Prediction, ScoredSample};
+use rskit_errors::ErrorCode;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -469,6 +470,12 @@ fn golden_fuzzy_match() {
     ];
     let m = fuzzy_match::<String>(0.7);
     let result = m.compute(&data).unwrap();
+    assert!(
+        !result.values.contains_key("threshold"),
+        "threshold is a configuration input, not a quality signal, so it must not appear in values"
+    );
+    let detail = result.detail.clone().expect("provenance detail present");
+    assert_eq!(detail["threshold"], 0.7);
     insta::assert_json_snapshot!("fuzzy_match", stable_metric(&result));
 }
 
@@ -505,7 +512,107 @@ fn classification_metric_matches_legacy_threshold_formula() {
     assert_eq!(round(result.values["f1"], 4), 0.8);
     assert_eq!(round(result.values["accuracy"], 4), 0.8);
     assert_eq!(round(result.values["fpr"], 4), 0.2);
-    assert_eq!(result.values["threshold"], 0.5);
+    assert!(
+        !result.values.contains_key("threshold"),
+        "threshold is a configuration input, not a quality signal, so it must not appear in values"
+    );
+    let detail = result.detail.expect("provenance detail present");
+    assert_eq!(detail["threshold"], 0.5);
+}
+
+#[test]
+fn classification_identity_folds_threshold_for_comparison_safety() {
+    let data = classification_data();
+    let low = binary_classification("pos".to_string(), 0.3)
+        .compute(&data)
+        .unwrap();
+    let high = binary_classification("pos".to_string(), 0.7)
+        .compute(&data)
+        .unwrap();
+
+    assert_eq!(low.name, "classification[t0.3]");
+    assert_eq!(high.name, "classification[t0.7]");
+    assert_ne!(low.name, high.name);
+
+    // Distinct identities keep RunComparator from joining the two cutoffs and reporting an incomparable directional delta on `f1` or any confusion-derived value.
+    let base = make_run_result("base", "baseline", vec![low], vec![]);
+    let target = make_run_result("target", "candidate", vec![high], vec![]);
+    let diff = RunComparator::new().compare(&base, &target);
+    assert!(
+        diff.changes.is_empty(),
+        "runs scored at different thresholds must not be joined and diffed"
+    );
+}
+
+#[test]
+fn fuzzy_match_identity_folds_threshold_for_comparison_safety() {
+    let data = vec![
+        binary_sample("fm01", "hello", "helo", 1.0),
+        binary_sample("fm02", "world", "world", 1.0),
+        binary_sample("fm03", "kitten", "sitting", 0.5),
+    ];
+    let low = fuzzy_match::<String>(0.5).compute(&data).unwrap();
+    let high = fuzzy_match::<String>(0.9).compute(&data).unwrap();
+
+    assert_eq!(low.name, "fuzzy_match[t0.5]");
+    assert_eq!(high.name, "fuzzy_match[t0.9]");
+
+    let base = make_run_result("base", "baseline", vec![low], vec![]);
+    let target = make_run_result("target", "candidate", vec![high], vec![]);
+    let diff = RunComparator::new().compare(&base, &target);
+    assert!(
+        diff.changes.is_empty(),
+        "fuzzy runs scored at different thresholds must not be joined and diffed"
+    );
+}
+
+#[test]
+fn fuzzy_match_empty_input_keeps_threshold_provenance() {
+    let empty: Vec<ScoredSample<String>> = Vec::new();
+    let result = fuzzy_match::<String>(0.7).compute(&empty).unwrap();
+
+    // The empty path must carry the same identity and provenance contract as a populated run, so an empty run never loses the configured threshold.
+    assert_eq!(result.name, "fuzzy_match[t0.7]");
+    assert!(result.values.is_empty());
+    let detail = result
+        .detail
+        .expect("empty fuzzy run keeps threshold provenance");
+    assert_eq!(detail["threshold"], 0.7);
+}
+
+#[test]
+fn classification_rejects_non_finite_threshold() {
+    let data = classification_data();
+    for bad in [f64::NAN, f64::INFINITY, -0.1, 1.1] {
+        let err = binary_classification("pos".to_string(), bad)
+            .compute(&data)
+            .expect_err("out-of-range threshold must be rejected");
+        assert_eq!(err.code(), ErrorCode::InvalidInput);
+    }
+}
+
+#[test]
+fn fuzzy_match_rejects_non_finite_threshold() {
+    let data = vec![binary_sample("fm01", "hello", "helo", 1.0)];
+    let empty: Vec<ScoredSample<String>> = Vec::new();
+    for bad in [f64::NAN, f64::INFINITY, -0.1, 1.1] {
+        // Both the populated and empty-input paths must reject an invalid threshold
+        // rather than emit a `tNaN` identity with `null` provenance.
+        assert_eq!(
+            fuzzy_match::<String>(bad)
+                .compute(&data)
+                .expect_err("out-of-range threshold must be rejected")
+                .code(),
+            ErrorCode::InvalidInput
+        );
+        assert_eq!(
+            fuzzy_match::<String>(bad)
+                .compute(&empty)
+                .expect_err("out-of-range threshold must be rejected on the empty path")
+                .code(),
+            ErrorCode::InvalidInput
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
