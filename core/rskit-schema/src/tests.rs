@@ -317,6 +317,38 @@ fn validation_result_valid_constructor_is_empty_success() {
 }
 
 #[test]
+fn validation_result_valid_omits_empty_errors_and_round_trips() {
+    let result = ValidationResult::valid();
+    let actual = serde_json::to_string_pretty(&result).unwrap();
+    let expected = include_str!("../tests/fixtures/cross-kit/schema/validation-result.valid.json");
+
+    assert_eq!(format!("{actual}\n"), expected);
+
+    let decoded: ValidationResult = serde_json::from_str(expected).unwrap();
+    assert!(decoded.valid);
+    assert!(decoded.errors.is_empty());
+}
+
+#[test]
+fn validation_result_round_trips_cross_kit_golden_json_with_rfc6901_paths() {
+    let result = ValidationResult {
+        valid: false,
+        errors: vec![ValidationError {
+            path: "/query".to_string(),
+            message: "\"x\" is not of type \"integer\"".to_string(),
+        }],
+    };
+    let actual = serde_json::to_string_pretty(&result).unwrap();
+    let expected =
+        include_str!("../tests/fixtures/cross-kit/schema/validation-result.invalid.json");
+    assert_eq!(format!("{actual}\n"), expected);
+
+    let decoded: ValidationResult = serde_json::from_str(&actual).unwrap();
+    assert_eq!(decoded.errors[0].path, "/query");
+    assert_eq!(decoded, result);
+}
+
+#[test]
 fn validate_invalid_schema_returns_error_result() {
     let schema = json!({"type": "not-a-json-schema-type"});
     let result = validate(&schema, &json!("value"));

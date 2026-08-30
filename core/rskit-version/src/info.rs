@@ -17,10 +17,15 @@ pub struct VersionInfo {
     pub git_branch: String,
     /// UTC build timestamp in RFC 3339 format, or empty if unavailable.
     pub build_time: String,
+    /// UTC build date (`YYYY-MM-DD`), if available.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub build_date: Option<String>,
     /// Rust compiler version string (e.g. `"rustc 1.97.0 ..."`).
     pub rust_version: String,
     /// `true` when `version` is not `"dev"` and does not contain `"dirty"`.
     pub is_release: bool,
+    /// `true` when the build came from a dirty working tree.
+    pub is_dirty: bool,
 }
 
 impl fmt::Display for VersionInfo {
@@ -56,12 +61,16 @@ impl VersionInfo {
         }
     }
 
-    /// Returns a concise version string: `{version}[-{short_commit}]`.
+    /// Returns a concise version string: `{version}[-{short_commit}][-dirty]`.
     pub fn short_version(&self) -> String {
-        self.short_git_commit().map_or_else(
+        let mut version = self.short_git_commit().map_or_else(
             || self.version.clone(),
             |commit| format!("{}-{commit}", self.version),
-        )
+        );
+        if self.is_dirty {
+            version.push_str("-dirty");
+        }
+        version
     }
 
     /// Returns a detailed version string with optional branch and build time.
@@ -77,6 +86,10 @@ impl VersionInfo {
             && self.git_branch != MASTER_BRANCH
         {
             parts.push(self.git_branch.clone());
+        }
+
+        if self.is_dirty {
+            parts.push("dirty".to_string());
         }
 
         let mut version = parts.join("-");
@@ -121,8 +134,13 @@ pub fn get_version_info() -> VersionInfo {
         .ok()
         .and_then(rskit_util::time::format_rfc3339)
         .unwrap_or_default();
+    let build_date = build_time
+        .get(..10)
+        .filter(|date| !date.is_empty())
+        .map(str::to_owned);
     let rust_version = env!("RUST_VERSION_STR").to_owned();
 
+    let is_dirty = option_env!("GIT_DIRTY").is_some_and(|value| value == "1" || value == "true");
     let is_release = version != "dev" && !version.contains("dirty");
 
     VersionInfo {
@@ -130,25 +148,29 @@ pub fn get_version_info() -> VersionInfo {
         git_commit,
         git_branch,
         build_time,
+        build_date,
         rust_version,
         is_release,
+        is_dirty,
     }
 }
 
-/// Returns a concise version string: `{version}[-{short_commit}]`.
+/// Returns a concise version string: `{version}[-{short_commit}][-dirty]`.
 pub fn get_short_version() -> String {
     get_version_info().short_version()
 }
 
 /// Returns a detailed version string with optional branch and build time.
 ///
-/// Format: `{version}[-{short_commit}][-{branch}] (built {time})` Branches named `main`
-/// or `master` are omitted.
+/// Format: `{version}[-{short_commit}][-{branch}][-dirty] (built {time})` Branches named `main`
+/// or `master` are omitted; the `dirty` marker is present only for a dirty working tree.
 pub fn get_full_version() -> String {
     get_version_info().full_version()
 }
 
-/// Returns `true` when this build represents a release (not dev, not dirty).
+/// Returns `true` when this build represents a release (version is not `"dev"`
+/// and carries no `"dirty"` marker). Working-tree state is reported separately by
+/// [`VersionInfo::is_dirty`].
 pub fn is_release() -> bool {
     get_version_info().is_release
 }

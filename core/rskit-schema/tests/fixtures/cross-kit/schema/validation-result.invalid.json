@@ -1,0 +1,9 @@
+{
+  "valid": false,
+  "errors": [
+    {
+      "path": "/query",
+      "message": "\"x\" is not of type \"integer\""
+    }
+  ]
+}

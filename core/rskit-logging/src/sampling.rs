@@ -13,10 +13,10 @@
 //! assert!(cfg.enabled);
 //! ```
 
-use std::collections::HashMap;
 use std::time::Instant;
 
 use parking_lot::Mutex;
+use std::collections::HashMap;
 use tracing::level_filters::LevelFilter;
 use tracing::{Level, Subscriber};
 use tracing_subscriber::Layer;
@@ -25,26 +25,7 @@ use tracing_subscriber::registry::LookupSpan;
 
 // ── Config ──────────────────────────────────────────────────────────────────
 
-/// Configuration for log sampling.
-#[derive(Debug, Clone)]
-pub struct SamplingConfig {
-    /// Master switch — when `false` the layer passes all events through.
-    pub enabled: bool,
-    /// Allow the first N events per second per level before sampling kicks in.
-    pub initial_rate: u32,
-    /// After the burst, allow every Nth event (1 = keep all, 2 = keep 50 %).
-    pub thereafter_rate: u32,
-}
-
-impl Default for SamplingConfig {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            initial_rate: 100,
-            thereafter_rate: 100,
-        }
-    }
-}
+pub use crate::config::SamplingConfig;
 
 // ── Per-level counter ───────────────────────────────────────────────────────
 
@@ -73,6 +54,7 @@ impl LevelCounter {
 pub struct SamplingLayer {
     initial_rate: u32,
     thereafter_rate: u32,
+    enabled: bool,
     counters: Mutex<HashMap<Level, LevelCounter>>,
 }
 
@@ -81,13 +63,20 @@ impl SamplingLayer {
     pub fn new(cfg: &SamplingConfig) -> Self {
         Self {
             initial_rate: cfg.initial_rate,
-            thereafter_rate: cfg.thereafter_rate.max(1),
+            thereafter_rate: cfg.thereafter_rate,
+            enabled: cfg.enabled,
             counters: Mutex::new(HashMap::new()),
         }
     }
 
     /// Determine whether an event at the given level should be kept.
     fn should_keep(&self, level: Level) -> bool {
+        // The master switch is authoritative even for direct users of this public layer: when
+        // sampling is disabled every event passes through.
+        if !self.enabled {
+            return true;
+        }
+
         let mut counters = self.counters.lock();
         let counter = counters.entry(level).or_insert_with(LevelCounter::new);
 
@@ -105,9 +94,13 @@ impl SamplingLayer {
             return true;
         }
 
-        // After the burst: keep every Nth event.
+        // After the burst: keep every Nth event. A `thereafter_rate` of 0 drops everything
+        // after the burst; a rate of 1 keeps all (remainder is always 0).
+        if self.thereafter_rate == 0 {
+            return false;
+        }
         let excess = counter.count - self.initial_rate;
-        excess % self.thereafter_rate == 1
+        excess.is_multiple_of(self.thereafter_rate)
     }
 }
 
@@ -161,11 +154,25 @@ mod tests {
         assert!(layer.should_keep(Level::INFO));
         assert!(layer.should_keep(Level::INFO));
 
-        // After burst: keep every 3rd (excess % 3 == 1)
-        assert!(layer.should_keep(Level::INFO)); // excess=1 → 1%3==1 ✓
+        // After burst: keep every 3rd (excess % 3 == 0)
+        assert!(!layer.should_keep(Level::INFO)); // excess=1 → 1%3==1 ✗
         assert!(!layer.should_keep(Level::INFO)); // excess=2 → 2%3==2 ✗
-        assert!(!layer.should_keep(Level::INFO)); // excess=3 → 3%3==0 ✗
-        assert!(layer.should_keep(Level::INFO)); // excess=4 → 4%3==1 ✓
+        assert!(layer.should_keep(Level::INFO)); // excess=3 → 3%3==0 ✓
+        assert!(!layer.should_keep(Level::INFO)); // excess=4 → 4%3==1 ✗
+    }
+
+    #[test]
+    fn thereafter_rate_one_keeps_all() {
+        let layer = SamplingLayer::new(&SamplingConfig {
+            enabled: true,
+            initial_rate: 1,
+            thereafter_rate: 1,
+        });
+
+        // Every event after the burst is kept (remainder is always 0).
+        for _ in 0..10 {
+            assert!(layer.should_keep(Level::INFO));
+        }
     }
 
     #[test]
@@ -180,29 +187,40 @@ mod tests {
         assert!(layer.should_keep(Level::INFO));
         assert!(layer.should_keep(Level::WARN));
 
-        // Second event per level — exceeds burst. excess=1 → 1%2==1 ✓
-        assert!(layer.should_keep(Level::INFO));
-        assert!(layer.should_keep(Level::WARN));
-
-        // Third event — excess=2 → 2%2==0 ✗
+        // Second event per level — exceeds burst. excess=1 → 1%2==1 ✗
         assert!(!layer.should_keep(Level::INFO));
         assert!(!layer.should_keep(Level::WARN));
+
+        // Third event — excess=2 → 2%2==0 ✓
+        assert!(layer.should_keep(Level::INFO));
+        assert!(layer.should_keep(Level::WARN));
     }
 
     #[test]
-    fn thereafter_rate_zero_treated_as_one() {
+    fn thereafter_rate_zero_drops_after_burst() {
         let layer = SamplingLayer::new(&SamplingConfig {
             enabled: true,
             initial_rate: 1,
-            thereafter_rate: 0, // should be clamped to 1
+            thereafter_rate: 0,
         });
 
+        // The initial burst passes, then everything after is dropped.
         assert!(layer.should_keep(Level::ERROR));
-        // excess=1 → 1%1==0, not ==1,
-        // so this is dropped But thereafter_rate 0 → max(1) → every 1st event → excess%1 always 0,
-        // so nothing after burst matches excess%1==1; keep-all via 0 remainder. Actually:
-        // excess%1 is always 0, never 1. So nothing passes. That's fine —
-        // a thereafter_rate of 0 means "drop everything after burst".
         assert!(!layer.should_keep(Level::ERROR));
+        assert!(!layer.should_keep(Level::ERROR));
+    }
+
+    #[test]
+    fn disabled_layer_keeps_every_event() {
+        let layer = SamplingLayer::new(&SamplingConfig {
+            enabled: false,
+            initial_rate: 1,
+            thereafter_rate: 2,
+        });
+
+        // The master switch is off, so nothing is sampled even past the burst.
+        for _ in 0..20 {
+            assert!(layer.should_keep(Level::INFO));
+        }
     }
 }

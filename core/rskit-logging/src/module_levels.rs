@@ -16,19 +16,11 @@
 //! ```
 
 use std::collections::HashMap;
-
 use tracing_subscriber::EnvFilter;
 
 // ── Config ──────────────────────────────────────────────────────────────────
 
-/// Per-module log level overrides.
-///
-/// Typically deserialized from `logging.module_levels` in YAML config.
-#[derive(Debug, Clone, Default)]
-pub struct ModuleLevelsConfig {
-    /// Module name → minimum level (e.g. `{"sqlx": "warn", "rdkafka": "off"}`).
-    pub levels: HashMap<String, String>,
-}
+pub use crate::config::ModuleLevelsConfig;
 
 // ── Builder ─────────────────────────────────────────────────────────────────
 

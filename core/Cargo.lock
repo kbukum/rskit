@@ -6162,6 +6162,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tempfile",
+ "tokio",
  "tracing",
  "tracing-subscriber",
 ]
@@ -6666,6 +6667,7 @@ dependencies = [
  "rskit-util",
  "rskit-validation",
  "serde",
+ "serde_json",
  "tokio",
  "uuid",
  "validator",
@@ -6753,6 +6755,7 @@ dependencies = [
  "rskit-util",
  "semver",
  "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -8097,6 +8100,7 @@ dependencies = [
  "tower-layer",
  "tower-service",
  "tracing",
+ "webpki-roots 1.0.9",
 ]
 
 [[package]]

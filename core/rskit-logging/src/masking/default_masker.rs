@@ -118,6 +118,8 @@ pub struct DefaultMasker {
     text_field_regex: Option<Regex>,
     /// Replacement string for field-name masking.
     replacement: String,
+    /// Trailing characters preserved for whole-field masking.
+    preserve_last: usize,
 }
 
 impl DefaultMasker {
@@ -156,6 +158,7 @@ impl DefaultMasker {
             json_field_regex,
             text_field_regex,
             replacement: cfg.replacement.clone(),
+            preserve_last: cfg.preserve_last,
         })
     }
 
@@ -251,6 +254,7 @@ impl Default for DefaultMasker {
             json_field_regex,
             text_field_regex,
             replacement: cfg.replacement,
+            preserve_last: 0,
         }
     }
 }
@@ -263,7 +267,7 @@ impl Masker for DefaultMasker {
 
         // Fast path: field-name match (case-insensitive).
         if !key.is_empty() && self.field_names.contains(&key.to_lowercase()) {
-            return Cow::Owned(self.replacement.clone());
+            return Cow::Owned(self.field_replacement(value));
         }
 
         // Slow path: value-pattern regexes.
@@ -277,7 +281,42 @@ impl Masker for DefaultMasker {
 
         let mut result = Cow::Borrowed(line);
 
-        // Value patterns.
+        // Whole-field masking runs first so `preserve_last` takes its suffix from the original
+        // value, not from output already redacted by the generic value patterns below.
+
+        // JSON field-name masking: "password":"secret" -> "password":"[REDACTED]"
+        if let Some(ref re) = self.json_field_regex
+            && re.is_match(&result)
+        {
+            let replacement = &self.replacement;
+            let preserve_last = self.preserve_last;
+            let masked = re.replace_all(&result, |caps: &regex::Captures| {
+                format!(
+                    "\"{}\":\"{}\"",
+                    &caps[1],
+                    preserve_replacement(&caps[2], replacement, preserve_last)
+                )
+            });
+            result = Cow::Owned(masked.into_owned());
+        }
+
+        // Text field-name masking: password=secret -> password=[REDACTED]
+        if let Some(ref re) = self.text_field_regex
+            && re.is_match(&result)
+        {
+            let replacement = &self.replacement;
+            let preserve_last = self.preserve_last;
+            let masked = re.replace_all(&result, |caps: &regex::Captures| {
+                format!(
+                    "{}={}",
+                    &caps[1],
+                    preserve_replacement(&caps[2], replacement, preserve_last)
+                )
+            });
+            result = Cow::Owned(masked.into_owned());
+        }
+
+        // Generic value patterns run last, over whatever content remains unmasked.
         for pattern in &self.value_patterns {
             if pattern.regex.is_match(&result) {
                 result = Cow::Owned(self.apply_value_pattern(pattern, &result).into_owned());
@@ -294,30 +333,28 @@ impl Masker for DefaultMasker {
             }
         }
 
-        // JSON field-name masking: "password":"secret" -> "password":"[REDACTED]"
-        if let Some(ref re) = self.json_field_regex
-            && re.is_match(&result)
-        {
-            let replacement = &self.replacement;
-            let masked = re.replace_all(&result, |caps: &regex::Captures| {
-                format!("\"{}\":\"{}\"", &caps[1], replacement)
-            });
-            result = Cow::Owned(masked.into_owned());
-        }
-
-        // Text field-name masking: password=secret -> password=[REDACTED]
-        if let Some(ref re) = self.text_field_regex
-            && re.is_match(&result)
-        {
-            let replacement = &self.replacement;
-            let masked = re.replace_all(&result, |caps: &regex::Captures| {
-                format!("{}={}", &caps[1], replacement)
-            });
-            result = Cow::Owned(masked.into_owned());
-        }
-
         result
     }
+}
+
+impl DefaultMasker {
+    fn field_replacement(&self, value: &str) -> String {
+        preserve_replacement(value, &self.replacement, self.preserve_last)
+    }
+}
+
+fn preserve_replacement(value: &str, replacement: &str, preserve_last: usize) -> String {
+    if preserve_last == 0 {
+        return replacement.to_string();
+    }
+    let chars = value.chars().collect::<Vec<_>>();
+    if chars.len() <= preserve_last {
+        return replacement.to_string();
+    }
+    let suffix = chars[chars.len() - preserve_last..]
+        .iter()
+        .collect::<String>();
+    format!("{replacement}{suffix}")
 }
 
 /// Convenience: mask a single value using a default masker.
@@ -355,5 +392,27 @@ mod tests {
                 field
             );
         }
+    }
+
+    #[test]
+    fn preserve_last_uses_original_field_value_not_redacted_json() {
+        // `password` is a default field name and the value is also caught by the default email
+        // value pattern; whole-field masking must run first so `preserve_last` keeps the original
+        // suffix (`.com`) rather than a suffix of an already-redacted value.
+        let cfg = MaskingConfig {
+            enabled: true,
+            preserve_last: 4,
+            ..Default::default()
+        };
+        let m = DefaultMasker::new(&cfg).unwrap();
+        let masked = m.mask_output(r#"{"password":"user@example.com"}"#);
+        assert!(
+            masked.contains(".com"),
+            "expected original suffix, got: {masked}"
+        );
+        assert!(
+            !masked.contains("user@example.com"),
+            "value not masked: {masked}"
+        );
     }
 }

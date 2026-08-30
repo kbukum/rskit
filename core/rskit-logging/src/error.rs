@@ -42,6 +42,28 @@ pub(crate) fn grpc_headers_not_supported() -> rskit_errors::AppError {
 }
 
 #[cfg(feature = "otlp")]
+pub(crate) fn insecure_conflicts_with_endpoint(
+    endpoint: impl Into<String>,
+) -> rskit_errors::AppError {
+    rskit_errors::AppError::invalid_input(
+        "otlp.insecure",
+        "`insecure = true` conflicts with an `https://` endpoint",
+    )
+    .with_detail("endpoint", endpoint.into())
+}
+
+#[cfg(feature = "otlp")]
+pub(crate) fn secure_requires_https_endpoint(
+    endpoint: impl Into<String>,
+) -> rskit_errors::AppError {
+    rskit_errors::AppError::invalid_input(
+        "otlp.insecure",
+        "an `http://` endpoint requires `insecure = true`; use `https://` for secure transport",
+    )
+    .with_detail("endpoint", endpoint.into())
+}
+
+#[cfg(feature = "otlp")]
 pub(crate) fn otlp_exporter(
     cause: impl std::error::Error + Send + Sync + 'static,
 ) -> rskit_errors::AppError {

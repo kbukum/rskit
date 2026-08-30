@@ -9,6 +9,7 @@ use super::contract::ConfigSource;
 use super::dotenv::{self, DotenvFileSource, Profile};
 use super::env::EnvironmentSource;
 use super::toml::TomlFileSource;
+use super::yaml::YamlFileSource;
 use crate::typed::decode;
 
 #[cfg(feature = "validate")]
@@ -20,13 +21,14 @@ use rskit_validation::Validate;
 enum LoaderPolicy {
     App,
     Toml,
+    Yaml,
     Custom,
 }
 
 /// Loads typed configuration from ordered source adapters.
 ///
 /// `ConfigLoader::app()` / `ConfigLoader::new()` keeps the service-oriented policy:
-/// defaults → TOML → profile dotenv → dotenv → adapter sources → env → overrides.
+/// defaults → config files (YAML primary, TOML secondary) → profile dotenv → dotenv → adapter sources → env → overrides.
 /// `ConfigLoader::toml(path)` is deterministic file-only loading.
 /// `ConfigLoader::custom()` only loads explicitly provided sources.
 #[derive(Debug)]
@@ -83,6 +85,22 @@ impl ConfigLoader {
         }
     }
 
+    /// Create a deterministic single-YAML loader.
+    ///
+    /// This policy does not read dotenv files or process environment variables.
+    pub fn yaml(path: impl Into<PathBuf>) -> Self {
+        Self {
+            policy: LoaderPolicy::Yaml,
+            defaults: Vec::new(),
+            config_file: Some(path.into()),
+            env_file: None,
+            env_prefix: String::new(),
+            profile: None,
+            sources: Vec::new(),
+            overrides: Vec::new(),
+        }
+    }
+
     /// Create a loader with no implicit sources.
     pub fn custom() -> Self {
         Self {
@@ -106,7 +124,7 @@ impl ConfigLoader {
         self
     }
 
-    /// Explicitly set the TOML config file path for app loading.
+    /// Explicitly set the config file path for app loading.
     #[must_use]
     pub fn with_config_file(mut self, path: impl Into<PathBuf>) -> Self {
         self.config_file = Some(path.into());
@@ -259,6 +277,12 @@ impl ConfigLoader {
                 })?;
                 Ok(vec![Box::new(TomlFileSource::required(path.clone()))])
             }
+            LoaderPolicy::Yaml => {
+                let path = self.config_file.as_ref().ok_or_else(|| {
+                    AppError::invalid_input("config", "YAML loader requires a config file")
+                })?;
+                Ok(vec![Box::new(YamlFileSource::required(path.clone()))])
+            }
             LoaderPolicy::Custom => Ok(Vec::new()),
         }
     }
@@ -267,10 +291,18 @@ impl ConfigLoader {
         let mut sources: Vec<Box<dyn ConfigSource>> = Vec::new();
 
         if let Some(path) = &self.config_file {
-            sources.push(Box::new(TomlFileSource::optional(path.clone())));
+            if is_yaml_path(path) {
+                sources.push(Box::new(YamlFileSource::optional(path.clone())));
+            } else {
+                sources.push(Box::new(TomlFileSource::optional(path.clone())));
+            }
         } else {
             sources.push(Box::new(TomlFileSource::optional("config.toml")));
             sources.push(Box::new(TomlFileSource::optional("config/config.toml")));
+            sources.push(Box::new(YamlFileSource::optional("config.yaml")));
+            sources.push(Box::new(YamlFileSource::optional("config.yml")));
+            sources.push(Box::new(YamlFileSource::optional("config/config.yaml")));
+            sources.push(Box::new(YamlFileSource::optional("config/config.yml")));
         }
 
         if let Some(profile) = &self.profile {
@@ -301,6 +333,12 @@ impl ConfigLoader {
 
         Ok(sources)
     }
+}
+
+fn is_yaml_path(path: &std::path::Path) -> bool {
+    // Reuse the canonical, case-insensitive codec selector so an explicit `CONFIG.YAML` or
+    // `config.YML` is recognized as YAML rather than falling through to the TOML parser.
+    rskit_codec::select::codec_for_path(path).is_some_and(|codec| codec.name() == "yaml")
 }
 
 /// Convenience function: create a default app loader and call [`ConfigLoader::load_app`].
@@ -344,5 +382,15 @@ mod tests {
             .app_policy_sources()
             .unwrap_err();
         assert!(err.to_string().contains("profile env file not found"));
+    }
+
+    #[test]
+    fn is_yaml_path_is_case_insensitive() {
+        assert!(is_yaml_path(std::path::Path::new("config.yaml")));
+        assert!(is_yaml_path(std::path::Path::new("config.yml")));
+        assert!(is_yaml_path(std::path::Path::new("CONFIG.YAML")));
+        assert!(is_yaml_path(std::path::Path::new("config.YML")));
+        assert!(!is_yaml_path(std::path::Path::new("config.toml")));
+        assert!(!is_yaml_path(std::path::Path::new("config")));
     }
 }

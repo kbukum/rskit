@@ -3,14 +3,22 @@
 use parking_lot::Mutex;
 use rskit_config::{
     AppConfig, ConfigLoader, ConfigMapSource, DotenvFileSource, Environment, EnvironmentSource,
-    LogFormat, SecretString, ServiceConfig, TomlFileSource, load_config,
+    LogFormat, SecretString, ServiceConfig, TomlFileSource, YamlFileSource, load_config,
 };
 use rskit_validation::Validate;
 use serde::Deserialize;
 use std::io::Write;
+use std::path::{Path, PathBuf};
 
 // Serialise env-mutating tests — parallel tests share the same process env.
 static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+// Serialise working-directory-mutating tests — the process cwd is global mutable state.
+// `rskit-testutil::CurrentDirGuard` is the canonical helper, but `rskit-testutil` depends on
+// `rskit-config`, so importing it here (even as a dev-dependency) would form a dependency cycle
+// that Toven rejects; this crate keeps a local guard that holds the same process-wide-lock
+// discipline.
+static CWD_LOCK: Mutex<()> = Mutex::new(());
 
 // ── Helpers ─────────────────────────────────────────────────────────
 
@@ -121,6 +129,33 @@ fn remove_env(key: &str) {
     // SAFETY: all tests that mutate process environment hold ENV_LOCK, which
     // serializes access to Rust 2024's process-global environment state.
     unsafe { std::env::remove_var(key) };
+}
+
+/// Pins the process working directory for the guard's lifetime, holding a process-wide lock so
+/// concurrent tests cannot interleave directory changes, and restoring the previous directory on
+/// drop. A restore failure panics rather than being silently swallowed.
+struct CurrentDirGuard {
+    previous: PathBuf,
+    _lock: parking_lot::MutexGuard<'static, ()>,
+}
+
+impl CurrentDirGuard {
+    fn change_to(path: &Path) -> std::io::Result<Self> {
+        let lock = CWD_LOCK.lock();
+        let previous = std::env::current_dir()?;
+        std::env::set_current_dir(path)?;
+        Ok(Self {
+            previous,
+            _lock: lock,
+        })
+    }
+}
+
+impl Drop for CurrentDirGuard {
+    fn drop(&mut self) {
+        std::env::set_current_dir(&self.previous)
+            .expect("restore working directory after CurrentDirGuard");
+    }
 }
 
 // ── Strict typed TOML tests ──────────────────────────────────────────
@@ -299,6 +334,13 @@ fn toml_file_source_exposes_configured_path() {
     assert_eq!(source.path(), std::path::Path::new("config/settings.toml"));
 }
 
+#[test]
+fn yaml_file_source_exposes_configured_path() {
+    let source = YamlFileSource::required("config/settings.yaml");
+
+    assert_eq!(source.path(), std::path::Path::new("config/settings.yaml"));
+}
+
 // ── ConfigLoader builder tests ──────────────────────────────────────
 
 #[test]
@@ -416,6 +458,82 @@ fn load_from_toml_file() {
     assert_eq!(cfg.app_port, 3333);
     assert_eq!(cfg.service.name, "myservice");
     clear_required_env();
+}
+
+#[test]
+fn load_from_yaml_file_as_primary_app_config() {
+    let _guard = ENV_LOCK.lock();
+    set_required_env();
+
+    let dir = tempfile::tempdir().unwrap();
+    let yaml_path = dir.path().join("test.yaml");
+    std::fs::write(&yaml_path, b"app_port: 3333\nname: myservice\n").unwrap();
+
+    let cfg: TestConfig = ConfigLoader::new()
+        .with_config_file(&yaml_path)
+        .load_app()
+        .expect("should load from YAML");
+    assert_eq!(cfg.app_port, 3333);
+    assert_eq!(cfg.service.name, "myservice");
+    clear_required_env();
+}
+
+#[test]
+fn app_loader_prefers_yaml_before_secondary_toml() {
+    let _guard = ENV_LOCK.lock();
+    set_required_env();
+
+    let dir = tempfile::tempdir().unwrap();
+    let yaml_path = dir.path().join("config.yaml");
+    let toml_path = dir.path().join("config.toml");
+    std::fs::write(&yaml_path, b"app_port: 2222\n").unwrap();
+    std::fs::write(&toml_path, b"app_port = 1111\n").unwrap();
+
+    let _cwd = CurrentDirGuard::change_to(dir.path()).unwrap();
+    let cfg: TestConfig = ConfigLoader::new()
+        .load_app()
+        .expect("should load app config");
+
+    assert_eq!(cfg.app_port, 2222);
+    clear_required_env();
+}
+
+#[test]
+fn toml_loader_remains_explicit_secondary_codec_path() {
+    let dir = tempfile::tempdir().unwrap();
+    let toml_path = dir.path().join("tool.toml");
+    std::fs::write(&toml_path, b"name = \"toven\"\nretries = 2\n").unwrap();
+
+    let cfg: ToolConfig = ConfigLoader::toml(&toml_path)
+        .load()
+        .expect("should load tool config");
+
+    assert_eq!(cfg.name, "toven");
+    assert_eq!(cfg.retries, 2);
+}
+
+#[test]
+fn env_key_normalization_uses_lowercase_dot_keys_after_prefix() {
+    let _guard = ENV_LOCK.lock();
+    set_env("APP__SERVER__HTTP_PORT", "8081");
+
+    #[derive(Debug, Deserialize)]
+    struct ServerConfig {
+        server: HttpConfig,
+    }
+
+    #[derive(Debug, Deserialize)]
+    struct HttpConfig {
+        http_port: u16,
+    }
+
+    let cfg: ServerConfig = ConfigLoader::custom()
+        .with_source(EnvironmentSource::with_prefix("APP"))
+        .load()
+        .expect("env should normalize into nested keys");
+
+    assert_eq!(cfg.server.http_port, 8081);
+    remove_env("APP__SERVER__HTTP_PORT");
 }
 
 #[test]
@@ -748,7 +866,7 @@ fn toml_sets_logging_config() {
     let toml_path = dir.path().join("logging.toml");
     std::fs::write(
         &toml_path,
-        b"address=\"0.0.0.0\"\nport=50051\n[logging]\nlevel = \"debug\"\nformat = \"json\"\nwith_caller = true\n",
+        b"address=\"0.0.0.0\"\nport=50051\n[logging]\nlevel = \"debug\"\nformat = \"json\"\ncaller = true\n",
     )
     .unwrap();
 

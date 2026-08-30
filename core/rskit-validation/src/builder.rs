@@ -41,7 +41,7 @@ impl Validator {
     #[must_use]
     pub fn max_length(mut self, field: &str, value: &str, max: usize) -> Self {
         if value.chars().count() > max {
-            self.add(field, format!("must be at most {max} characters"));
+            self.add(field, format!("must not exceed {max} characters"));
         }
         self
     }
@@ -70,7 +70,7 @@ impl Validator {
         match regex::Regex::new(re) {
             Ok(regex) => {
                 if !regex.is_match(value) {
-                    self.add(field, format!("must match pattern {re}"));
+                    self.add(field, "must match the required format");
                 }
             }
             Err(err) => self.add(field, format!("invalid pattern: {err}")),

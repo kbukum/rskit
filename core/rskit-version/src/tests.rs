@@ -47,8 +47,29 @@ fn full_version_contains_built() {
 
 #[test]
 fn is_release_reflects_version() {
-    // Pre-release versions are still release builds; only dev/dirty builds are not.
-    assert!(is_release());
+    let info = get_version_info();
+    assert_eq!(
+        is_release(),
+        info.version != "dev" && !info.version.contains("dirty")
+    );
+}
+
+#[test]
+fn is_release_is_independent_of_dirty_state() {
+    // Release status is derived solely from the version string; working-tree
+    // dirtiness is reported separately via `is_dirty` (cross-kit contract).
+    let dirty_release = VersionInfo {
+        version: "1.2.3".to_string(),
+        git_commit: "abcdef1234567890".to_string(),
+        git_branch: "feature".to_string(),
+        build_time: String::new(),
+        build_date: None,
+        rust_version: "rustc 1.97.0".to_string(),
+        is_release: true,
+        is_dirty: true,
+    };
+    assert!(dirty_release.is_release);
+    assert!(dirty_release.is_dirty);
 }
 
 #[test]
@@ -70,4 +91,43 @@ fn version_info_matches_semver_requirement() {
     assert_eq!(info.matches_requirement(">=0.2.0-alpha.1"), Some(true));
     assert_eq!(info.matches_requirement(">=0.1.0"), Some(false));
     assert_eq!(info.matches_requirement("not a requirement"), None);
+}
+
+#[test]
+fn version_info_serializes_dirty_and_build_date_fields() {
+    let info = VersionInfo {
+        version: "1.2.3".to_string(),
+        git_commit: "abcdef1234567890".to_string(),
+        git_branch: "feature".to_string(),
+        build_time: "2026-08-30T09:00:00Z".to_string(),
+        build_date: Some("2026-08-30".to_string()),
+        rust_version: "rustc 1.97.0".to_string(),
+        is_release: false,
+        is_dirty: true,
+    };
+
+    let json = serde_json::to_value(&info).unwrap();
+    assert_eq!(json["is_dirty"], true);
+    assert_eq!(json["build_date"], "2026-08-30");
+    assert_eq!(json["rust_version"], "rustc 1.97.0");
+}
+
+#[test]
+fn dirty_versions_include_suffix_deterministically() {
+    let info = VersionInfo {
+        version: "1.2.3".to_string(),
+        git_commit: "abcdef1234567890".to_string(),
+        git_branch: "feature".to_string(),
+        build_time: "2026-08-30T09:00:00Z".to_string(),
+        build_date: None,
+        rust_version: "rustc 1.97.0".to_string(),
+        is_release: false,
+        is_dirty: true,
+    };
+
+    assert_eq!(info.short_version(), "1.2.3-abcdef1-dirty");
+    assert_eq!(
+        info.full_version(),
+        "1.2.3-abcdef1-feature-dirty (built 2026-08-30T09:00:00Z)"
+    );
 }

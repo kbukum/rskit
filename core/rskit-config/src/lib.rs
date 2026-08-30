@@ -74,7 +74,7 @@ pub use sink::{ConfigSink, ConfigTable, FileConfigSink, InMemoryConfigSink};
 pub use source::load_config;
 pub use source::{
     ConfigLoader, ConfigMapSource, ConfigSource, DotenvFileSource, EnvironmentSource, Profile,
-    TomlFileSource,
+    TomlFileSource, YamlFileSource,
 };
 pub use strict::{
     CompositeKey, IdentityKey, IncludeMerge, MergeIdentity, RawTable, RawValue, StrictLoader,
