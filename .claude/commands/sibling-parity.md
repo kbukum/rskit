@@ -1,5 +1,5 @@
 ---
-description: Keep rskit as the reference kit that gokit (Go) and pykit (Python) mirror — judge cross-kit parity by capability, keep docs/PARITY-MATRIX.md accurate, propagate capability and quality changes down to the sibling kits, and improve rskit generically (never consumer-specific). Use when touching anything with a cross-kit parity row or aligning a capability across kits.
+description: Keep rskit aligned with its sibling kits gokit (Go) and pykit (Python) — judge cross-kit parity by capability, mirror the strongest existing implementation for a given scope, keep docs/PARITY-MATRIX.md accurate, and keep each kit generic (never consumer-specific). Use when touching anything with a cross-kit parity row or aligning a capability across kits.
 ---
 
 # /sibling-parity — router to the canonical skill
