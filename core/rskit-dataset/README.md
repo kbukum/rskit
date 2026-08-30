@@ -8,6 +8,7 @@ Streaming dataset collection framework: one generic collection engine drives bot
 
 - Generic collection engine: one `Collector<T>` orchestrates any `DatasetItem` — both `DataItem` blobs and `DatasetRecord` rows share the same worker pool, cancellation, and event loop
 - ETL pipeline: streaming `Source` → fallible `Transform` → per-item `ItemSink<T>` materialization, with a pluggable `Validator<T>` policy callers opt into
+- Publishing via `Target`, which is directory-scoped by design — it publishes the finished output directory (not per item), so it is intentionally non-generic while `Source`/`Transform`/`Validator`/`ItemSink` are item-typed. gokit folds the per-item sink and the directory target into a single item-typed `dataset/stage.Target[T]` (an intentional cross-kit divergence)
 - `LocalBlobSink` writes `DataItem` samples to `real/` and `ai/`; `DataItem` uses checked in-memory payload construction for small samples and file-backed streaming payloads for large samples
 - Parallel fetching with configurable concurrency
 - `Manifest` — incremental build cache for resumable collection

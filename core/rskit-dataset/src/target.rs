@@ -1,4 +1,8 @@
-//! Target trait — publish collected data to a destination.
+//! Target trait — publish a collected dataset *directory* to a destination.
+//!
+//! [`Target`] is **directory-scoped by design**: it publishes the finished output directory the collector materialized, so — deliberately unlike the item-typed [`Source`](crate::Source) / [`Transform`](crate::transform::Transform) / [`Validator`](crate::validate::Validator) — it is **not** generic over the item type. Per-item materialization is a separate concern owned by the generic [`ItemSink<T>`](crate::ItemSink), which the engine streams each item into *before* any target publishes the completed directory.
+//!
+//! Cross-kit mapping: gokit makes the opposite-but-equivalent decision, folding the per-item sink and the directory target into a single item-typed `dataset/stage.Target[T]` (consumes a `stream.Pipeline[T]`). So rskit's `ItemSink<T>` + directory `Target` split maps onto gokit's one `stage.Target[T]`; both kits cover the same publish concern, and the divergence is intentional (see the gokit parity matrix at <https://github.com/kbukum/gokit/blob/main/docs/PARITY-MATRIX.md>, dataset row).
 
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use serde::{Deserialize, Serialize};
@@ -18,12 +22,14 @@ pub struct PublishResult {
 }
 
 /// Destination for collected dataset output.
+///
+/// `Target` is **directory-scoped by design**: `publish` receives the finished output *directory* the collector produced, not individual items — so it is deliberately non-generic, unlike the item-typed [`Source`](crate::Source), [`Transform`](crate::transform::Transform), and [`Validator`](crate::validate::Validator). Per-item materialization is the separate, generic [`ItemSink<T>`](crate::ItemSink) concern, run to completion before any `Target` publishes. (gokit folds both into one item-typed `stage.Target[T]`; see the module docs for the mapping.)
 #[async_trait::async_trait]
 pub trait Target: Send + Sync {
     /// Stable target name.
     fn name(&self) -> &str;
 
-    /// Publish the dataset directory and optional metadata.
+    /// Publish the produced dataset directory and optional metadata.
     async fn publish(
         &self,
         directory: &Path,
