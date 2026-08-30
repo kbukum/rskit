@@ -1,7 +1,6 @@
 //! Service discovery configuration.
 //!
-//! Mirrors gokit's `discovery.Config` — all three kits use the same config shape
-//! so services are structurally identical regardless of language.
+//! A single provider-agnostic config shape so services are structurally identical regardless of backend.
 
 use std::collections::HashMap;
 

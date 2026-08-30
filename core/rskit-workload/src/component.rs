@@ -1,7 +1,6 @@
 //! Lifecycle-managed workload component.
 //!
-//! Mirrors gokit's `workload.Component`:
-//! wraps a [`Manager`] built from an injected [`WorkloadRegistry`] and participates in ordered startup,
+//! Wraps a [`Manager`] built from an injected [`WorkloadRegistry`] and participates in ordered startup,
 //! shutdown, and health reporting through [`rskit_component::Component`].
 
 use std::sync::Arc;

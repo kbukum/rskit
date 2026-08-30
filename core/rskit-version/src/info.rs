@@ -6,7 +6,7 @@ const MASTER_BRANCH: &str = "master";
 const SHORT_COMMIT_LEN: usize = 7;
 const GIT_BRANCH: &str = env!("GIT_BRANCH");
 
-/// Immutable snapshot of build/version metadata. Compatible with gokit and pykit `VersionInfo`.
+/// Immutable snapshot of build/version metadata. A stable cross-language version-info shape.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VersionInfo {
     /// Crate version from `Cargo.toml` (e.g. `"0.1.0-alpha.1"`).

@@ -1,6 +1,5 @@
 //! Core data types for the bench framework.
 //!
-//! These types mirror gokit's `bench` core types, adapted with Rust idioms.
 //! All types use serde for JSON serialization to ensure cross-language compatibility.
 
 use rskit_errors::AppResult;

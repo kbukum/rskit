@@ -23,8 +23,6 @@ use crate::config::GrpcClientConfig;
 /// Maintains a gRPC channel to a service discovered via the [`Discovery`] trait.
 /// When an optional [`Watcher`] is provided the channel reacts to instance-set changes in real-time;
 /// otherwise it falls back to periodic polling.
-///
-/// Mirrors `DiscoveryChannel` from pykit-grpc.
 pub struct DiscoveryChannel {
     discovery: Arc<dyn Discovery>,
     watcher: Option<Arc<dyn Watcher>>,

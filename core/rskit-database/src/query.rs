@@ -1,6 +1,6 @@
 //! HTTP query parameter parsing and pagination for database queries.
 //!
-//! Mirrors the gokit `database/query/` package, providing:
+//! Provides:
 //!
 //! - [`QueryConfig`] — allowed sorts, filters, and page-size limits.
 //! - [`QueryParams`] — parsed page/sort/filter values ready for SQL use.

@@ -1,7 +1,7 @@
 //! Result types for bench runs.
 //!
 //! These types represent the complete output of a benchmark evaluation,
-//! designed for cross-language compatibility with gokit and pykit.
+//! serialized to the shared bench result schema for cross-language interchange.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

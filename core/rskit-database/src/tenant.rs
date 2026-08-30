@@ -1,6 +1,6 @@
 //! Tenant-scoping helpers for multi-tenant database queries.
 //!
-//! Mirrors gokit's `database/tenant.go`.  Provides:
+//! Provides:
 //!
 //! - [`TenantScope`] — a builder for constructing tenant-filtered query predicate fragments.
 
@@ -8,7 +8,7 @@ use std::num::NonZeroUsize;
 
 /// Helper for building tenant-scoped SQL `WHERE` clauses.
 ///
-/// Mirrors gokit's `ScopeToTenant` by associating a field name with a tenant value.
+/// Associates a field name with a tenant value.
 /// Adapter crates decide how to bind the returned value.
 ///
 /// # Examples

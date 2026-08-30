@@ -22,7 +22,7 @@
 //!
 //! # Design
 //!
-//! There is intentionally no global logger registry (unlike gokit's `logger.Get(name)`).
+//! There is intentionally no global logger registry.
 //! Callers use `tracing` directly and scope context via spans + `#[tracing::instrument]`.
 //! `init_logging` installs a scoped default subscriber;
 //! the returned guard restores the previous subscriber on drop.
