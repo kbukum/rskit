@@ -46,6 +46,9 @@ async fn ttl_cleanup_removes_idle_accumulators() {
 
     manager.append("session", 7).unwrap();
     tokio::time::advance(Duration::from_secs(11)).await;
-    assert_eq!(manager.cleanup_expired().unwrap(), vec!["session"]);
+    assert_eq!(
+        manager.cleanup_expired().into_result().unwrap(),
+        vec!["session"]
+    );
     assert!(manager.keys().is_empty());
 }

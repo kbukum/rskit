@@ -7,6 +7,8 @@
 //! The engine stays item-agnostic — it never writes items itself.
 //! Per-item materialization lives behind an injected [`ItemSink<T>`] ([`LocalBlobSink`] writes [`DataItem`] samples to `real/` and `ai/`),
 //! and per-item validation is a pluggable [`Validator<T>`] that callers opt into (for example a schema-backed validator for tabular records).
+//! Publishing is the separate [`Target`] concern, which is directory-scoped by design (it publishes the finished output directory, not per item);
+//! gokit folds the per-item sink and the directory target into a single item-typed `dataset/stage.Target[T]` (an intentional cross-kit divergence).
 
 #![warn(missing_docs)]
 

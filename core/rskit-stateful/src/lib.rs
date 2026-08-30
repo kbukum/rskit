@@ -16,13 +16,16 @@ pub mod measurer;
 pub mod memory_store;
 /// Store trait for pluggable backends.
 pub mod store;
+/// Shared test doubles for accumulator and manager tests.
+#[cfg(test)]
+mod test_support;
 /// Flush triggers.
 pub mod trigger;
 
 pub use accumulator::Accumulator;
 pub use config::AccumulatorConfig;
 pub use machine::{AuditEntry, State, StateMachine, StatePersistence, StateSnapshot, Transition};
-pub use manager::Manager;
+pub use manager::{CleanupReport, Manager};
 pub use measurer::{ByteSizeMeasurer, CountMeasurer, Measurer};
 pub use memory_store::MemoryStore;
 pub use store::Store;
