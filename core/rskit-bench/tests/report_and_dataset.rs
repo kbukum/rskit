@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use rskit_bench::dataset::{load_content, load_manifest};
 use rskit_bench::dataset_loader::DatasetLoader;
 use rskit_bench::report_gen::{
-    CsvReporter, JUnitReporter, JsonReporter, MarkdownReporter, Reporter, TableReporter,
-    VegaLiteReporter, vegalite_specs,
+    CsvReporter, HtmlReporter, JUnitReporter, JsonReporter, MarkdownReporter, Reporter,
+    TableReporter, VegaLiteReporter, vegalite_specs,
 };
 use rskit_bench::result::{
     BenchRunResult, BenchSampleResult, BranchResult, DatasetInfo, MetricResult,
@@ -205,6 +205,7 @@ fn report_generators_emit_all_supported_formats_and_escape_special_values() {
         Box::new(TableReporter),
         Box::new(JUnitReporter::new("suite<&\"'>")),
         Box::new(VegaLiteReporter),
+        Box::new(HtmlReporter),
     ];
 
     for reporter in reporters {
@@ -265,9 +266,50 @@ fn report_generators_emit_all_supported_formats_and_escape_special_values() {
                 assert!(json.get("calibration").is_some());
                 assert!(json.get("branch_comparison").is_some());
             }
+            "html" => {
+                assert!(rendered.starts_with("<!DOCTYPE html>"));
+                assert!(rendered.contains("Run run-1"));
+                assert!(rendered.contains(">accuracy<"));
+                assert!(rendered.contains("very-long-branch-name-that-needs-truncation"));
+                assert!(rendered.contains("cdn.jsdelivr.net/npm/vega@5"));
+                assert!(rendered.contains("vega-embed@6"));
+                assert!(rendered.contains(r#"<script type="application/json""#));
+                assert!(rendered.contains("vegaEmbed"));
+            }
             name => panic!("unexpected reporter {name}"),
         }
     }
+}
+
+#[test]
+fn html_reporter_escapes_hostile_sample_fields_and_embeds_specs() {
+    let mut result = bench_result();
+    // Inject a hostile label/error that must never reach the page as live markup.
+    result.samples.push(BenchSampleResult {
+        id: "xss".to_owned(),
+        label: r#"<script>alert("x")&'"#.to_owned(),
+        predicted: "no".to_owned(),
+        score: 0.1,
+        correct: false,
+        branch_scores: HashMap::new(),
+        duration_ms: 1,
+        error: "<img src=x onerror=alert(1)>".to_owned(),
+    });
+
+    let mut output = Vec::new();
+    HtmlReporter.generate(&mut output, &result).unwrap();
+    let html = String::from_utf8(output).unwrap();
+
+    // The hostile substrings must be escaped, not present literally.
+    assert!(!html.contains("<script>alert"));
+    assert!(!html.contains("<img src=x onerror=alert(1)>"));
+    assert!(html.contains("&lt;script&gt;alert(&quot;x&quot;)&amp;&#39;"));
+    assert!(html.contains("&lt;img src=x onerror=alert(1)&gt;"));
+
+    // Charts from curve data are embedded as inert JSON and rendered via vegaEmbed.
+    assert!(html.contains(r#"<script type="application/json" id="chart-0-spec">"#));
+    assert!(html.contains("vegaEmbed('#chart-0'"));
+    assert!(html.contains(r#"src="https://cdn.jsdelivr.net/npm/vega-lite@5""#));
 }
 
 #[test]

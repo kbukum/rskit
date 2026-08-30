@@ -10,6 +10,7 @@ fn safe_divide(a: f64, b: f64) -> f64 {
 
 fn empty_result(name: &str) -> MetricResult {
     MetricResult {
+        directions: Default::default(),
         name: name.into(),
         value: 0.0,
         direction: MetricDirection::HigherIsBetter,
@@ -89,6 +90,7 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for NdcgMetric<L> {
         values.insert("k".into(), n as f64);
 
         Ok(MetricResult {
+            directions: Default::default(),
             name: "ndcg".into(),
             value: val,
             direction: MetricDirection::HigherIsBetter,
@@ -149,6 +151,7 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for MeanAvgPrecisio
 
         let map = sum_precision / total_relevant as f64;
         Ok(MetricResult {
+            directions: Default::default(),
             name: "mean_average_precision".into(),
             value: map,
             direction: MetricDirection::HigherIsBetter,
@@ -203,6 +206,7 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for PrecisionAtK<L>
         values.insert("k".into(), n as f64);
 
         Ok(MetricResult {
+            directions: Default::default(),
             name: "precision_at_k".into(),
             value: val,
             direction: MetricDirection::HigherIsBetter,
@@ -265,6 +269,7 @@ impl<L: PartialEq + Clone + Send + Sync + 'static> Metric<L> for RecallAtK<L> {
         values.insert("k".into(), n as f64);
 
         Ok(MetricResult {
+            directions: Default::default(),
             name: "recall_at_k".into(),
             value: val,
             direction: MetricDirection::HigherIsBetter,

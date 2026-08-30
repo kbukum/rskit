@@ -9,6 +9,7 @@ fn safe_divide(a: f64, b: f64) -> f64 {
 
 fn empty_result(name: &str, direction: MetricDirection) -> MetricResult {
     MetricResult {
+        directions: Default::default(),
         name: name.into(),
         value: 0.0,
         direction,
@@ -38,6 +39,7 @@ impl Metric<f64> for Mae {
             .map(|s| (s.sample.label - s.prediction.score).abs())
             .sum();
         Ok(MetricResult {
+            directions: Default::default(),
             name: "mae".into(),
             value: sum / scored.len() as f64,
             direction: MetricDirection::LowerIsBetter,
@@ -68,6 +70,7 @@ impl Metric<f64> for Mse {
             .map(|s| (s.sample.label - s.prediction.score).powi(2))
             .sum();
         Ok(MetricResult {
+            directions: Default::default(),
             name: "mse".into(),
             value: sum / scored.len() as f64,
             direction: MetricDirection::LowerIsBetter,
@@ -99,6 +102,7 @@ impl Metric<f64> for Rmse {
             .sum();
         let val = (sum / scored.len() as f64).sqrt();
         Ok(MetricResult {
+            directions: Default::default(),
             name: "rmse".into(),
             value: val,
             direction: MetricDirection::LowerIsBetter,
@@ -134,12 +138,57 @@ impl Metric<f64> for RSquared {
         let mut values = HashMap::new();
         values.insert("ss_res".into(), ss_res);
         values.insert("ss_tot".into(), ss_tot);
+        // R² itself is higher-is-better; a lower residual sum of squares is
+        // better, while the total sum of squares is a descriptive property of the
+        // data.
+        let mut directions = HashMap::new();
+        directions.insert("ss_res".into(), MetricDirection::LowerIsBetter);
+        directions.insert("ss_tot".into(), MetricDirection::Neutral);
         Ok(MetricResult {
             name: "r_squared".into(),
             value: val,
             direction: MetricDirection::HigherIsBetter,
+            directions,
             values,
             detail: None,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::{BenchSample, Prediction, ScoredSample};
+
+    fn scored(label: f64, score: f64) -> ScoredSample<f64> {
+        ScoredSample {
+            sample: BenchSample {
+                id: "s".into(),
+                input: vec![],
+                label,
+                source: String::new(),
+                metadata: HashMap::new(),
+            },
+            prediction: Prediction {
+                sample_id: "s".into(),
+                label,
+                score,
+                scores: HashMap::new(),
+                metadata: HashMap::new(),
+            },
+        }
+    }
+
+    #[test]
+    fn r_squared_subvalue_directions() {
+        let r = r_squared()
+            .compute(&[scored(1.0, 1.2), scored(2.0, 1.8)])
+            .unwrap();
+        assert_eq!(r.direction, MetricDirection::HigherIsBetter);
+        assert_eq!(
+            r.directions.get("ss_res"),
+            Some(&MetricDirection::LowerIsBetter)
+        );
+        assert_eq!(r.directions.get("ss_tot"), Some(&MetricDirection::Neutral));
     }
 }

@@ -4,10 +4,24 @@
 //! serialized to the shared bench result schema for cross-language interchange.
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use super::provenance::RunProvenance;
 use super::schema;
+
+/// Serializes a string-keyed map with its keys in sorted order.
+///
+/// The in-memory type stays a [`HashMap`] for fast keyed lookup; only the wire
+/// form is ordered. Sorting makes the emitted JSON deterministic (a plain
+/// `HashMap` serializes in arbitrary order) and matches the sibling kit's
+/// sorted-key map output, so the two kits emit an interchangeable contract.
+fn serialize_sorted_map<S, V>(map: &HashMap<String, V>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+    V: Serialize,
+{
+    map.iter().collect::<BTreeMap<_, _>>().serialize(serializer)
+}
 
 /// Complete result of a benchmark run.
 ///
@@ -28,7 +42,7 @@ pub struct BenchRunResult {
     /// Run start time (ISO 8601).
     pub timestamp: String,
     /// User-provided tag.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub tag: String,
     /// Total run duration in milliseconds.
     #[serde(default)]
@@ -39,13 +53,21 @@ pub struct BenchRunResult {
     #[serde(default)]
     pub metrics: Vec<MetricResult>,
     /// Per-branch results.
-    #[serde(default)]
+    #[serde(
+        default,
+        skip_serializing_if = "HashMap::is_empty",
+        serialize_with = "serialize_sorted_map"
+    )]
     pub branches: HashMap<String, BranchResult>,
     /// Per-sample results.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub samples: Vec<BenchSampleResult>,
     /// Optional visualization curves.
-    #[serde(default)]
+    #[serde(
+        default,
+        skip_serializing_if = "HashMap::is_empty",
+        serialize_with = "serialize_sorted_map"
+    )]
     pub curves: HashMap<String, serde_json::Value>,
     /// Reproducibility provenance (seed, commit, tool/host identity, dataset hash).
     #[serde(default)]
@@ -64,7 +86,7 @@ pub struct DatasetInfo {
     #[serde(default)]
     pub sample_count: usize,
     /// Count of each label.
-    #[serde(default)]
+    #[serde(default, serialize_with = "serialize_sorted_map")]
     pub label_distribution: HashMap<String, usize>,
 }
 
@@ -75,17 +97,35 @@ pub struct MetricResult {
     pub name: String,
     /// Primary scalar result.
     pub value: f64,
-    /// Optimization direction of [`value`](Self::value) and every entry in
-    /// [`values`](Self::values): whether higher or lower is better, or whether
-    /// the metric is purely descriptive.
+    /// Optimization direction of [`value`](Self::value) and of every entry in
+    /// [`values`](Self::values) not overridden in [`directions`](Self::directions):
+    /// whether higher or lower is better, or whether the metric is purely
+    /// descriptive.
     ///
-    /// Defaults to [`MetricDirection::HigherIsBetter`] so results predating this
-    /// field (and the many accuracy-style metrics for which higher is better)
-    /// are classified correctly by [`RunComparator`](crate::compare::RunComparator).
+    /// Defaults to [`MetricDirection::HigherIsBetter`], so the many accuracy-style
+    /// metrics for which higher is better are classified correctly by
+    /// [`RunComparator`](crate::compare::RunComparator) without setting it explicitly.
     #[serde(default)]
     pub direction: MetricDirection,
+    /// Per-key optimization direction override for entries in
+    /// [`values`](Self::values) whose direction differs from
+    /// [`direction`](Self::direction). A key absent from this map inherits
+    /// `direction`, so a heterogeneous metric — a higher-is-better headline (F1,
+    /// R²) alongside lower-is-better diagnostics (false-positive rate, residual
+    /// sum of squares) — classifies every subvalue correctly instead of
+    /// inheriting one direction for the whole map.
+    #[serde(
+        default,
+        skip_serializing_if = "HashMap::is_empty",
+        serialize_with = "serialize_sorted_map"
+    )]
+    pub directions: HashMap<String, MetricDirection>,
     /// Per-label or secondary metrics.
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    #[serde(
+        default,
+        skip_serializing_if = "HashMap::is_empty",
+        serialize_with = "serialize_sorted_map"
+    )]
     pub values: HashMap<String, f64>,
     /// Complex metric structure (confusion matrix, ROC curve, etc.).
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -145,7 +185,7 @@ pub struct BranchResult {
     #[serde(default)]
     pub tier: i32,
     /// Metrics for this branch.
-    #[serde(default)]
+    #[serde(default, serialize_with = "serialize_sorted_map")]
     pub metrics: HashMap<String, f64>,
     /// Average confidence on correct predictions.
     #[serde(default)]
@@ -178,7 +218,11 @@ pub struct BenchSampleResult {
     #[serde(default)]
     pub correct: bool,
     /// Scores from all branches.
-    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    #[serde(
+        default,
+        skip_serializing_if = "HashMap::is_empty",
+        serialize_with = "serialize_sorted_map"
+    )]
     pub branch_scores: HashMap<String, f64>,
     /// Evaluation time in milliseconds.
     #[serde(default)]

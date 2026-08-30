@@ -73,6 +73,7 @@ mod tests {
 
         async fn compute(&self, _scored: &[ScoredSample<String>]) -> AppResult<MetricResult> {
             Ok(MetricResult {
+                directions: Default::default(),
                 name: self.name.clone(),
                 value: self.value,
                 direction: MetricDirection::HigherIsBetter,
@@ -102,6 +103,7 @@ mod tests {
     #[test]
     fn as_sync_ignores_samples_and_replays_result() {
         let precomputed = MetricResult {
+            directions: Default::default(),
             name: "semantic_similarity".into(),
             value: 0.9,
             direction: MetricDirection::HigherIsBetter,

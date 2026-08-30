@@ -81,6 +81,7 @@ impl<L: Display + Clone + Send + Sync + 'static> Metric<L> for TokenStats<L> {
         values.insert("reference_tokens_avg".into(), reference_avg);
 
         Ok(MetricResult {
+            directions: Default::default(),
             name: self.name.clone(),
             value: predicted_avg,
             direction: MetricDirection::Neutral,
@@ -98,6 +99,7 @@ impl<L> TokenStats<L> {
         values.insert("reference_tokens_total".into(), 0.0);
         values.insert("reference_tokens_avg".into(), 0.0);
         MetricResult {
+            directions: Default::default(),
             name: self.name.clone(),
             value: 0.0,
             direction: MetricDirection::Neutral,

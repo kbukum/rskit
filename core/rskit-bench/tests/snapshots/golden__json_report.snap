@@ -4,8 +4,6 @@ expression: parsed
 ---
 {
   "$schema": "https://gokit.dev/bench/v1/schema.json",
-  "branches": {},
-  "curves": {},
   "dataset": {
     "label_distribution": {},
     "name": "test-dataset",

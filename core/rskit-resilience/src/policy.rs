@@ -98,6 +98,22 @@ impl Policy {
         self
     }
 
+    /// Returns `true` when a retry primitive is configured.
+    ///
+    /// Lets a caller reject a retry-configured policy for a non-idempotent operation without reaching into the policy's internals.
+    #[must_use]
+    pub fn has_retry(&self) -> bool {
+        self.retry.is_some()
+    }
+
+    /// Returns the configured execution timeout, or `None` when the policy is not time-bounded.
+    ///
+    /// Lets a caller enforce that every remote call is time-bounded by requiring a positive timeout, without reaching into the policy's internals.
+    #[must_use]
+    pub fn timeout(&self) -> Option<Duration> {
+        self.timeout
+    }
+
     /// Execute an operation through the configured policy stack.
     ///
     /// The execution order is: rate limit → bulkhead → circuit breaker → timeout → retry → fn.
@@ -225,6 +241,21 @@ mod tests {
     use crate::{
         BulkheadConfig, CbConfig, ConstantBackoff, LinearBackoff, RateLimiter, RateLimiterConfig,
     };
+
+    #[test]
+    fn has_retry_reflects_configured_retry() {
+        assert!(!Policy::new().has_retry());
+        assert!(Policy::new().with_retry(RetryPolicy::new()).has_retry());
+    }
+
+    #[test]
+    fn timeout_reports_configured_bound() {
+        assert_eq!(Policy::new().timeout(), None);
+        assert_eq!(
+            Policy::new().with_timeout(Duration::from_secs(5)).timeout(),
+            Some(Duration::from_secs(5))
+        );
+    }
 
     #[tokio::test]
     async fn policy_retries_until_success() {

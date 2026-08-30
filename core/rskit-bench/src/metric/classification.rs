@@ -1,4 +1,5 @@
 use super::Metric;
+use super::identity::format_threshold;
 use crate::curves::{ConfusionMatrixDetail, ThresholdPoint};
 use crate::{MetricDirection, MetricResult, ScoredSample};
 use rskit_errors::{AppError, AppResult, ErrorCode};
@@ -27,7 +28,7 @@ where
 ///
 /// The threshold is part of the identity because `f1` (the primary value) and every confusion-derived value are computed at this cutoff: two runs scored at different thresholds must never join under a shared name, or [`RunComparator`](crate::compare::RunComparator) would score an incomparable delta as a regression or improvement.
 fn build_name(threshold: f64) -> String {
-    format!("classification[t{threshold}]")
+    format!("classification[t{}]", format_threshold(threshold))
 }
 
 struct BinaryClassification<L> {
@@ -87,6 +88,17 @@ impl<L: PartialEq + Display + Clone + Send + Sync + 'static> Metric<L> for Binar
         values.insert("tn".into(), tn as f64);
         values.insert("fn".into(), fn_ as f64);
 
+        // f1/precision/recall/accuracy inherit the metric's higher-is-better
+        // direction; the confusion-derived diagnostics have their own: a lower
+        // false-positive rate (and fewer false positives/negatives) is better,
+        // while the raw tp/tn counts are descriptive.
+        let mut directions = HashMap::new();
+        directions.insert("fpr".into(), MetricDirection::LowerIsBetter);
+        directions.insert("fp".into(), MetricDirection::LowerIsBetter);
+        directions.insert("fn".into(), MetricDirection::LowerIsBetter);
+        directions.insert("tp".into(), MetricDirection::Neutral);
+        directions.insert("tn".into(), MetricDirection::Neutral);
+
         let detail = ConfusionMatrixDetail {
             labels: vec![format!("{}", self.positive), neg_label],
             matrix: vec![vec![tp, fn_], vec![fp, tn]],
@@ -102,6 +114,7 @@ impl<L: PartialEq + Display + Clone + Send + Sync + 'static> Metric<L> for Binar
             name: self.name.clone(),
             value: f1,
             direction: MetricDirection::HigherIsBetter,
+            directions,
             values,
             detail: Some(detail),
         })
@@ -144,6 +157,7 @@ impl<L: PartialEq + Display + Clone + Send + Sync + 'static> Metric<L>
             orientation: "row=actual, col=predicted".into(),
         };
         Ok(MetricResult {
+            directions: Default::default(),
             name: "confusion_matrix".into(),
             value: 0.0,
             direction: MetricDirection::Neutral,
@@ -206,6 +220,7 @@ impl<L: PartialEq + Display + Clone + Send + Sync + 'static> Metric<L> for Thres
             });
         }
         Ok(MetricResult {
+            directions: Default::default(),
             name: "threshold_sweep".into(),
             value: best_f1,
             direction: MetricDirection::HigherIsBetter,
@@ -293,11 +308,61 @@ impl<L: PartialEq + Display + Clone + Send + Sync + 'static> Metric<L> for Multi
         values.insert("accuracy".into(), accuracy);
 
         Ok(MetricResult {
+            directions: Default::default(),
             name: "multi_class_classification".into(),
             value: macro_f1,
             direction: MetricDirection::HigherIsBetter,
             values,
             detail: None,
         })
+    }
+}
+
+#[cfg(test)]
+mod direction_tests {
+    use super::*;
+    use crate::types::{BenchSample, Prediction, ScoredSample};
+    use std::collections::HashMap;
+
+    fn scored(label: &str, pred: &str, score: f64) -> ScoredSample<String> {
+        ScoredSample {
+            sample: BenchSample {
+                id: "s".into(),
+                input: vec![],
+                label: label.into(),
+                source: String::new(),
+                metadata: HashMap::new(),
+            },
+            prediction: Prediction {
+                sample_id: "s".into(),
+                label: pred.into(),
+                score,
+                scores: HashMap::new(),
+                metadata: HashMap::new(),
+            },
+        }
+    }
+
+    #[test]
+    fn binary_classification_subvalue_directions() {
+        let m = binary_classification::<String>("pos".into(), 0.5);
+        let r = m
+            .compute(&[scored("pos", "pos", 0.9), scored("neg", "neg", 0.2)])
+            .unwrap();
+        assert_eq!(r.direction, MetricDirection::HigherIsBetter);
+        for k in ["fpr", "fp", "fn"] {
+            assert_eq!(
+                r.directions.get(k),
+                Some(&MetricDirection::LowerIsBetter),
+                "{k}"
+            );
+        }
+        for k in ["tp", "tn"] {
+            assert_eq!(r.directions.get(k), Some(&MetricDirection::Neutral), "{k}");
+        }
+        // Headline values inherit the top-level direction (absent from directions).
+        for k in ["f1", "precision", "recall", "accuracy"] {
+            assert!(!r.directions.contains_key(k), "{k} should inherit");
+        }
     }
 }
