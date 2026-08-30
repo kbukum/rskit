@@ -311,11 +311,15 @@ depgraphs:
 ## path because its go/no-go verdict is a release gate (clean tree, registry
 ## idempotency), not a binary-contract signal. TOVEN selects the binary (see the
 ## TOVEN var).
+## The release previews query crates.io for published-version idempotency, so a
+## transient registry fault (SSL reset, dropped connection) is retried with
+## backoff via scripts/retry.sh rather than failing the canary; the local
+## discovery steps (modules, graph) need no network and run directly.
 toven-canary:
 	@$(TOVEN) modules
 	@$(TOVEN) graph
-	@$(TOVEN) release status
-	@$(TOVEN) release plan
+	@./scripts/retry.sh $(TOVEN) release status
+	@./scripts/retry.sh $(TOVEN) release plan
 
 ## Fast check: format + lint + build only (no tests) — for rapid iteration
 check-fast: fmt-check lint build
