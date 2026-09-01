@@ -313,7 +313,10 @@ mod tests {
             insecure: true,
             ..Default::default()
         };
-        assert_eq!(resolve_endpoint(&insecure).unwrap(), "Http://collector:4317");
+        assert_eq!(
+            resolve_endpoint(&insecure).unwrap(),
+            "Http://collector:4317"
+        );
     }
 
     #[test]
