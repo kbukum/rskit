@@ -106,6 +106,17 @@ impl<C: AppConfig> AppBuilder<C> {
         self
     }
 
+    /// Register a hook called once during startup before any component or start hook runs.
+    #[must_use]
+    pub fn configure<F, Fut>(mut self, hook: F) -> Self
+    where
+        F: Fn(CancellationToken) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = AppResult<()>> + Send + 'static,
+    {
+        self.hooks.configure.push(make_hook(hook));
+        self
+    }
+
     /// Register a hook called before components start.
     #[must_use]
     pub fn before_start<F, Fut>(mut self, hook: F) -> Self
@@ -125,6 +136,17 @@ impl<C: AppConfig> AppBuilder<C> {
         Fut: std::future::Future<Output = AppResult<()>> + Send + 'static,
     {
         self.hooks.after_start.push(make_hook(hook));
+        self
+    }
+
+    /// Register a hook called once during startup after the application is fully started and ready.
+    #[must_use]
+    pub fn ready<F, Fut>(mut self, hook: F) -> Self
+    where
+        F: Fn(CancellationToken) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = AppResult<()>> + Send + 'static,
+    {
+        self.hooks.ready.push(make_hook(hook));
         self
     }
 
@@ -226,6 +248,17 @@ impl<C> App<Built, C> {
         self.shutdown_token.clone()
     }
 
+    /// Register a hook called once during startup before any component or start hook runs.
+    #[must_use]
+    pub fn configure<F, Fut>(mut self, hook: F) -> Self
+    where
+        F: Fn(CancellationToken) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = AppResult<()>> + Send + 'static,
+    {
+        self.hooks.configure.push(make_hook(hook));
+        self
+    }
+
     /// Register a hook called before components start.
     #[must_use]
     pub fn before_start<F, Fut>(mut self, hook: F) -> Self
@@ -245,6 +278,17 @@ impl<C> App<Built, C> {
         Fut: std::future::Future<Output = AppResult<()>> + Send + 'static,
     {
         self.hooks.after_start.push(make_hook(hook));
+        self
+    }
+
+    /// Register a hook called once during startup after the application is fully started and ready.
+    #[must_use]
+    pub fn ready<F, Fut>(mut self, hook: F) -> Self
+    where
+        F: Fn(CancellationToken) -> Fut + Send + Sync + 'static,
+        Fut: std::future::Future<Output = AppResult<()>> + Send + 'static,
+    {
+        self.hooks.ready.push(make_hook(hook));
         self
     }
 
@@ -275,6 +319,8 @@ impl<C: AppConfig> App<Built, C> {
     /// Start components and transition to [`Started`].
     pub async fn start(self) -> AppResult<App<Started, C>> {
         crate::summary::print_startup(self.config.service_config(), self.registry.len());
+        self.run_hooks(LifecyclePhase::Configure, &self.hooks.configure)
+            .await?;
         self.run_hooks(LifecyclePhase::BeforeStart, &self.hooks.before_start)
             .await?;
 
@@ -296,6 +342,15 @@ impl<C: AppConfig> App<Built, C> {
         {
             return Err(self
                 .rollback_startup_failure(error.context("after_start hooks failed"), true)
+                .await);
+        }
+
+        if let Err(error) = self
+            .run_hooks(LifecyclePhase::Ready, &self.hooks.ready)
+            .await
+        {
+            return Err(self
+                .rollback_startup_failure(error.context("ready hooks failed"), true)
                 .await);
         }
 
@@ -560,12 +615,21 @@ mod tests {
     #[tokio::test]
     async fn lifecycle_hooks_run_in_order() {
         let order = Arc::new(Mutex::new(Vec::new()));
+        let configure = Arc::clone(&order);
         let before_start = Arc::clone(&order);
         let after_start = Arc::clone(&order);
+        let ready = Arc::clone(&order);
         let before_stop = Arc::clone(&order);
         let after_stop = Arc::clone(&order);
 
         let app = AppBuilder::new(TestCfg::default())
+            .configure(move |_token| {
+                let order = Arc::clone(&configure);
+                async move {
+                    order.lock().push("configure");
+                    Ok(())
+                }
+            })
             .before_start(move |_token| {
                 let order = Arc::clone(&before_start);
                 async move {
@@ -577,6 +641,13 @@ mod tests {
                 let order = Arc::clone(&after_start);
                 async move {
                     order.lock().push("after_start");
+                    Ok(())
+                }
+            })
+            .ready(move |_token| {
+                let order = Arc::clone(&ready);
+                async move {
+                    order.lock().push("ready");
                     Ok(())
                 }
             })
@@ -603,7 +674,14 @@ mod tests {
 
         assert_eq!(
             *order.lock(),
-            vec!["before_start", "after_start", "before_stop", "after_stop"]
+            vec![
+                "configure",
+                "before_start",
+                "after_start",
+                "ready",
+                "before_stop",
+                "after_stop"
+            ]
         );
     }
 
@@ -618,12 +696,16 @@ mod tests {
             .await
             .expect("run_task should complete");
 
+        let configure = subscriber.recv().await.expect("configure event");
         let before_start = subscriber.recv().await.expect("before_start event");
         let after_start = subscriber.recv().await.expect("after_start event");
+        let ready = subscriber.recv().await.expect("ready event");
         let before_stop = subscriber.recv().await.expect("before_stop event");
         let after_stop = subscriber.recv().await.expect("after_stop event");
+        assert_eq!(configure.kind(), crate::LifecycleEventType::Configure);
         assert_eq!(before_start.kind(), crate::LifecycleEventType::BeforeStart);
         assert_eq!(after_start.kind(), crate::LifecycleEventType::AfterStart);
+        assert_eq!(ready.kind(), crate::LifecycleEventType::Ready);
         assert_eq!(before_stop.kind(), crate::LifecycleEventType::BeforeStop);
         assert_eq!(after_stop.kind(), crate::LifecycleEventType::AfterStop);
     }

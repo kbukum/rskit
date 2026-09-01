@@ -1,0 +1,9 @@
+{
+  "type": "progress",
+  "task_id": "00000000-0000-0000-0000-000000000001",
+  "worker_id": "w1",
+  "progress": {
+    "current": 5
+  },
+  "timestamp": "2026-01-01T00:00:00Z"
+}

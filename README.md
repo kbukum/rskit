@@ -10,7 +10,7 @@
 
 > **Status — pre-1.0.** Crates are versioned independently per crate. Breaking changes are allowed before `1.0`, documented in [`CHANGELOG.md`](CHANGELOG.md), and governed by [`docs/policy/SEMVER.md`](docs/policy/SEMVER.md). MSRV bumps are minor version changes during `0.x`.
 
-> **Sibling projects.** [**gokit**](https://github.com/kbukum/gokit) (Go) · rskit (Rust, this repo) · [**pykit**](https://github.com/kbukum/pykit) (Python). Public abstractions (`AppError`, `Component`, `Provider`, `Pipeline`, lifecycle hooks) are evaluated for parity across all three.
+> **Sibling project.** [**gokit**](https://github.com/kbukum/gokit) (Go) · rskit (Rust, this repo). Public abstractions (`AppError`, `Component`, `Provider`, `Pipeline`, lifecycle hooks) are evaluated for parity across both.
 
 > **Tooling requirements.** Rust uses the pinned workspace toolchain/MSRV, and repository automation is invoked through `scripts/rskit_tool.py`, which requires Python 3.11+.
 
@@ -51,8 +51,7 @@ CI runs the full workspace; on pull requests the `changes` job publishes an `aff
   bulkhead — all available as `tower::Layer`.
 - **Typed errors** — `ErrorCode` enum (exhaustive match), RFC 9457 problem details,
   and lightweight HTTP status metadata; gRPC mapping lives in `rskit-grpc`.
-- **Sibling parity** — APIs mirror [gokit](https://github.com/kbukum/gokit) (Go)
-  and [pykit](https://github.com/kbukum/pykit) (Python).
+- **Sibling parity** — APIs mirror [gokit](https://github.com/kbukum/gokit) (Go).
   See [`docs/DESIGN.md`](docs/DESIGN.md) for cross-language design notes.
 
 ## Install

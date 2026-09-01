@@ -6,10 +6,14 @@ use rskit_hook::{Event, EventType};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum LifecycleEventType {
+    /// Emitted once during startup before any component or start hook runs.
+    Configure,
     /// Emitted before components start.
     BeforeStart,
     /// Emitted after components start and readiness checks pass.
     AfterStart,
+    /// Emitted once during startup after the application is fully started and ready.
+    Ready,
     /// Emitted before components stop.
     BeforeStop,
     /// Emitted after components stop.
@@ -21,8 +25,10 @@ impl LifecycleEventType {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
+            Self::Configure => "bootstrap:configure",
             Self::BeforeStart => "bootstrap:before_start",
             Self::AfterStart => "bootstrap:after_start",
+            Self::Ready => "bootstrap:ready",
             Self::BeforeStop => "bootstrap:before_stop",
             Self::AfterStop => "bootstrap:after_stop",
         }
@@ -64,6 +70,10 @@ mod tests {
     #[test]
     fn lifecycle_event_types_expose_stable_labels_and_event_types() {
         assert_eq!(
+            LifecycleEventType::Configure.as_str(),
+            "bootstrap:configure"
+        );
+        assert_eq!(
             LifecycleEventType::BeforeStart.as_str(),
             "bootstrap:before_start"
         );
@@ -71,6 +81,7 @@ mod tests {
             LifecycleEventType::AfterStart.as_str(),
             "bootstrap:after_start"
         );
+        assert_eq!(LifecycleEventType::Ready.as_str(), "bootstrap:ready");
         assert_eq!(
             LifecycleEventType::BeforeStop.as_str(),
             "bootstrap:before_stop"

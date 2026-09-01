@@ -6,7 +6,7 @@
 
 ## Context
 
-rskit is a split Cargo workspace family with 70+ publishable crates across `core/` and `contrib/`. Without an enforced layering rule, foundation crates (e.g. `rskit-errors`) could accidentally depend on higher layers (e.g. `rskit-server`), creating cycles, slow rebuilds, and undermining the modular distribution model. The sibling repos ([`gokit`](https://github.com/kbukum/gokit), [`pykit`](https://github.com/kbukum/pykit)) enforce the same multi-tier layering model with language-native linters (`depguard`/`import-linter`).
+rskit is a split Cargo workspace family with 70+ publishable crates across `core/` and `contrib/`. Without an enforced layering rule, foundation crates (e.g. `rskit-errors`) could accidentally depend on higher layers (e.g. `rskit-server`), creating cycles, slow rebuilds, and undermining the modular distribution model. The sibling repo ([`gokit`](https://github.com/kbukum/gokit)) enforces the same multi-tier layering model with a language-native linter (`depguard`).
 
 We need a stable rule that engineers can apply without case-by-case debate, enforced automatically.
 
@@ -38,7 +38,7 @@ The layer contract is enforced via:
 - Domain-free primitives shared across layers belong in `rskit-util`, which remains the L0 utility crate and must not depend on internal `rskit-*` crates.
 - Cross-layer wiring lives in `rskit-bootstrap` and `rskit-di`; foundation crates remain independently testable and reusable.
 - A small upfront cost: foundation crates duplicate single-method traits (e.g. `worker::Broadcaster`) instead of importing concrete transport types. This is a deliberate tradeoff for layering isolation.
-- Sibling parity: the same layering decision exists in [`gokit/docs/adr/0001`](https://github.com/kbukum/gokit/blob/main/docs/adr/0001-three-tier-layering.md) and [`pykit/docs/adr/0001`](https://github.com/kbukum/pykit/blob/main/docs/adr/0001-layered-package-architecture.md); changes here should be evaluated for both.
+- Sibling parity: the same layering decision exists in [`gokit/docs/adr/0001`](https://github.com/kbukum/gokit/blob/main/docs/adr/0001-three-tier-layering.md); changes here should be evaluated for it.
 
 ## Alternatives considered
 

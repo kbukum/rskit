@@ -1,0 +1,9 @@
+{
+  "name": "ingest",
+  "size": 8,
+  "queue_size": 256,
+  "event_buffer": 64,
+  "grace_period": "3601s",
+  "dispatch": "round_robin",
+  "overflow": "reject"
+}

@@ -1,8 +1,10 @@
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Kind of event emitted by a worker during task execution.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum EventKind {
     /// Periodic progress update with completion percentage.
@@ -18,15 +20,18 @@ pub enum EventKind {
 }
 
 /// Progress information for a long-running task.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Progress {
     /// Number of units completed so far.
     pub current: u64,
     /// Total number of units, if known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub total: Option<u64>,
-    /// Completion percentage derived from `current / total`, if `total` is known.
+    /// Completion percentage on a 0–100 scale, derived from `current / total`, if `total` is known.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub percent: Option<f32>,
     /// Optional human-readable status message.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 }
 
@@ -57,19 +62,23 @@ impl Progress {
 }
 
 /// Event emitted by a worker task on the event channel.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Event<O: Clone> {
     /// The kind of this event.
+    #[serde(rename = "type")]
     pub kind: EventKind,
-    /// Identifier of the task that produced this event.
+    /// Identifier of the task that produced this event, serialized as a string UUID.
     pub task_id: Uuid,
     /// Identifier of the worker that produced this event.
     pub worker_id: String,
     /// Progress snapshot, present for `EventKind::Progress` events.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub progress: Option<Progress>,
     /// Task output payload, present for `Partial` and `Result` events.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub data: Option<O>,
     /// Error or log message, present for `Error` and `Log` events.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     /// Wall-clock time at which the event was created.
     pub timestamp: DateTime<Utc>,
@@ -139,5 +148,86 @@ impl<O: Clone> Event<O> {
             error: Some(err.into()),
             timestamp: Utc::now(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fixed_event(progress: Progress) -> Event<serde_json::Value> {
+        Event {
+            kind: EventKind::Progress,
+            task_id: Uuid::parse_str("00000000-0000-0000-0000-000000000001").unwrap(),
+            worker_id: "w1".to_string(),
+            progress: Some(progress),
+            data: None,
+            error: None,
+            timestamp: DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
+                .unwrap()
+                .with_timezone(&Utc),
+        }
+    }
+
+    #[test]
+    fn progress_uses_0_to_100_percent_scale() {
+        assert_eq!(Progress::new(5, Some(10)).percent, Some(50.0));
+        assert_eq!(Progress::new(0, Some(0)).percent, Some(100.0));
+        assert_eq!(Progress::new(3, None).percent, None);
+    }
+
+    #[test]
+    fn event_kind_serializes_as_snake_case_type_field() {
+        assert_eq!(
+            serde_json::to_value(EventKind::Progress).unwrap(),
+            serde_json::json!("progress")
+        );
+        assert_eq!(
+            serde_json::to_value(EventKind::Result).unwrap(),
+            serde_json::json!("result")
+        );
+        let event = fixed_event(Progress::new(1, Some(2)));
+        assert_eq!(
+            serde_json::to_value(&event).unwrap()["type"],
+            serde_json::json!("progress")
+        );
+    }
+
+    #[test]
+    fn progress_event_matches_cross_kit_golden_json() {
+        let event = fixed_event(Progress::new(5, Some(10)));
+        let actual = serde_json::to_string_pretty(&event).unwrap();
+        let expected = include_str!("../tests/fixtures/cross-kit/worker/progress-event.json");
+        assert_eq!(format!("{actual}\n"), expected);
+
+        let decoded: Event<serde_json::Value> = serde_json::from_str(expected).unwrap();
+        assert_eq!(decoded.kind, EventKind::Progress);
+        assert_eq!(decoded.task_id, event.task_id);
+        assert_eq!(decoded.progress.unwrap().percent, Some(50.0));
+    }
+
+    #[test]
+    fn unknown_total_omits_total_and_percent() {
+        let event = fixed_event(Progress::new(5, None));
+        let actual = serde_json::to_string_pretty(&event).unwrap();
+        let expected =
+            include_str!("../tests/fixtures/cross-kit/worker/progress-event-unknown-total.json");
+        assert_eq!(format!("{actual}\n"), expected);
+
+        let decoded: Event<serde_json::Value> = serde_json::from_str(expected).unwrap();
+        let progress = decoded.progress.unwrap();
+        assert_eq!(progress.current, 5);
+        assert!(progress.total.is_none());
+        assert!(progress.percent.is_none());
+    }
+
+    #[test]
+    fn task_id_serializes_as_string_uuid() {
+        let event = fixed_event(Progress::new(1, Some(2)));
+        let value = serde_json::to_value(&event).unwrap();
+        assert_eq!(
+            value["task_id"],
+            serde_json::json!("00000000-0000-0000-0000-000000000001")
+        );
     }
 }

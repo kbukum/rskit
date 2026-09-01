@@ -48,7 +48,7 @@ Conventions from `.github/copilot-instructions.md`: typed, minimal public API (n
 
 ## Step 5 — Parity awareness
 
-rskit is a sibling kit to gokit/pykit, and no kit is the canonical reference. If this capability should be tracked cross-kit, note it for the sibling repos (see the `sibling-parity` skill) — mirroring whichever kit is strongest in that scope — rather than assuming it stays rskit-only or that rskit always leads.
+rskit is a sibling kit to gokit, and no kit is the canonical reference. If this capability should be tracked cross-kit, note it for the sibling repo (see the `sibling-parity` skill) — mirroring whichever kit is strongest in that scope — rather than assuming it stays rskit-only or that rskit always leads.
 
 ## Step 6 — Validate
 

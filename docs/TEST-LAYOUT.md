@@ -1,6 +1,6 @@
 # Test layout
 
-The single source of truth for **where tests live** in rskit and **how they are organized**. It describes rskit as it already is, so the convention can be applied consistently as crates are hardened. This is the Rust-idiomatic sibling of gokit's `docs/TEST-LAYOUT.md` and pykit's equivalent: the same three tiers, expressed the Rust way.
+The single source of truth for **where tests live** in rskit and **how they are organized**. It describes rskit as it already is, so the convention can be applied consistently as crates are hardened. This is the Rust-idiomatic sibling of gokit's `docs/TEST-LAYOUT.md`: the same three tiers, expressed the Rust way.
 
 The reuse rule for shared test tooling — fakes, harnesses, golden helpers, assertions belong in `core/rskit-testutil`, never hand-rolled in a `#[cfg(test)]` block — is governed together with the production concern owners in [`CONCERN-OWNERS.md`](CONCERN-OWNERS.md). This document covers test placement only.
 

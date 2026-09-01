@@ -33,3 +33,4 @@ rskit-util = { workspace = true }
 tokio = { workspace = true, features = ["full", "test-util"] }
 parking_lot = { workspace = true }
 rskit-testutil = { workspace = true }
+serde_json = { workspace = true }

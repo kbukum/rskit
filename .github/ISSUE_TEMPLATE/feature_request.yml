@@ -46,9 +46,8 @@ body:
     attributes:
       label: Sibling parity
       description: |
-        rskit mirrors [gokit](https://github.com/kbukum/gokit) and
-        [pykit](https://github.com/kbukum/pykit). Does this feature already
-        exist in either sibling? Should it?
+        rskit mirrors [gokit](https://github.com/kbukum/gokit). Does this feature already
+        exist in the sibling? Should it?
 
   - type: checkboxes
     id: terms

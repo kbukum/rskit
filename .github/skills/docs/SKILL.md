@@ -21,7 +21,7 @@ The authoritative doc policy lives in the Documentation section of [`.github/cop
 
 Check every committed prose source, not just `docs/`:
 
-- `docs/**` — `DESIGN.md`, `PACKAGES.md`, `MODULE-INDEX.md`, `CONCERN-OWNERS.md`, `CONSUMER-CLASSES.md`, `EXAMPLES.md`, `VERSIONING*.md`, `RELEASING.md`, `security-model.md`, `PARITY-MATRIX.md`, the ADRs under `docs/adr/`, and dependency graphs under `docs/depgraphs/`.
+- `docs/**` — `DESIGN.md`, `PACKAGES.md`, `MODULE-INDEX.md`, `CONCERN-OWNERS.md`, `CONSUMER-CLASSES.md`, `EXAMPLES.md`, `VERSIONING*.md`, `RELEASING.md`, `security-model.md`, the ADRs under `docs/adr/`, and dependency graphs under `docs/depgraphs/`.
 - `README.md`, `CHANGELOG.md`, `MAINTAINERS.md`, and any top-level `*.md`.
 - `.github/skills/**/SKILL.md` and their `references/*.md`.
 - `///` rustdoc and `//` comments in the crates in scope (these are docs too).
@@ -44,7 +44,7 @@ Verify each doc against the code it describes; a doc that lies is worse than no 
 - **Commands & gates** match the `Makefile` (`make check`, `make lint C=<crate>`, `make test`, `make doc`, `make deny`, `make release-*`, `make check-topology`/`check-public-api`) — no renamed or removed target lingers in the docs.
 - **Crate & workspace structure** matches reality: the `core/`/`contrib/`/`examples/` split, the crate lists in `PACKAGES.md`/`MODULE-INDEX.md`, and facade wiring in the `rskit` umbrella crate match the tree; renamed/added/dropped crates are reflected everywhere they appear (including `CONCERN-OWNERS.md`).
 - **Canonical-owner claims** are accurate: `CONCERN-OWNERS.md` names the crate that actually owns each concern today.
-- **Parity matrix** is current: `PARITY-MATRIX.md` reflects what gokit/pykit currently mirror (see the `sibling-parity` skill).
+- **Parity tracking** is current: gokit parity is tracked through tracking issues in the gokit repo (see the `sibling-parity` skill).
 - **Examples run.** Code/command examples reflect current behavior; doctests compile under `make doc`.
 - **Links resolve.** Internal relative links and cross-references point at files that exist; other-repo references use full URLs, never bare `#123`.
 

@@ -62,7 +62,6 @@ value that is not a non-negative integer the build fails rather than silently us
 
 This crate mirrors the API of:
 - **gokit** — `version.VersionInfo` / `version.GetVersionInfo()`
-- **pykit** — `pykit_version.VersionInfo` / `pykit_version.get_version_info()`
 
 ---
 

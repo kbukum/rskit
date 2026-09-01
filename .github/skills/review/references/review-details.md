@@ -13,7 +13,7 @@ Mode is either **changes** (a diff: branch, commit range, `HEAD~1`) or **project
 ## Phase 1 — Scope
 
 1. `git status`, `git diff --stat`, `git diff` (changes mode) or `ls core contrib examples` + dependency map (project mode). Preserve uncommitted changes; integrate on top, never discard.
-2. List the scope to review: changed crates (changes mode) or chosen crates/workspace (project mode). Note cross-cutting touches: a core crate's public surface affects the `rskit` facade, the other core crates, every `contrib/` adapter, and downstream consumers (pykit/gokit parity, Toven). Also flag workspace-`Cargo.toml` edits, shared error types, public re-exports, `[lints]`.
+2. List the scope to review: changed crates (changes mode) or chosen crates/workspace (project mode). Note cross-cutting touches: a core crate's public surface affects the `rskit` facade, the other core crates, every `contrib/` adapter, and downstream consumers (gokit parity, Toven). Also flag workspace-`Cargo.toml` edits, shared error types, public re-exports, `[lints]`.
 3. Determine which passes apply via the triggers below. Skip non-applicable passes explicitly in the final report.
 
 The reviewer judges code as written, against the rules below and the baseline in [`.github/copilot-instructions.md`](../../../copilot-instructions.md). PR descriptions, commit messages, or plan/ADR docs are scope hints only — never justifications.

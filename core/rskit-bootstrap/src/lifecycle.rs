@@ -22,16 +22,20 @@ where
 
 #[derive(Default)]
 pub(crate) struct LifecycleHooks {
+    pub(crate) configure: Vec<AsyncHook>,
     pub(crate) before_start: Vec<AsyncHook>,
     pub(crate) after_start: Vec<AsyncHook>,
+    pub(crate) ready: Vec<AsyncHook>,
     pub(crate) before_stop: Vec<AsyncHook>,
     pub(crate) after_stop: Vec<AsyncHook>,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum LifecyclePhase {
+    Configure,
     BeforeStart,
     AfterStart,
+    Ready,
     BeforeStop,
     AfterStop,
 }
@@ -39,8 +43,10 @@ pub(crate) enum LifecyclePhase {
 impl LifecyclePhase {
     const fn label(self) -> &'static str {
         match self {
+            Self::Configure => "configure",
             Self::BeforeStart => "before_start",
             Self::AfterStart => "after_start",
+            Self::Ready => "ready",
             Self::BeforeStop => "before_stop",
             Self::AfterStop => "after_stop",
         }
@@ -48,15 +54,20 @@ impl LifecyclePhase {
 
     const fn event_type(self) -> LifecycleEventType {
         match self {
+            Self::Configure => LifecycleEventType::Configure,
             Self::BeforeStart => LifecycleEventType::BeforeStart,
             Self::AfterStart => LifecycleEventType::AfterStart,
+            Self::Ready => LifecycleEventType::Ready,
             Self::BeforeStop => LifecycleEventType::BeforeStop,
             Self::AfterStop => LifecycleEventType::AfterStop,
         }
     }
 
     const fn fail_when_cancelled(self) -> bool {
-        matches!(self, Self::BeforeStart | Self::AfterStart)
+        matches!(
+            self,
+            Self::Configure | Self::BeforeStart | Self::AfterStart | Self::Ready
+        )
     }
 }
 
@@ -108,14 +119,18 @@ mod tests {
 
     #[test]
     fn lifecycle_phase_metadata_covers_all_variants() {
+        assert_eq!(LifecyclePhase::Configure.label(), "configure");
         assert_eq!(LifecyclePhase::BeforeStart.label(), "before_start");
         assert_eq!(LifecyclePhase::AfterStart.label(), "after_start");
+        assert_eq!(LifecyclePhase::Ready.label(), "ready");
         assert_eq!(LifecyclePhase::BeforeStop.label(), "before_stop");
         assert_eq!(LifecyclePhase::AfterStop.label(), "after_stop");
         assert_eq!(
             LifecyclePhase::AfterStop.event_type(),
             LifecycleEventType::AfterStop
         );
+        assert!(LifecyclePhase::Configure.fail_when_cancelled());
+        assert!(LifecyclePhase::Ready.fail_when_cancelled());
         assert!(LifecyclePhase::BeforeStart.fail_when_cancelled());
         assert!(!LifecyclePhase::BeforeStop.fail_when_cancelled());
     }

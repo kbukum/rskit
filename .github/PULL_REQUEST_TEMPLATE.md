@@ -56,12 +56,12 @@ $ make test C=rskit-<name>
 
 ## Sibling Parity
 
-<!-- rskit mirrors gokit and pykit.
+<!-- rskit mirrors gokit.
 If this change touches a public abstraction (error codes, Component lifecycle, Provider, Pipeline, etc.),
 confirm parity or link the corresponding sibling issue. -->
 
 - [ ] Sibling-parity not required (internal change)
-- [ ] Sibling-parity tracked: gokit#___, pykit#___
+- [ ] Sibling-parity tracked: gokit#___
 
 ## Checklist
 

@@ -241,7 +241,7 @@ If `docs.rs` fails to build, investigate the build log on `https://docs.rs/crate
 
 - Post in the project's discussion / README "Latest" section.
 - Open a "post-release smoke test" issue against the next sprint milestone.
-- Notify sibling repos ([`gokit`](https://github.com/kbukum/gokit), [`pykit`](https://github.com/kbukum/pykit)) if any cross-sibling APIs changed.
+- Notify sibling repo ([`gokit`](https://github.com/kbukum/gokit)) if any cross-sibling APIs changed.
 
 ## Hotfix releases
 
