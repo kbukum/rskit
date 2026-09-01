@@ -1,6 +1,6 @@
 # Pass 07 — Comments and rustdoc
 
-Every comment and `///` doc earns its place by explaining the code as it exists now. This pass sweeps all prose in the source and rewrites or deletes anything that documents history, plans, or the author's process instead of the code. rskit is published API: its rustdoc is the contract downstream consumers (the facade, every `contrib/` adapter, pykit/gokit parity, Toven) read, so stale or narrative prose here ships to everyone.
+Every comment and `///` doc earns its place by explaining the code as it exists now. This pass sweeps all prose in the source and rewrites or deletes anything that documents history, plans, or the author's process instead of the code. rskit is published API: its rustdoc is the contract downstream consumers (the facade, every `contrib/` adapter, gokit parity, Toven) read, so stale or narrative prose here ships to everyone.
 
 > **Run in a separate, clean-context agent** — never inline in the session that wrote the code. An independent reader judges each comment against the code in front of it, with no memory of why it was written. A plan/spec may be passed in as a scope checklist only; it never excuses a baseline violation.
 

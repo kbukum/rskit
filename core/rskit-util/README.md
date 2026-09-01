@@ -119,4 +119,3 @@ assert_eq!(rendered, "hello rskit");
 This crate mirrors the utility modules in:
 
 - **gokit** — `github.com/kbukum/gokit/util`
-- **pykit** — `pykit-util` package

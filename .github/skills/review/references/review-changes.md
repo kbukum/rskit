@@ -13,7 +13,7 @@ Standing, re-runnable review of a **change set** in this repository — a branch
 ## Pass 0 — Scope and context
 
 - Get the actual diff: `git diff <base>...HEAD --stat`, then per file. Review only what changed plus its affected area; do not audit the whole repo (that is [`review-project.md`](./review-project.md)).
-- rskit is a foundation toolkit: a change to a core crate's public surface affects the facade, other core crates, `contrib/` adapters, and downstream repos (pykit/gokit parity, Toven). List the affected area before reviewing.
+- rskit is a foundation toolkit: a change to a core crate's public surface affects the facade, other core crates, `contrib/` adapters, and downstream repos (gokit parity, Toven). List the affected area before reviewing.
 - Note whether the change belongs in `core/`, `contrib/`, or `examples/`, and whether it belongs in *this* crate at all.
 
 ## Passes — run in order, stop early on a structural failure

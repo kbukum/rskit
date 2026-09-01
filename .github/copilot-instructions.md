@@ -1,7 +1,7 @@
 # rskit
 
 Rust infrastructure toolkit providing foundational crates for service development.
-Sibling kit to gokit (Go) and pykit (Python): aligned in capabilities and naming where
+Sibling kit to gokit (Go): aligned in capabilities and naming where
 idiomatic, no kit the canonical reference.
 
 ## Engineering principles

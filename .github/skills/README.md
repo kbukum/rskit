@@ -20,7 +20,7 @@ Each skill is a folder with a `SKILL.md` (YAML frontmatter + workflow) and optio
 | [`new-crate`](new-crate/SKILL.md) | Scaffold a new crate — core vs contrib placement, workspace Cargo.toml, `#![warn(missing_docs)]`, facade wiring. |
 | [`new-backend`](new-backend/SKILL.md) | Add a storage/cache/messaging/inference/llm/media/vectorstore adapter as a typed-registration contrib crate. |
 | [`release`](release/SKILL.md) | Cut a release — semver bump, CHANGELOG, per-crate bumps, full gates, crates.io publish in dependency order. |
-| [`sibling-parity`](sibling-parity/SKILL.md) | Keep rskit aligned with gokit/pykit — mirror whichever kit is strongest per capability, propagate both ways, keep the parity matrix accurate. |
+| [`sibling-parity`](sibling-parity/SKILL.md) | Keep rskit aligned with gokit — mirror whichever kit is strongest per capability, propagate both ways, track parity through gokit tracking issues. |
 | [`docs`](docs/SKILL.md) | Review/update docs to the repo's standards (flowing paragraphs without hard column wrapping) and keep them up to date (commands, crate structure, examples match the code). |
 
 ## Conventions

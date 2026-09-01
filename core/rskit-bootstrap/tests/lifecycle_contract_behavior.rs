@@ -96,11 +96,19 @@ async fn app_builder_exposes_config_container_token_and_lifecycle_events() {
 
     assert_eq!(
         events.recv().await.unwrap().kind(),
+        LifecycleEventType::Configure
+    );
+    assert_eq!(
+        events.recv().await.unwrap().kind(),
         LifecycleEventType::BeforeStart
     );
     assert_eq!(
         events.recv().await.unwrap().kind(),
         LifecycleEventType::AfterStart
+    );
+    assert_eq!(
+        events.recv().await.unwrap().kind(),
+        LifecycleEventType::Ready
     );
     assert_eq!(
         events.recv().await.unwrap().kind(),
@@ -143,6 +151,10 @@ async fn custom_container_and_lifecycle_bus_are_used_and_after_start_failure_rol
     assert_eq!(stops.load(Ordering::SeqCst), 1);
     assert_eq!(
         events.recv().await.unwrap().kind(),
+        LifecycleEventType::Configure
+    );
+    assert_eq!(
+        events.recv().await.unwrap().kind(),
         LifecycleEventType::BeforeStart
     );
     assert_eq!(
@@ -153,6 +165,44 @@ async fn custom_container_and_lifecycle_bus_are_used_and_after_start_failure_rol
         events.recv().await.unwrap().kind(),
         LifecycleEventType::BeforeStop
     );
+}
+
+#[tokio::test]
+async fn ready_hook_failure_rolls_back_startup_and_stops_components() {
+    let starts = Arc::new(AtomicUsize::new(0));
+    let stops = Arc::new(AtomicUsize::new(0));
+    let before_stop = Arc::new(AtomicUsize::new(0));
+    let hook_count = Arc::clone(&before_stop);
+
+    let app = AppBuilder::new(TestConfig::default())
+        .with_component(Arc::new(CountingComponent {
+            starts: Arc::clone(&starts),
+            stops: Arc::clone(&stops),
+            healthy: true,
+        }))
+        .before_stop(move |_| {
+            let hook_count = Arc::clone(&hook_count);
+            async move {
+                hook_count.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            }
+        })
+        .ready(|_| async { Err::<(), _>(AppError::new(ErrorCode::Internal, "ready failed")) })
+        .build()
+        .unwrap();
+
+    let error = match app.start().await {
+        Ok(_) => panic!("ready hook failure should fail startup"),
+        Err(error) => error,
+    };
+
+    // The ready hook runs after components start, so rollback must stop the started components
+    // and run the stop hooks, surfacing the contextualized error.
+    assert!(error.to_string().contains("ready hooks failed"));
+    assert!(error.to_string().contains("ready failed"));
+    assert_eq!(starts.load(Ordering::SeqCst), 1);
+    assert_eq!(stops.load(Ordering::SeqCst), 1);
+    assert_eq!(before_stop.load(Ordering::SeqCst), 1);
 }
 
 #[tokio::test]
@@ -208,6 +258,10 @@ async fn unhealthy_component_rolls_back_startup_and_runs_stop_hooks() {
 #[test]
 fn lifecycle_event_metadata_is_stable() {
     assert_eq!(
+        LifecycleEventType::Configure.as_str(),
+        "bootstrap:configure"
+    );
+    assert_eq!(
         LifecycleEventType::BeforeStart.as_str(),
         "bootstrap:before_start"
     );
@@ -215,6 +269,7 @@ fn lifecycle_event_metadata_is_stable() {
         LifecycleEventType::AfterStart.as_str(),
         "bootstrap:after_start"
     );
+    assert_eq!(LifecycleEventType::Ready.as_str(), "bootstrap:ready");
     assert_eq!(
         LifecycleEventType::BeforeStop.as_str(),
         "bootstrap:before_stop"

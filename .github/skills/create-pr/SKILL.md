@@ -34,7 +34,7 @@ git diff origin/main...HEAD --stat
 git diff origin/main...HEAD            # skim for the shape of the change, not to transcribe it
 ```
 
-Answer, in your head: what capability/fix/refactor is this, which crates it touches, what a reviewer must understand to judge it, and whether it changes a public abstraction (error codes, `Component` lifecycle, `Provider`/stream shapes, typestate `App<S, C>`) that the sibling kits (gokit/pykit) mirror.
+Answer, in your head: what capability/fix/refactor is this, which crates it touches, what a reviewer must understand to judge it, and whether it changes a public abstraction (error codes, `Component` lifecycle, `Provider`/stream shapes, typestate `App<S, C>`) that the sibling kit (gokit) mirrors.
 
 ## 3. Write the description — high level, organized, simplified
 
@@ -47,7 +47,7 @@ Fill every section of [`../../PULL_REQUEST_TEMPLATE.md`](../../PULL_REQUEST_TEMP
 - **Changes Made** — a short, grouped bullet list of the *key* changes by concern (e.g. "typed registry factory", "in-memory default kept in core"), not one bullet per file and not a commit log.
 - **Testing** — check only the gates you actually ran; scope to affected crates. These map to `make`/`cargo` (see the `validate` skill): `make test C=<crate>`, `make lint C=<crate>`, `make test-affected`. Paste real evidence if useful; don't fabricate output.
 - **Breaking Changes** — pre-stable, describe the redesign, not a migration shim.
-- **Sibling Parity** — no kit is the canonical reference; if a public abstraction changed, note whether gokit/pykit need to mirror it (or whether rskit should adopt a stronger sibling version) and link the sibling item as a full URL; otherwise mark parity-not-required.
+- **Sibling Parity** — no kit is the canonical reference; if a public abstraction changed, note whether gokit needs to mirror it (or whether rskit should adopt a stronger sibling version) and link the sibling item as a full URL; otherwise mark parity-not-required.
 - **Checklist** — tick only what is genuinely true. An unchecked box is honest signal; a falsely checked one wastes reviewer trust. Do not narrate prior bugs or how they were fixed — describe the change as it stands.
 
 Keep prose tight: no process narration, no "previously we…", no restating the diff. Explain the *current* state and the decisions a reviewer needs.

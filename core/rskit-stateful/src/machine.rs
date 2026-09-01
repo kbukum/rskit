@@ -1,9 +1,9 @@
+use chrono::{DateTime, Utc};
 use parking_lot::Mutex;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::sync::Arc;
-use std::time::SystemTime;
 
 /// Marker trait for states managed by [`StateMachine`].
 pub trait State: Clone + Send + Sync + 'static {}
@@ -75,7 +75,7 @@ where
 }
 
 /// Point-in-time state snapshot.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct StateSnapshot<S> {
     /// Current state.
     pub state: S,
@@ -84,7 +84,7 @@ pub struct StateSnapshot<S> {
 }
 
 /// Audit record emitted for each successful transition.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct AuditEntry<S, C> {
     /// Transition name.
     pub transition: String,
@@ -96,8 +96,8 @@ pub struct AuditEntry<S, C> {
     pub context: C,
     /// Version after the transition.
     pub version: u64,
-    /// Wall-clock time when the transition was applied.
-    pub recorded_at: SystemTime,
+    /// Wall-clock time when the transition was applied, serialized as an RFC 3339 string.
+    pub recorded_at: DateTime<Utc>,
 }
 
 /// Persistence hook for snapshots and audit entries.
@@ -217,7 +217,7 @@ where
             to: to.clone(),
             context,
             version: snapshot.version,
-            recorded_at: SystemTime::now(),
+            recorded_at: Utc::now(),
         };
 
         for persistence in &self.persistence {
@@ -236,7 +236,7 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
-    #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+    #[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
     enum OrderState {
         Draft,
         Submitted,
@@ -320,6 +320,40 @@ mod tests {
         assert_eq!(machine.state(), OrderState::Draft);
         assert_eq!(machine.snapshot().version, 0);
         assert!(machine.audit_log().is_empty());
+    }
+
+    #[test]
+    fn snapshot_and_audit_round_trip_through_serde() {
+        let snapshot = StateSnapshot {
+            state: OrderState::Submitted,
+            version: 3,
+        };
+        let json = serde_json::to_string(&snapshot).unwrap();
+        let restored: StateSnapshot<OrderState> = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.state, OrderState::Submitted);
+        assert_eq!(restored.version, 3);
+
+        let audit = AuditEntry {
+            transition: "submit".into(),
+            from: OrderState::Draft,
+            to: OrderState::Submitted,
+            context: true,
+            version: 3,
+            recorded_at: DateTime::from_timestamp(1_700_000_000, 0).unwrap(),
+        };
+        let json = serde_json::to_string(&audit).unwrap();
+        // Lock the snake_case fields and RFC 3339 timestamp shared with the sibling kits.
+        assert_eq!(
+            json,
+            r#"{"transition":"submit","from":"Draft","to":"Submitted","context":true,"version":3,"recorded_at":"2023-11-14T22:13:20Z"}"#
+        );
+        let restored: AuditEntry<OrderState, bool> = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.transition, "submit");
+        assert_eq!(restored.from, OrderState::Draft);
+        assert_eq!(restored.to, OrderState::Submitted);
+        assert!(restored.context);
+        assert_eq!(restored.version, 3);
+        assert_eq!(restored.recorded_at, audit.recorded_at);
     }
 
     #[test]

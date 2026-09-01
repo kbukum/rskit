@@ -14,6 +14,8 @@ pub mod manager;
 pub mod measurer;
 /// In-memory store implementation.
 pub mod memory_store;
+/// Serde-loadable accumulator settings.
+pub mod settings;
 /// Store trait for pluggable backends.
 pub mod store;
 /// Shared test doubles for accumulator and manager tests.
@@ -28,5 +30,6 @@ pub use machine::{AuditEntry, State, StateMachine, StatePersistence, StateSnapsh
 pub use manager::{CleanupReport, Manager};
 pub use measurer::{ByteSizeMeasurer, CountMeasurer, Measurer};
 pub use memory_store::MemoryStore;
+pub use settings::{AccumulatorSettings, TriggerSpec};
 pub use store::Store;
 pub use trigger::{ByteSizeTrigger, SizeTrigger, TimeTrigger, Trigger};

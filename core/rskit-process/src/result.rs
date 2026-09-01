@@ -182,4 +182,15 @@ mod tests {
         );
         assert!(!result(Some(2), false, false).success());
     }
+
+    #[test]
+    fn cancelled_process_surfaces_canceled_wire_spelling() {
+        let error = result(Some(0), false, true).check().unwrap_err();
+        assert_eq!(error.code(), ErrorCode::Cancelled);
+        assert_eq!(error.code().as_str(), "CANCELED");
+        assert_eq!(
+            serde_json::to_string(&error.code()).unwrap(),
+            r#""CANCELED""#
+        );
+    }
 }

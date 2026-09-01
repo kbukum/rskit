@@ -43,8 +43,7 @@ Maintainers are expected to:
 - Triage issues and security reports (see [SECURITY.md](SECURITY.md)).
 - Cut releases following the process documented in [docs/RELEASING.md](docs/RELEASING.md).
 - Uphold the [Code of Conduct](CODE_OF_CONDUCT.md).
-- Maintain sibling parity with [`gokit`](https://github.com/kbukum/gokit)
-  and [`pykit`](https://github.com/kbukum/pykit).
+- Maintain sibling parity with [`gokit`](https://github.com/kbukum/gokit).
 
 ## Becoming Inactive / Stepping Down
 

@@ -11,13 +11,12 @@ See [CHANGELOG.md](CHANGELOG.md) for the full breaking-change history.
 
 ## Sibling-Parity Contract
 
-rskit is part of a sibling trio that intentionally mirrors module structure, naming, and patterns:
+rskit is part of a sibling pair that intentionally mirrors module structure, naming, and patterns:
 
 - [`kbukum/gokit`](https://github.com/kbukum/gokit) — Go
 - [`kbukum/rskit`](https://github.com/kbukum/rskit) — Rust (this repo)
-- [`kbukum/pykit`](https://github.com/kbukum/pykit) — Python
 
-When a public abstraction (`AppError`, `Component`, `Provider`, `Pipeline`, lifecycle hooks, error codes, configuration semantics) is changed in one sibling, the same change should be evaluated for the other two. Drift is treated as a finding and tracked in cross-sibling issues.
+When a public abstraction (`AppError`, `Component`, `Provider`, `Pipeline`, lifecycle hooks, error codes, configuration semantics) is changed in one sibling, the same change should be evaluated for the other. Drift is treated as a finding and tracked in cross-sibling issues.
 
 ## Roles
 

@@ -10,6 +10,3 @@ contact_links:
   - name: Sibling project — gokit (Go)
     url: https://github.com/kbukum/gokit/issues
     about: For issues specific to the Go sibling.
-  - name: Sibling project — pykit (Python)
-    url: https://github.com/kbukum/pykit/issues
-    about: For issues specific to the Python sibling.
