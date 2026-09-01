@@ -196,7 +196,7 @@ impl<T: Send + Sync + Clone + 'static> ManagedConsumerBuilder<T> {
                     std::time::Duration::from_millis(500),
                     std::time::Duration::from_secs(5),
                 ))
-                .with_jitter(false),
+                .with_jitter(0.0),
             name: name.into(),
         }
     }

@@ -14,6 +14,14 @@ pub type BoxStream<O> = Pin<Box<dyn FuturesStream<Item = AppResult<O>> + Send + 
 pub trait Provider: Send + Sync {
     /// Stable name identifying this provider instance (used in logs and spans).
     fn name(&self) -> &'static str;
+
+    /// Whether this provider is currently ready to handle requests.
+    ///
+    /// Defaults to `true`. Registry resolution skips providers that report `false`,
+    /// so an unavailable provider is passed over in favor of the next eligible binding.
+    fn is_available(&self) -> bool {
+        true
+    }
 }
 
 // ─── Interaction patterns ─────────────────────────────────────────────────────

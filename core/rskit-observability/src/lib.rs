@@ -25,9 +25,12 @@ pub use attribute::{
     set_current_span_attribute, set_span_attribute,
 };
 pub use context::OperationContext;
-pub use health::{ComponentHealth, HealthStatus, ServiceHealth};
+pub use health::{ComponentHealth, HealthStatus, ServiceHealth, ServiceHealthReport};
 pub use logs::{LogsConfig, LogsHandle, init_logs};
-pub use metrics::{MetricsConfig, MetricsHandle, init_metrics, init_metrics_with_protocol};
+pub use metrics::{
+    Metrics, MetricsConfig, MetricsHandle, OperationMetric, RequestMetric, init_metrics,
+    init_metrics_with_protocol, metric_attr, metric_name,
+};
 pub use propagation::{extract_trace_context, inject_trace_context};
 pub use tracer::{
     OtlpProtocol, SERVICE_NAME, TracerGuard, TracingConfig, set_operation_attributes,

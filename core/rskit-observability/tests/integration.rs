@@ -8,12 +8,12 @@ use rskit_observability::{LogsConfig, MetricsConfig, OtlpProtocol, TracingConfig
 fn tracing_config_construction() {
     let cfg = TracingConfig {
         service_name: "my-service".into(),
-        endpoint: "http://localhost:4317".into(),
+        endpoint: "http://localhost:4318".into(),
         sample_rate: 0.5,
         export_timeout: Duration::from_secs(10),
     };
     assert_eq!(cfg.service_name, "my-service");
-    assert_eq!(cfg.endpoint, "http://localhost:4317");
+    assert_eq!(cfg.endpoint, "http://localhost:4318");
     assert!((cfg.sample_rate - 0.5).abs() < f64::EPSILON);
     assert_eq!(cfg.export_timeout, Duration::from_secs(10));
 }
@@ -22,7 +22,7 @@ fn tracing_config_construction() {
 fn tracing_config_full_sample_rate() {
     let cfg = TracingConfig {
         service_name: "svc".into(),
-        endpoint: "http://collector:4317".into(),
+        endpoint: "http://collector:4318".into(),
         sample_rate: 1.0,
         export_timeout: Duration::from_secs(5),
     };
@@ -36,11 +36,11 @@ fn metrics_config_construction() {
     let cfg = MetricsConfig {
         service_name: "my-service".into(),
         export_interval: Duration::from_secs(15),
-        otlp_endpoint: Some("http://localhost:4317".into()),
+        otlp_endpoint: Some("http://localhost:4318".into()),
     };
     assert_eq!(cfg.service_name, "my-service");
     assert_eq!(cfg.export_interval, Duration::from_secs(15));
-    assert_eq!(cfg.otlp_endpoint.as_deref(), Some("http://localhost:4317"));
+    assert_eq!(cfg.otlp_endpoint.as_deref(), Some("http://localhost:4318"));
 }
 
 #[test]
@@ -103,7 +103,7 @@ fn extract_trace_context_with_traceparent() {
 async fn tracer_provider_with_valid_endpoint() {
     let cfg = TracingConfig {
         service_name: "test-svc".into(),
-        endpoint: "http://localhost:4317".into(),
+        endpoint: "http://localhost:4318".into(),
         sample_rate: 1.0,
         export_timeout: Duration::from_secs(5),
     };
@@ -115,7 +115,7 @@ async fn tracer_provider_with_valid_endpoint() {
 async fn tracer_provider_is_idempotent() {
     let cfg = TracingConfig {
         service_name: "test-svc".into(),
-        endpoint: "http://localhost:4317".into(),
+        endpoint: "http://localhost:4318".into(),
         sample_rate: 1.0,
         export_timeout: Duration::from_secs(5),
     };
@@ -129,7 +129,7 @@ async fn init_metrics_with_endpoint() {
     let cfg = MetricsConfig {
         service_name: "test-svc".into(),
         export_interval: Duration::from_secs(15),
-        otlp_endpoint: Some("http://localhost:4317".into()),
+        otlp_endpoint: Some("http://localhost:4318".into()),
     };
     let handle = rskit_observability::init_metrics(&cfg).unwrap();
     let counter = handle.counter("test_counter", "a test counter");

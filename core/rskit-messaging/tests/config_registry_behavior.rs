@@ -185,7 +185,7 @@ async fn managed_component_builders_preserve_names_and_custom_backoff() {
             Duration::from_millis(1),
             Duration::from_millis(5),
         ))
-        .with_jitter(false);
+        .with_jitter(0.0);
     let consumer = ManagedConsumerBuilder::new("consumer-a", Arc::new(broker.consumer()), handler)
         .with_recv_backoff(backoff)
         .build();

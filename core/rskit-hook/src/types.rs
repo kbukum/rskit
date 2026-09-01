@@ -11,10 +11,19 @@ use std::fmt;
 pub struct EventType(String);
 
 impl EventType {
+    /// The canonical event type emitted when a non-fatal hook handler returns an error.
+    pub const ON_ERROR: &'static str = "on_error";
+
     /// Create a new event type from any string-like value.
     #[must_use]
     pub fn new(name: impl Into<String>) -> Self {
         Self(name.into())
+    }
+
+    /// The canonical [`EventType`] for non-fatal hook handler errors.
+    #[must_use]
+    pub fn on_error() -> Self {
+        Self::new(Self::ON_ERROR)
     }
 
     /// Return the inner string slice.
@@ -77,6 +86,57 @@ impl HookError {
     pub fn message(&self) -> &str {
         &self.message
     }
+
+    /// Combine two hook errors into a single aggregate error.
+    ///
+    /// Messages are joined with `; ` and the result is fatal if either input is fatal.
+    /// Used to accumulate every non-fatal error raised during a single emit.
+    #[must_use]
+    pub fn join(self, other: HookError) -> HookError {
+        let message = format!("{}; {}", self.message, other.message);
+        HookError {
+            message,
+            fatal: self.fatal || other.fatal,
+        }
+    }
+}
+
+/// A non-fatal hook handler error, re-emitted as an observation to `on_error` handlers.
+///
+/// Mirrors the aggregation contract shared with the sibling kits: whenever a handler for some
+/// event returns a non-fatal error, the registry emits an [`ErrorEvent`] carrying the failing
+/// error and the [`EventType`] that produced it to any handlers registered for
+/// [`EventType::on_error`].
+#[derive(Debug, Clone)]
+pub struct ErrorEvent {
+    error: HookError,
+    source: EventType,
+}
+
+impl ErrorEvent {
+    /// Create an error event for `error` produced while dispatching `source`.
+    #[must_use]
+    pub fn new(error: HookError, source: EventType) -> Self {
+        Self { error, source }
+    }
+
+    /// The non-fatal error that was raised.
+    #[must_use]
+    pub fn error(&self) -> &HookError {
+        &self.error
+    }
+
+    /// The event type that produced the error.
+    #[must_use]
+    pub fn source(&self) -> &EventType {
+        &self.source
+    }
+}
+
+impl Event for ErrorEvent {
+    fn event_type(&self) -> EventType {
+        EventType::on_error()
+    }
 }
 
 impl fmt::Display for HookError {
@@ -92,7 +152,7 @@ pub type HookResult = Result<(), HookError>;
 
 #[cfg(test)]
 mod tests {
-    use super::{Event, EventType, HookError, HookResult};
+    use super::{ErrorEvent, Event, EventType, HookError, HookResult};
 
     struct Ping {
         count: u32,
@@ -128,5 +188,24 @@ mod tests {
         let err = HookError::fatal("budget exceeded");
         assert!(err.is_fatal());
         assert_eq!(err.message(), "budget exceeded");
+    }
+
+    #[test]
+    fn hook_error_join_combines_messages_and_fatality() {
+        let joined = HookError::new("first").join(HookError::new("second"));
+        assert_eq!(joined.message(), "first; second");
+        assert!(!joined.is_fatal());
+
+        let with_fatal = HookError::new("warn").join(HookError::fatal("stop"));
+        assert!(with_fatal.is_fatal());
+        assert_eq!(with_fatal.message(), "warn; stop");
+    }
+
+    #[test]
+    fn error_event_carries_source_and_error() {
+        let event = ErrorEvent::new(HookError::new("boom"), EventType::new("ping"));
+        assert_eq!(event.event_type(), EventType::on_error());
+        assert_eq!(event.source(), &EventType::new("ping"));
+        assert_eq!(event.error().message(), "boom");
     }
 }

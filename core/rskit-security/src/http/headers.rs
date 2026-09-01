@@ -1,5 +1,7 @@
 //! Secure-by-default HTTP response header policy.
 
+use std::time::Duration;
+
 use http::{
     HeaderName, HeaderValue,
     header::{
@@ -9,12 +11,17 @@ use http::{
 };
 use rskit_errors::{AppError, AppResult};
 
-const HSTS_HEADER_VALUE: &str = "max-age=63072000; includeSubDomains; preload";
+/// Default HSTS `max-age`: two years, matching the shared cross-kit policy.
+///
+/// Expressed in seconds because the larger-unit `Duration` constructors are not yet stable at
+/// the workspace MSRV.
+#[allow(clippy::duration_suboptimal_units)]
+const DEFAULT_HSTS_MAX_AGE: Duration = Duration::from_secs(2 * 365 * 24 * 60 * 60);
 const CSP_HEADER_VALUE: &str =
     "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'";
 const PERMISSIONS_POLICY: HeaderName = HeaderName::from_static("permissions-policy");
 const REFERRER_POLICY_VALUE: &str = "strict-origin-when-cross-origin";
-const PERMISSIONS_POLICY_VALUE: &str = "accelerometer=(), camera=(), geolocation=(), microphone=()";
+const PERMISSIONS_POLICY_VALUE: &str = "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()";
 const X_CONTENT_TYPE_OPTIONS_VALUE: &str = "nosniff";
 const X_FRAME_OPTIONS_VALUE: &str = "DENY";
 
@@ -33,6 +40,9 @@ pub enum TransportSecurity {
 #[derive(Debug, Clone)]
 pub struct SecurityHeadersConfig {
     transport_security: TransportSecurity,
+    hsts_max_age: Duration,
+    hsts_include_subdomains: bool,
+    hsts_preload: bool,
     content_security_policy: Option<String>,
     permissions_policy: Option<String>,
     referrer_policy: Option<String>,
@@ -44,6 +54,9 @@ impl Default for SecurityHeadersConfig {
     fn default() -> Self {
         Self {
             transport_security: TransportSecurity::HttpsOnly,
+            hsts_max_age: DEFAULT_HSTS_MAX_AGE,
+            hsts_include_subdomains: true,
+            hsts_preload: true,
             content_security_policy: Some(CSP_HEADER_VALUE.to_string()),
             permissions_policy: Some(PERMISSIONS_POLICY_VALUE.to_string()),
             referrer_policy: Some(REFERRER_POLICY_VALUE.to_string()),
@@ -81,6 +94,30 @@ impl SecurityHeadersConfig {
     #[must_use]
     pub const fn with_transport_security(mut self, transport_security: TransportSecurity) -> Self {
         self.transport_security = transport_security;
+        self
+    }
+
+    /// Override the HSTS `max-age`. Applies only in [`TransportSecurity::HttpsOnly`] mode.
+    #[must_use]
+    pub const fn with_hsts_max_age(mut self, max_age: Duration) -> Self {
+        self.hsts_max_age = max_age;
+        self
+    }
+
+    /// Toggle the HSTS `includeSubDomains` directive (enabled by default).
+    #[must_use]
+    pub const fn with_hsts_include_subdomains(mut self, enabled: bool) -> Self {
+        self.hsts_include_subdomains = enabled;
+        self
+    }
+
+    /// Toggle the HSTS `preload` directive (enabled by default).
+    ///
+    /// Disable it for short `max-age` policies: the HSTS preload list requires a `max-age` of at
+    /// least one year, so emitting `preload` with a shorter age is a contradictory policy.
+    #[must_use]
+    pub const fn with_hsts_preload(mut self, enabled: bool) -> Self {
+        self.hsts_preload = enabled;
         self
     }
 
@@ -130,7 +167,7 @@ impl SecurityHeadersConfig {
         if matches!(self.transport_security, TransportSecurity::HttpsOnly) {
             headers.push((
                 STRICT_TRANSPORT_SECURITY,
-                HeaderValue::from_static(HSTS_HEADER_VALUE),
+                header_value(&STRICT_TRANSPORT_SECURITY, &self.hsts_value())?,
             ));
         }
         if let Some(value) = &self.content_security_policy {
@@ -161,6 +198,20 @@ impl SecurityHeadersConfig {
     }
 }
 
+impl SecurityHeadersConfig {
+    /// Render the `Strict-Transport-Security` value from the configured `max-age`.
+    fn hsts_value(&self) -> String {
+        let mut value = format!("max-age={}", self.hsts_max_age.as_secs());
+        if self.hsts_include_subdomains {
+            value.push_str("; includeSubDomains");
+        }
+        if self.hsts_preload {
+            value.push_str("; preload");
+        }
+        value
+    }
+}
+
 fn header_value(header: &HeaderName, value: &str) -> AppResult<HeaderValue> {
     HeaderValue::from_str(value).map_err(|error| {
         AppError::invalid_input(header.as_str(), format!("invalid header value: {error}"))
@@ -185,6 +236,91 @@ mod tests {
         assert!(contains_header(&headers, &REFERRER_POLICY));
         assert!(contains_header(&headers, &X_FRAME_OPTIONS));
         assert!(contains_header(&headers, &X_CONTENT_TYPE_OPTIONS));
+    }
+
+    #[test]
+    fn default_permissions_policy_has_eight_directives() {
+        let headers = SecurityHeadersConfig::default().header_pairs().unwrap();
+        let value = headers
+            .iter()
+            .find(|(header, _)| *header == PERMISSIONS_POLICY)
+            .map(|(_, value)| value.to_str().unwrap().to_string())
+            .expect("permissions-policy header present");
+
+        assert_eq!(
+            value.split(", ").count(),
+            8,
+            "expected eight directives: {value}"
+        );
+        for name in [
+            "accelerometer",
+            "camera",
+            "geolocation",
+            "gyroscope",
+            "magnetometer",
+            "microphone",
+            "payment",
+            "usb",
+        ] {
+            assert!(
+                value.contains(&format!("{name}=()")),
+                "missing directive {name} in {value}"
+            );
+        }
+    }
+
+    #[test]
+    fn default_hsts_max_age_is_two_years() {
+        let headers = SecurityHeadersConfig::default().header_pairs().unwrap();
+        let value = headers
+            .iter()
+            .find(|(header, _)| *header == STRICT_TRANSPORT_SECURITY)
+            .map(|(_, value)| value.to_str().unwrap().to_string())
+            .expect("hsts header present");
+        assert_eq!(value, "max-age=63072000; includeSubDomains; preload");
+    }
+
+    #[test]
+    #[allow(clippy::duration_suboptimal_units)]
+    fn hsts_max_age_is_configurable() {
+        let headers = SecurityHeadersConfig::default()
+            .with_hsts_max_age(std::time::Duration::from_secs(3600))
+            .header_pairs()
+            .unwrap();
+        let value = headers
+            .iter()
+            .find(|(header, _)| *header == STRICT_TRANSPORT_SECURITY)
+            .map(|(_, value)| value.to_str().unwrap().to_string())
+            .expect("hsts header present");
+        assert_eq!(value, "max-age=3600; includeSubDomains; preload");
+    }
+
+    #[test]
+    #[allow(clippy::duration_suboptimal_units)]
+    fn hsts_preload_and_subdomains_are_configurable() {
+        let headers = SecurityHeadersConfig::default()
+            .with_hsts_max_age(std::time::Duration::from_secs(3600))
+            .with_hsts_preload(false)
+            .header_pairs()
+            .unwrap();
+        let value = headers
+            .iter()
+            .find(|(header, _)| *header == STRICT_TRANSPORT_SECURITY)
+            .map(|(_, value)| value.to_str().unwrap().to_string())
+            .expect("hsts header present");
+        assert_eq!(value, "max-age=3600; includeSubDomains");
+
+        let headers = SecurityHeadersConfig::default()
+            .with_hsts_include_subdomains(false)
+            .with_hsts_preload(false)
+            .header_pairs()
+            .unwrap();
+        let value = headers
+            .iter()
+            .find(|(header, _)| *header == STRICT_TRANSPORT_SECURITY)
+            .map(|(_, value)| value.to_str().unwrap().to_string())
+            .expect("hsts header present");
+        assert_eq!(value, "max-age=63072000");
     }
 
     #[test]

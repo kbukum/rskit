@@ -130,7 +130,7 @@ mod client_transport_behavior {
             RetryPolicy::new()
                 .with_max_attempts(2)
                 .with_constant_backoff(ConstantBackoff::new(Duration::from_millis(1)))
-                .with_jitter(false),
+                .with_jitter(0.0),
         );
         let config = HttpClientConfig::new()
             .with_base_url(format!("http://{address}"))

@@ -15,7 +15,33 @@ type CloseableArc = Arc<dyn Closeable>;
 type SingletonFactory = Arc<dyn Fn() -> AppResult<SingletonValue> + Send + Sync>;
 
 thread_local! {
-    static RESOLUTION_STACK: RefCell<HashSet<TypeId>> = RefCell::new(HashSet::new());
+    static RESOLUTION_STACK: RefCell<HashSet<Key>> = RefCell::new(HashSet::new());
+}
+
+/// Registration key: concrete type plus an optional qualifying name.
+///
+/// A `None` name is the by-type registration; a `Some(name)` lets multiple values of the same
+/// type coexist, resolved by name.
+#[derive(Clone, PartialEq, Eq, Hash)]
+struct Key {
+    type_id: TypeId,
+    name: Option<String>,
+}
+
+impl Key {
+    fn new<T: 'static>(name: Option<&str>) -> Self {
+        Self {
+            type_id: TypeId::of::<T>(),
+            name: name.map(str::to_owned),
+        }
+    }
+}
+
+fn key_label<T: 'static>(name: Option<&str>) -> String {
+    match name {
+        Some(name) => format!("{}:{name}", std::any::type_name::<T>()),
+        None => std::any::type_name::<T>().to_string(),
+    }
 }
 
 #[derive(Clone)]
@@ -76,33 +102,35 @@ enum CloseableRegistration {
 /// so [`Container::close`] can release them in reverse (LIFO):
 /// a dependency registered before the resources built on top of it is released after them.
 struct CloseableEntry {
-    type_name: &'static str,
+    label: String,
     registration: CloseableRegistration,
 }
 
 struct ResolutionGuard {
-    type_id: TypeId,
+    key: Key,
 }
 
 impl ResolutionGuard {
-    fn enter<T: 'static>() -> AppResult<Self> {
-        let type_id = TypeId::of::<T>();
-        let type_name = std::any::type_name::<T>();
+    fn enter<T: 'static>(name: Option<&str>) -> AppResult<Self> {
+        let key = Key::new::<T>(name);
         let inserted = RESOLUTION_STACK.with(|stack| {
             let mut stack = stack.borrow_mut();
-            if stack.contains(&type_id) {
+            if stack.contains(&key) {
                 false
             } else {
-                stack.insert(type_id)
+                stack.insert(key.clone())
             }
         });
 
         if inserted {
-            Ok(Self { type_id })
+            Ok(Self { key })
         } else {
             Err(AppError::new(
                 ErrorCode::Conflict,
-                format!("circular dependency detected while resolving {type_name}"),
+                format!(
+                    "circular dependency detected while resolving {}",
+                    key_label::<T>(name)
+                ),
             ))
         }
     }
@@ -111,7 +139,7 @@ impl ResolutionGuard {
 impl Drop for ResolutionGuard {
     fn drop(&mut self) {
         RESOLUTION_STACK.with(|stack| {
-            stack.borrow_mut().remove(&self.type_id);
+            stack.borrow_mut().remove(&self.key);
         });
     }
 }
@@ -138,7 +166,7 @@ pub trait Closeable: Send + Sync {
 /// or [`register_singleton_closeable`](Self::register_singleton_closeable)
 /// so [`close`](Self::close) can clean them up.
 pub struct Container {
-    registrations: RwLock<HashMap<TypeId, Registration>>,
+    registrations: RwLock<HashMap<Key, Registration>>,
     closeables: Mutex<Vec<CloseableEntry>>,
 }
 
@@ -160,9 +188,20 @@ impl Container {
 
     /// Register a pre-built value.
     pub fn register<T: Send + Sync + 'static>(&self, value: Arc<T>) {
+        self.register_keyed(None, value);
+    }
+
+    /// Register a pre-built value under a qualifying `name`.
+    ///
+    /// Multiple values of the same type can coexist under different names.
+    pub fn register_named<T: Send + Sync + 'static>(&self, name: impl AsRef<str>, value: Arc<T>) {
+        self.register_keyed(Some(name.as_ref()), value);
+    }
+
+    fn register_keyed<T: Send + Sync + 'static>(&self, name: Option<&str>, value: Arc<T>) {
         self.registrations
             .write()
-            .insert(TypeId::of::<T>(), Registration::Eager(value as ArcAny));
+            .insert(Key::new::<T>(name), Registration::Eager(value as ArcAny));
     }
 
     /// Register a pre-built value that implements [`Closeable`].
@@ -172,12 +211,29 @@ impl Container {
     /// Re-registering the same type records an additional closeable,
     /// so a replaced resource is still closed.
     pub fn register_closeable<T: Closeable + Send + Sync + 'static>(&self, value: Arc<T>) {
+        self.register_closeable_keyed(None, value);
+    }
+
+    /// Register a named pre-built value that implements [`Closeable`].
+    pub fn register_closeable_named<T: Closeable + Send + Sync + 'static>(
+        &self,
+        name: impl AsRef<str>,
+        value: Arc<T>,
+    ) {
+        self.register_closeable_keyed(Some(name.as_ref()), value);
+    }
+
+    fn register_closeable_keyed<T: Closeable + Send + Sync + 'static>(
+        &self,
+        name: Option<&str>,
+        value: Arc<T>,
+    ) {
         self.registrations.write().insert(
-            TypeId::of::<T>(),
+            Key::new::<T>(name),
             Registration::Eager(Arc::clone(&value) as ArcAny),
         );
         self.closeables.lock().push(CloseableEntry {
-            type_name: std::any::type_name::<T>(),
+            label: key_label::<T>(name),
             registration: CloseableRegistration::Eager(value as CloseableArc),
         });
     }
@@ -188,14 +244,48 @@ impl Container {
         T: Send + Sync + 'static,
         F: Fn() -> AppResult<Arc<T>> + Send + Sync + 'static,
     {
+        self.register_factory_keyed(None, factory);
+    }
+
+    /// Register a named factory called fresh on every resolve.
+    pub fn register_factory_named<T, F>(&self, name: impl AsRef<str>, factory: F)
+    where
+        T: Send + Sync + 'static,
+        F: Fn() -> AppResult<Arc<T>> + Send + Sync + 'static,
+    {
+        self.register_factory_keyed(Some(name.as_ref()), factory);
+    }
+
+    fn register_factory_keyed<T, F>(&self, name: Option<&str>, factory: F)
+    where
+        T: Send + Sync + 'static,
+        F: Fn() -> AppResult<Arc<T>> + Send + Sync + 'static,
+    {
         let factory: Factory = Arc::new(move || factory().map(|value| value as ArcAny));
         self.registrations
             .write()
-            .insert(TypeId::of::<T>(), Registration::Lazy(factory));
+            .insert(Key::new::<T>(name), Registration::Lazy(factory));
     }
 
     /// Register a singleton factory — called once and cached.
     pub fn register_singleton<T, F>(&self, factory: F)
+    where
+        T: Send + Sync + 'static,
+        F: Fn() -> AppResult<Arc<T>> + Send + Sync + 'static,
+    {
+        self.register_singleton_keyed(None, factory);
+    }
+
+    /// Register a named singleton factory — called once and cached.
+    pub fn register_singleton_named<T, F>(&self, name: impl AsRef<str>, factory: F)
+    where
+        T: Send + Sync + 'static,
+        F: Fn() -> AppResult<Arc<T>> + Send + Sync + 'static,
+    {
+        self.register_singleton_keyed(Some(name.as_ref()), factory);
+    }
+
+    fn register_singleton_keyed<T, F>(&self, name: Option<&str>, factory: F)
     where
         T: Send + Sync + 'static,
         F: Fn() -> AppResult<Arc<T>> + Send + Sync + 'static,
@@ -208,7 +298,7 @@ impl Container {
         })));
         self.registrations
             .write()
-            .insert(TypeId::of::<T>(), Registration::Singleton(registration));
+            .insert(Key::new::<T>(name), Registration::Singleton(registration));
     }
 
     /// Register a singleton factory for a type that implements [`Closeable`].
@@ -222,6 +312,23 @@ impl Container {
         T: Closeable + Send + Sync + 'static,
         F: Fn() -> AppResult<Arc<T>> + Send + Sync + 'static,
     {
+        self.register_singleton_closeable_keyed(None, factory);
+    }
+
+    /// Register a named singleton factory for a type that implements [`Closeable`].
+    pub fn register_singleton_closeable_named<T, F>(&self, name: impl AsRef<str>, factory: F)
+    where
+        T: Closeable + Send + Sync + 'static,
+        F: Fn() -> AppResult<Arc<T>> + Send + Sync + 'static,
+    {
+        self.register_singleton_closeable_keyed(Some(name.as_ref()), factory);
+    }
+
+    fn register_singleton_closeable_keyed<T, F>(&self, name: Option<&str>, factory: F)
+    where
+        T: Closeable + Send + Sync + 'static,
+        F: Fn() -> AppResult<Arc<T>> + Send + Sync + 'static,
+    {
         let registration = Arc::new(SingletonRegistration::new(Arc::new(move || {
             factory().map(|value| SingletonValue {
                 any: Arc::clone(&value) as ArcAny,
@@ -229,24 +336,36 @@ impl Container {
             })
         })));
         self.registrations.write().insert(
-            TypeId::of::<T>(),
+            Key::new::<T>(name),
             Registration::Singleton(Arc::clone(&registration)),
         );
         self.closeables.lock().push(CloseableEntry {
-            type_name: std::any::type_name::<T>(),
+            label: key_label::<T>(name),
             registration: CloseableRegistration::Singleton(registration),
         });
     }
 
     /// Resolve a registered type, returning `Err(NotFound)` if not registered.
     pub fn resolve<T: Send + Sync + 'static>(&self) -> AppResult<Arc<T>> {
-        let _guard = ResolutionGuard::enter::<T>()?;
+        self.resolve_keyed::<T>(None)
+    }
+
+    /// Resolve a value registered under a qualifying `name`.
+    pub fn resolve_named<T: Send + Sync + 'static>(
+        &self,
+        name: impl AsRef<str>,
+    ) -> AppResult<Arc<T>> {
+        self.resolve_keyed::<T>(Some(name.as_ref()))
+    }
+
+    fn resolve_keyed<T: Send + Sync + 'static>(&self, name: Option<&str>) -> AppResult<Arc<T>> {
+        let _guard = ResolutionGuard::enter::<T>(name)?;
         let registration = self
             .registrations
             .read()
-            .get(&TypeId::of::<T>())
+            .get(&Key::new::<T>(name))
             .cloned()
-            .ok_or_else(|| AppError::not_found(std::any::type_name::<T>(), None))?;
+            .ok_or_else(|| AppError::not_found(key_label::<T>(name), None))?;
 
         let value = match registration {
             Registration::Eager(value) => value,
@@ -259,10 +378,18 @@ impl Container {
             .map_err(|_| AppError::new(ErrorCode::Internal, "type downcast failed in DI container"))
     }
 
-    /// Returns `true` if `T` has been registered.
+    /// Returns `true` if `T` has been registered by type.
     #[must_use]
     pub fn is_registered<T: 'static>(&self) -> bool {
-        self.registrations.read().contains_key(&TypeId::of::<T>())
+        self.registrations.read().contains_key(&Key::new::<T>(None))
+    }
+
+    /// Returns `true` if `T` has been registered under `name`.
+    #[must_use]
+    pub fn is_registered_named<T: 'static>(&self, name: impl AsRef<str>) -> bool {
+        self.registrations
+            .read()
+            .contains_key(&Key::new::<T>(Some(name.as_ref())))
     }
 
     /// Close every recorded closeable once, in reverse registration order (LIFO),
@@ -285,8 +412,8 @@ impl Container {
                 && let Err(err) = closeable.close().await
             {
                 errors.push(
-                    err.context(format!("close {}", entry.type_name))
-                        .with_detail("closeable", entry.type_name),
+                    err.context(format!("close {}", entry.label))
+                        .with_detail("closeable", entry.label.clone()),
                 );
             }
         }
@@ -440,5 +567,50 @@ mod tests {
             .expect("second close should be a no-op");
 
         assert!(closed.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn named_registrations_of_same_type_coexist() {
+        let container = Container::new();
+        container.register_named("primary", Arc::new(Svc { val: 1 }));
+        container.register_named("replica", Arc::new(Svc { val: 2 }));
+
+        assert_eq!(container.resolve_named::<Svc>("primary").unwrap().val, 1);
+        assert_eq!(container.resolve_named::<Svc>("replica").unwrap().val, 2);
+        assert!(container.is_registered_named::<Svc>("primary"));
+        assert!(!container.is_registered_named::<Svc>("missing"));
+    }
+
+    #[test]
+    fn named_and_unnamed_registrations_are_independent() {
+        let container = Container::new();
+        container.register(Arc::new(Svc { val: 10 }));
+        container.register_named("special", Arc::new(Svc { val: 20 }));
+
+        assert_eq!(container.resolve::<Svc>().unwrap().val, 10);
+        assert_eq!(container.resolve_named::<Svc>("special").unwrap().val, 20);
+    }
+
+    #[test]
+    fn resolve_named_missing_returns_not_found() {
+        let container = Container::new();
+        container.register(Arc::new(Svc { val: 1 }));
+        assert!(container.resolve_named::<Svc>("nope").is_err());
+    }
+
+    #[test]
+    fn named_singleton_is_cached_independently() {
+        let container = Container::new();
+        let counter = Arc::new(AtomicUsize::new(0));
+        let captured = Arc::clone(&counter);
+        container.register_singleton_named("a", move || {
+            let value = captured.fetch_add(1, Ordering::SeqCst);
+            Ok(Arc::new(Svc { val: value }))
+        });
+
+        let first = container.resolve_named::<Svc>("a").unwrap();
+        let second = container.resolve_named::<Svc>("a").unwrap();
+        assert!(Arc::ptr_eq(&first, &second));
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
     }
 }

@@ -17,4 +17,4 @@ pub use bus::{EventBus, EventBusConfig, EventRegistry, Subscriber};
 pub use registry::HookRegistry as Registry;
 pub use registry::{HookRegistry, LifecycleHookRegistry};
 pub use tokio_util::sync::CancellationToken;
-pub use types::{Event, EventType, HookError, HookResult};
+pub use types::{ErrorEvent, Event, EventType, HookError, HookResult};

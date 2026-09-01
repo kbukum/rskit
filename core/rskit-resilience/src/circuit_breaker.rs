@@ -16,6 +16,17 @@ pub enum CbState {
     HalfOpen,
 }
 
+impl std::fmt::Display for CbState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let name = match self {
+            CbState::Closed => "closed",
+            CbState::Open => "open",
+            CbState::HalfOpen => "half-open",
+        };
+        f.write_str(name)
+    }
+}
+
 /// Circuit breaker configuration.
 #[derive(Clone)]
 pub struct CbConfig {
@@ -417,6 +428,13 @@ mod tests {
 
         assert!(formatted.contains("debug-cb"));
         assert!(formatted.contains("<fn>"));
+    }
+
+    #[test]
+    fn state_display_renders_canonical_names() {
+        assert_eq!(CbState::Closed.to_string(), "closed");
+        assert_eq!(CbState::Open.to_string(), "open");
+        assert_eq!(CbState::HalfOpen.to_string(), "half-open");
     }
 
     #[tokio::test(start_paused = true)]

@@ -82,10 +82,10 @@ impl RetryConfig {
         self
     }
 
-    /// Enable or disable retry jitter.
+    /// Set the retry jitter fraction, in `0.0..=1.0` (`0.0` disables jitter).
     #[must_use]
-    pub fn with_jitter(mut self, enabled: bool) -> Self {
-        self.policy = self.policy.with_jitter(enabled);
+    pub fn with_jitter(mut self, fraction: f64) -> Self {
+        self.policy = self.policy.with_jitter(fraction);
         self
     }
 
@@ -187,7 +187,7 @@ mod tests {
         RetryConfig::new()
             .with_max_attempts(3)
             .with_initial_backoff(Duration::from_millis(1))
-            .with_jitter(false)
+            .with_jitter(0.0)
     }
 
     #[tokio::test]
@@ -294,7 +294,7 @@ mod tests {
                 config: RetryConfig::new()
                     .with_max_attempts(2)
                     .with_initial_backoff(Duration::from_millis(1))
-                    .with_jitter(false),
+                    .with_jitter(0.0),
             })],
         );
 

@@ -19,7 +19,7 @@ async fn compose_rate_bulkhead_circuit_timeout_retry() {
             RetryPolicy::new()
                 .with_max_attempts(3)
                 .with_constant_backoff(ConstantBackoff::new(Duration::from_millis(1)))
-                .with_jitter(false),
+                .with_jitter(0.0),
         );
 
     let mut attempts = 0usize;

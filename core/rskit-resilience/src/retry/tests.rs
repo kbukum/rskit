@@ -14,7 +14,7 @@ fn make_policy() -> RetryPolicy {
     RetryPolicy::new()
         .with_max_attempts(3)
         .with_initial_backoff(Duration::from_millis(1))
-        .with_jitter(false)
+        .with_jitter(0.0)
 }
 
 #[tokio::test]
@@ -93,7 +93,7 @@ async fn execute_with_max_attempts_one_does_not_retry() {
     let policy = RetryPolicy::new()
         .with_max_attempts(1)
         .with_initial_backoff(Duration::from_millis(1))
-        .with_jitter(false);
+        .with_jitter(0.0);
 
     let result = policy
         .execute(|| {
@@ -113,7 +113,7 @@ async fn execute_with_max_attempts_one_does_not_retry() {
 fn constant_backoff_uses_same_delay() {
     let policy = RetryPolicy::new()
         .with_constant_backoff(ConstantBackoff::new(Duration::from_millis(25)))
-        .with_jitter(false);
+        .with_jitter(0.0);
 
     assert_eq!(policy.backoff(1), Duration::from_millis(25));
     assert_eq!(policy.backoff(3), Duration::from_millis(25));
@@ -127,7 +127,7 @@ fn linear_backoff_increases_until_capped() {
             Duration::from_millis(5),
             Duration::from_millis(20),
         ))
-        .with_jitter(false);
+        .with_jitter(0.0);
 
     assert_eq!(policy.backoff(1), Duration::from_millis(10));
     assert_eq!(policy.backoff(2), Duration::from_millis(15));
@@ -140,14 +140,14 @@ fn public_backoff_delay_matches_policy_backoff() {
     let policy = RetryPolicy::new()
         .with_initial_backoff(Duration::from_millis(10))
         .with_max_backoff(Duration::from_millis(30))
-        .with_jitter(false);
+        .with_jitter(0.0);
 
     assert_eq!(policy.backoff_delay(3), Duration::from_millis(30));
 }
 
 #[test]
 fn retry_presets_create_expected_policies() {
-    let fast = RetryPolicy::fast().with_jitter(false);
+    let fast = RetryPolicy::fast().with_jitter(0.0);
     assert_eq!(fast.max_attempts, 2);
     assert_eq!(fast.backoff_delay(1), Duration::from_millis(10));
 
@@ -186,12 +186,59 @@ fn validate_rejects_invalid_retry_limits() {
     );
 }
 
+#[test]
+fn default_jitter_matches_shared_fraction() {
+    assert_eq!(RetryPolicy::new().jitter, 0.1);
+}
+
+#[test]
+fn validate_rejects_out_of_range_jitter() {
+    for bad in [-0.1, 1.1, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        assert!(
+            RetryPolicy::new().with_jitter(bad).validate().is_err(),
+            "jitter {bad} should be rejected"
+        );
+    }
+    for good in [0.0, 0.5, 1.0] {
+        assert!(
+            RetryPolicy::new().with_jitter(good).validate().is_ok(),
+            "jitter {good} should be accepted"
+        );
+    }
+}
+
+#[tokio::test]
+async fn execute_returns_zero_attempt_error_for_invalid_jitter() {
+    let policy = RetryPolicy::new().with_jitter(f64::NAN);
+
+    let result = policy.execute(|| async { Ok::<(), AppError>(()) }).await;
+
+    let err = result.unwrap_err();
+    assert_eq!(err.attempts, 0);
+    assert_eq!(err.last_error.code(), ErrorCode::InvalidInput);
+}
+
+#[test]
+fn jitter_never_exceeds_max_backoff() {
+    let policy = RetryPolicy::new()
+        .with_initial_backoff(Duration::from_millis(100))
+        .with_max_backoff(Duration::from_millis(100))
+        .with_jitter(1.0);
+
+    for attempt in 1..=50 {
+        assert!(
+            policy.backoff_delay(attempt) <= Duration::from_millis(100),
+            "attempt {attempt} exceeded max_backoff"
+        );
+    }
+}
+
 #[tokio::test]
 async fn execute_stops_before_elapsed_time_cap() {
     let policy = RetryPolicy::new()
         .with_max_attempts(10)
         .with_initial_backoff(Duration::from_millis(50))
-        .with_jitter(false)
+        .with_jitter(0.0)
         .with_max_elapsed_time(Duration::from_millis(10));
 
     let result = policy
@@ -211,7 +258,7 @@ async fn execute_invokes_on_retry_and_honors_retry_if() {
     let policy = RetryPolicy::new()
         .with_max_attempts(3)
         .with_initial_backoff(Duration::from_millis(1))
-        .with_jitter(false)
+        .with_jitter(0.0)
         .with_retry_if(|e: &AppError| e.code() == ErrorCode::InvalidInput)
         .with_on_retry(move |_attempt, _err| {
             seen.fetch_add(1, Ordering::SeqCst);
@@ -239,7 +286,7 @@ async fn execute_retry_if_returning_false_stops_a_retryable_error() {
     let policy = RetryPolicy::new()
         .with_max_attempts(5)
         .with_initial_backoff(Duration::from_millis(1))
-        .with_jitter(false)
+        .with_jitter(0.0)
         .with_retry_if(|_e: &AppError| false);
 
     let attempts = Arc::new(AtomicUsize::new(0));
@@ -264,7 +311,7 @@ async fn execute_times_out_a_single_slow_attempt() {
     let policy = RetryPolicy::new()
         .with_max_attempts(3)
         .with_max_elapsed_time(Duration::from_millis(50))
-        .with_jitter(false);
+        .with_jitter(0.0);
 
     let result = policy
         .execute(|| async {
