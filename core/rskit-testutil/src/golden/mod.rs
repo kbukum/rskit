@@ -8,9 +8,11 @@
 
 mod diff;
 mod file;
+mod json;
 mod matcher;
 mod normalize;
 
 pub use file::{BLESS_ENV, Golden, GoldenMode, GoldenOutcome};
+pub use json::CrossKitJsonGolden;
 pub use matcher::Match;
 pub use normalize::{Normalizer, Rule};

@@ -24,18 +24,20 @@ impl EnvironmentSource {
 
 impl ConfigSource for EnvironmentSource {
     fn collect(&self) -> AppResult<config::Config> {
-        let env_source = if self.prefix.is_empty() {
-            config::Environment::default()
-                .separator("__")
-                .try_parsing(true)
-        } else {
-            config::Environment::with_prefix(&self.prefix)
-                .separator("__")
-                .try_parsing(true)
-        };
-
-        config::Config::builder()
-            .add_source(env_source)
+        let mut builder = config::Config::builder();
+        for (key, value) in std::env::vars_os() {
+            // Environment data is an external boundary: `vars()` panics on non-Unicode
+            // entries, so read the OS-string form and skip anything that is not valid UTF-8.
+            let (Some(key), Some(value)) = (key.to_str(), value.to_str()) else {
+                continue;
+            };
+            if let Some(key) = normalize_env_key(&self.prefix, key) {
+                builder = builder
+                    .set_override(&key, parse_env_value(value.to_owned()))
+                    .map_err(|e| AppError::invalid_input("config", e.to_string()))?;
+            }
+        }
+        builder
             .build()
             .map_err(|e| AppError::invalid_input("config", e.to_string()))
     }
@@ -44,12 +46,23 @@ impl ConfigSource for EnvironmentSource {
 pub(crate) fn normalize_env_key(prefix: &str, key: &str) -> Option<String> {
     let key = key.to_ascii_lowercase();
     if prefix.is_empty() {
-        return Some(key.replace("__", "."));
+        return normalized_config_key(&key);
     }
 
     let prefix = prefix.to_ascii_lowercase();
     key.strip_prefix(&format!("{prefix}__"))
-        .map(|stripped| stripped.replace("__", "."))
+        .and_then(normalized_config_key)
+}
+
+fn normalized_config_key(key: &str) -> Option<String> {
+    let key = key.replace("__", ".");
+    let valid = key.split('.').all(|segment| {
+        !segment.is_empty()
+            && segment
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-')
+    });
+    valid.then_some(key)
 }
 
 pub(crate) fn parse_env_value(value: String) -> config::Value {

@@ -55,6 +55,7 @@ pub enum ErrorCode {
     // ── Lifecycle ─────────────────────────────────────────────────────
     /// The operation was cancelled by the caller
     /// or system before completion (e.g., context cancellation, client disconnect).
+    #[serde(rename = "CANCELED")]
     Cancelled,
 }
 
@@ -118,7 +119,7 @@ impl ErrorCode {
             ErrorCode::Internal => "INTERNAL_ERROR",
             ErrorCode::DatabaseError => "DATABASE_ERROR",
             ErrorCode::ExternalService => "EXTERNAL_SERVICE_ERROR",
-            ErrorCode::Cancelled => "CANCELLED",
+            ErrorCode::Cancelled => "CANCELED",
             #[allow(unreachable_patterns)]
             _ => "UNKNOWN",
         }
@@ -150,7 +151,7 @@ impl ErrorCode {
             "INTERNAL_ERROR" => ErrorCode::Internal,
             "DATABASE_ERROR" => ErrorCode::DatabaseError,
             "EXTERNAL_SERVICE_ERROR" => ErrorCode::ExternalService,
-            "CANCELLED" => ErrorCode::Cancelled,
+            "CANCELED" => ErrorCode::Cancelled,
             _ => return None,
         })
     }
@@ -312,6 +313,18 @@ mod tests {
     #[test]
     fn display_uses_as_str() {
         assert_eq!(format!("{}", ErrorCode::Timeout), "TIMEOUT");
+    }
+
+    #[test]
+    fn cancelled_wire_string_uses_single_l_spelling_and_portable_timeout_status() {
+        assert_eq!(ErrorCode::Cancelled.as_str(), "CANCELED");
+        assert_eq!(format!("{}", ErrorCode::Cancelled), "CANCELED");
+        assert_eq!(ErrorCode::from_wire("CANCELED"), Some(ErrorCode::Cancelled));
+        assert_eq!(ErrorCode::from_wire("CANCELLED"), None);
+        assert_eq!(
+            ErrorCode::Cancelled.http_status(),
+            http::StatusCode::REQUEST_TIMEOUT
+        );
     }
 
     // ── serde ↔ as_str parity ──────────────────────────────────────────────

@@ -110,7 +110,7 @@ fn main() -> rskit_logging::LoggingResult<()> {
 
     let otlp = OtlpConfig {
         enabled: true,
-        endpoint: "http://otel-collector:4317".to_string(),
+        endpoint: "https://otel-collector:4317".to_string(),
         protocol: "grpc".to_string(),
         ..Default::default()
     };
@@ -196,6 +196,7 @@ let masking = MaskingConfig {
     field_names: vec!["my_internal_token".into(), "employee_id".into()],
     value_patterns: vec![r"MYSVC_[A-Za-z0-9]{32}".into()],
     replacement: "[REDACTED]".into(),
+    ..Default::default()
 };
 let _guard = init_logging_with_masking(&cfg, &masking)?;
 ```
@@ -284,8 +285,9 @@ use rskit_logging::otlp::OtlpConfig;
 
 let otlp = OtlpConfig {
     enabled: true,
-    endpoint: "http://otel-collector:4317".to_string(),
+    endpoint: "https://otel-collector:4317".to_string(),
     protocol: "grpc".to_string(),    // "grpc" | "http"
+    insecure: false,                 // require plaintext http:// endpoints when true
     headers: HashMap::new(),
 };
 ```

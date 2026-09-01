@@ -58,3 +58,4 @@ rskit-errors = { workspace = true }
 parking_lot = { workspace = true }
 serde_json = { workspace = true }
 tempfile   = { workspace = true }
+tokio      = { workspace = true }

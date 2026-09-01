@@ -55,17 +55,18 @@ pub mod sampling;
 #[cfg(feature = "setup")]
 pub mod setup;
 
-pub use config::{LogFormat, LogOutput, LoggingConfig};
+pub use config::{
+    LogFormat, LogOutput, LoggingConfig, MaskingConfig, ModuleLevelsConfig, OtlpConfig,
+    SamplingConfig,
+};
 pub use error::LoggingResult;
 
 #[cfg(feature = "setup")]
-pub use masking::{DefaultMasker, Masker, MaskingConfig, MaskingMakeWriter};
+pub use masking::{DefaultMasker, Masker, MaskingMakeWriter};
 #[cfg(feature = "setup")]
-pub use module_levels::{ModuleLevelsConfig, build_env_filter};
+pub use module_levels::build_env_filter;
 #[cfg(feature = "otlp")]
-pub use otlp::{OtlpConfig, OtlpProvider};
-#[cfg(feature = "setup")]
-pub use sampling::SamplingConfig;
+pub use otlp::OtlpProvider;
 #[cfg(feature = "setup")]
 pub use setup::{
     LoggingGuard, init_logging, init_logging_env, init_logging_with_masking,

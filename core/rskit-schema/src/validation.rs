@@ -16,7 +16,7 @@ pub struct ValidationOptions {
 }
 
 /// A single validation error with a JSON-pointer path.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ValidationError {
     /// JSON Pointer path to the failing value.
     pub path: String,
@@ -35,11 +35,12 @@ impl std::fmt::Display for ValidationError {
 }
 
 /// Outcome of validating a value against a schema.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ValidationResult {
     /// Whether the value satisfied the schema.
     pub valid: bool,
     /// Validation failures. Empty when `valid` is true.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub errors: Vec<ValidationError>,
 }
 

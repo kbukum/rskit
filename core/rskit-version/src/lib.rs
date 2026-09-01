@@ -13,8 +13,8 @@
 //! let info = get_version_info();
 //! println!("{}", info.version);      // e.g. "0.1.0-alpha.1"
 //! println!("{}", info.git_commit);   // e.g. "a1b2c3d..."
-//! println!("{}", get_short_version()); // "0.1.0-alpha.1-a1b2c3d"
-//! println!("{}", get_full_version()); // "0.1.0-alpha.1-a1b2c3d (built 2024-01-15T10:30:00Z)"
+//! println!("{}", get_short_version()); // "0.1.0-alpha.1-a1b2c3d" (+ "-dirty" for a dirty tree)
+//! println!("{}", get_full_version()); // "0.1.0-alpha.1-a1b2c3d (built 2024-01-15T10:30:00Z)" (+ "-dirty" for a dirty tree)
 //! ```
 
 #![warn(missing_docs)]

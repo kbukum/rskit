@@ -282,6 +282,7 @@ fn init_logging_with_options_combines_sampling_module_levels_and_masking() {
         field_names: vec!["tenant_secret".to_owned()],
         value_patterns: vec![r"tenant-[0-9]+".to_owned()],
         replacement: "[MASKED]".to_owned(),
+        ..Default::default()
     };
 
     {
@@ -504,6 +505,7 @@ fn enabled_http_otlp_provider_builds_layer_and_shutdowns_without_records() {
         enabled: true,
         endpoint: "http://localhost:4318/v1/logs".to_owned(),
         protocol: "http".to_owned(),
+        insecure: true,
         headers: std::collections::HashMap::from([("x-test".to_owned(), "value".to_owned())]),
     };
 
@@ -1032,7 +1034,7 @@ fn logging_config_with_service_name() {
 
 #[test]
 fn logging_config_with_caller_true() {
-    let json = r#"{"with_caller":true}"#;
+    let json = r#"{"caller":true}"#;
     let cfg: LoggingConfig = serde_json::from_str(json).unwrap();
     assert!(cfg.with_caller);
 }

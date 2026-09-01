@@ -39,7 +39,9 @@ pub use config::TestAppConfig;
 pub use current_dir::CurrentDirGuard;
 #[cfg(feature = "embedding")]
 pub use embedding::FakeEmbeddingProvider;
-pub use golden::{BLESS_ENV, Golden, GoldenMode, GoldenOutcome, Match, Normalizer, Rule};
+pub use golden::{
+    BLESS_ENV, CrossKitJsonGolden, Golden, GoldenMode, GoldenOutcome, Match, Normalizer, Rule,
+};
 pub use hook::TestEvent;
 pub use http_server::{CapturedRequest, FakeHttpServer, FakeResponse};
 #[cfg(feature = "llm")]

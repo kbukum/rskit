@@ -10,7 +10,7 @@ Each layer is opt-in, so a consumer links only what it needs:
 
 | Layer | Module | For |
 |-------|--------|-----|
-| Source pipeline (read) | `source` | Layered load: defaults → TOML → dotenv → adapters → env → overrides |
+| Source pipeline (read) | `source` | Layered load: defaults → config files (TOML then YAML) → dotenv → adapters → env → overrides |
 | Typed decode | `typed` (via `ConfigLoader::load`) | Plain `Deserialize` types; validation optional |
 | Service shape | `service` + `app` | `ServiceConfig` / `AppConfig` convenience for network services |
 | Strict TOML | `strict` | `deny_unknown_fields`, raw-subtree passthrough, identity-aware include-merge |
@@ -61,7 +61,7 @@ let cfg: Config = ConfigLoader::app()
 
 ### 2. App / CLI / tool / library — plain typed load, no service identity
 
-No service shape, no `validator`. Set `default-features = false`. `ConfigLoader::toml(path)` is the deterministic entry point (file only — no dotenv, no process env); `ConfigLoader::custom()` reads only explicitly added sources.
+No service shape, no `validator`. Set `default-features = false`. `ConfigLoader::toml(path)` and `ConfigLoader::yaml(path)` are the deterministic entry points (file only — no dotenv, no process env); `ConfigLoader::custom()` reads only explicitly added sources.
 
 ```rust
 use rskit_config::ConfigLoader;
@@ -75,7 +75,11 @@ struct ToolConfig {
 
 // File-only, deterministic: ideal for CLIs and one-shot tools.
 let cfg: ToolConfig = ConfigLoader::toml("tool.toml").load()?;
+// ...or the YAML equivalent:
+let cfg: ToolConfig = ConfigLoader::yaml("tool.yaml").load()?;
 ```
+
+App loading discovers config files automatically when no explicit path is set. Every present candidate is layered, and YAML takes precedence over TOML: `config.toml`, `config/config.toml`, then `config.yaml`, `config.yml`, `config/config.yaml`, `config/config.yml` (later layers win). An explicit `with_config_file(path)` selects a single source by extension (`.yaml`/`.yml` → YAML, otherwise TOML).
 
 Opt into validation per-call without making it the default by implementing `Validate` and calling `load_validated()` instead of `load()`.
 

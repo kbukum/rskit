@@ -10,6 +10,7 @@ mod env;
 mod map;
 mod pipeline;
 mod toml;
+mod yaml;
 
 pub use contract::ConfigSource;
 pub use dotenv::{DotenvFileSource, Profile};
@@ -19,3 +20,4 @@ pub use pipeline::ConfigLoader;
 #[cfg(feature = "validate")]
 pub use pipeline::load_config;
 pub use toml::TomlFileSource;
+pub use yaml::YamlFileSource;

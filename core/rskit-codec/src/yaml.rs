@@ -13,11 +13,14 @@ use crate::codec::Codec;
 /// # Security
 ///
 /// Unlike TOML and JSON, YAML supports anchors and aliases, which the parser expands
-/// during decode. A small hostile document can therefore reference-expand into a much
-/// larger in-memory tree ("billion laughs"). This codec does not itself cap expansion,
-/// so callers must decode only size-bounded input — the same trust boundary the other
-/// codecs rely on (e.g. `rskit-fs` bounded reads). Do not feed unbounded or untrusted
-/// streams straight into [`decode_value`](YamlCodec::decode_value).
+/// during decode. A small hostile document can reference-expand into a much larger
+/// in-memory tree ("billion laughs"). The underlying `serde_norway` parser mitigates
+/// this class of attack itself: it bounds alias recursion depth and caps the total
+/// number of alias expansions relative to the event count, surfacing an over-expanding
+/// document as a typed decode error rather than exhausting memory. Callers should still
+/// decode only size-bounded input — the same trust boundary the other codecs rely on
+/// (e.g. `rskit-fs` bounded reads) — but a compact alias bomb will not silently blow up
+/// through [`decode_value`](YamlCodec::decode_value).
 #[derive(Debug, Clone, Copy, Default)]
 pub struct YamlCodec;
 
@@ -111,5 +114,23 @@ mod tests {
 
         let err = decode::<Settings>(&YamlCodec, "name: svc\nunknown: 1\n").unwrap_err();
         assert!(err.to_string().contains("deserialize"));
+    }
+
+    #[test]
+    fn rejects_alias_expansion_bomb() {
+        // Classic "billion laughs": each level aliases the previous one many times, so a
+        // compact document would expand exponentially in memory. serde_norway's repetition
+        // limit must reject this as a typed decode error instead of exhausting memory.
+        let bomb = "\
+a: &a [\"x\", \"x\", \"x\", \"x\", \"x\", \"x\", \"x\", \"x\", \"x\"]
+b: &b [*a, *a, *a, *a, *a, *a, *a, *a, *a]
+c: &c [*b, *b, *b, *b, *b, *b, *b, *b, *b]
+d: &d [*c, *c, *c, *c, *c, *c, *c, *c, *c]
+e: &e [*d, *d, *d, *d, *d, *d, *d, *d, *d]
+f: &f [*e, *e, *e, *e, *e, *e, *e, *e, *e]
+g: [*f, *f, *f, *f, *f, *f, *f, *f, *f]
+";
+        let err = YamlCodec.decode_value(bomb).unwrap_err();
+        assert!(err.to_string().contains("parse"), "{err}");
     }
 }

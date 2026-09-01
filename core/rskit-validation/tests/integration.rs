@@ -105,7 +105,7 @@ fn max_length_fails_above_boundary() {
         .validate()
         .unwrap_err();
     assert!(err.message().contains("bio"));
-    assert!(err.message().contains("at most 3"));
+    assert!(err.message().contains("must not exceed 3 characters"));
 }
 
 #[test]
@@ -311,7 +311,8 @@ fn pattern_fails_when_value_does_not_match() {
         .validate()
         .unwrap_err();
     assert!(err.message().contains("zip"));
-    assert!(err.message().contains("must match pattern"));
+    assert!(err.message().contains("must match the required format"));
+    assert!(!err.message().contains(r"^\d{5}$"));
 }
 
 #[test]
