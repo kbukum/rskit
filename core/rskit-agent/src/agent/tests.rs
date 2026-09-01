@@ -278,7 +278,7 @@ async fn test_agent_with_tool() {
                     RetryPolicy::new()
                         .with_max_attempts(2)
                         .with_constant_backoff(ConstantBackoff::new(Duration::from_millis(1)))
-                        .with_jitter(false),
+                        .with_jitter(0.0),
                 ),
             ),
             context_strategy: None,

@@ -403,7 +403,7 @@ mod tests {
             Policy::new().with_retry(
                 RetryPolicy::fast()
                     .with_constant_backoff(ConstantBackoff::new(Duration::from_millis(1)))
-                    .with_jitter(false),
+                    .with_jitter(0.0),
             ),
         );
         let response = provider

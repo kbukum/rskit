@@ -103,7 +103,7 @@ mod tests {
         RetryPolicy::new()
             .with_max_attempts(3)
             .with_initial_backoff(Duration::from_millis(1))
-            .with_jitter(false)
+            .with_jitter(0.0)
     }
 
     #[tokio::test]

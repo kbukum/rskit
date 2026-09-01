@@ -6,7 +6,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use parking_lot::RwLock;
 use tokio_util::sync::CancellationToken;
 
-use crate::types::{Event, EventType, HookError, HookResult};
+use crate::types::{ErrorEvent, Event, EventType, HookError, HookResult};
 
 type ErasedEvent = dyn Any + Send + Sync;
 type ErasedHandler = Arc<dyn Fn(CancellationToken, &ErasedEvent) -> HookResult + Send + Sync>;
@@ -18,7 +18,10 @@ type HandlerMap = Arc<RwLock<HashMap<HandlerKey, Vec<(usize, ErasedHandler)>>>>;
 /// Registration and emission are constructor-injected through registry values;
 /// there is no global hook registry. Handlers for the same event type run in registration order.
 /// A fatal [`HookError`] short-circuits the remaining handlers for that event type;
-/// non-fatal errors are collected and the first non-fatal error is returned after all handlers run.
+/// non-fatal errors are aggregated across all handlers and returned together. For every
+/// non-fatal error the registry also emits an [`ErrorEvent`] to handlers registered for
+/// [`EventType::on_error`], unless the event being dispatched is itself an `on_error` event
+/// (which prevents unbounded recursion).
 pub struct HookRegistry {
     handlers: HandlerMap,
     event_types: Arc<RwLock<HashMap<TypeId, EventType>>>,
@@ -98,11 +101,18 @@ impl HookRegistry {
     ///
     /// Dispatch uses snapshot semantics: handlers registered
     /// or removed during an in-flight emit do not affect that emit, but apply to subsequent emits.
+    ///
+    /// Non-fatal errors do not stop dispatch: every non-fatal error is aggregated and the
+    /// combined error is returned once all handlers have run. Each non-fatal error is also
+    /// re-emitted as an [`ErrorEvent`] to [`EventType::on_error`] handlers, except when the
+    /// event being dispatched is itself an `on_error` event. A fatal [`HookError`] returns
+    /// immediately with the errors accumulated so far.
     pub fn emit<E>(&self, event: &E, cancel: CancellationToken) -> HookResult
     where
         E: Event,
     {
-        let key = (TypeId::of::<E>(), event.event_type());
+        let event_type = event.event_type();
+        let key = (TypeId::of::<E>(), event_type.clone());
         let handler_list = {
             let handlers = self.handlers.read();
             let Some(handler_list) = handlers.get(&key) else {
@@ -113,11 +123,11 @@ impl HookRegistry {
                 .map(|(_, handler)| Arc::clone(handler))
                 .collect::<Vec<_>>()
         };
-        let mut first_error: Option<HookError> = None;
+        let is_on_error = event_type == EventType::on_error();
+        let mut aggregate: Option<HookError> = None;
         for handler in handler_list {
             if cancel.is_cancelled() {
-                let err = HookError::fatal("hook dispatch cancelled");
-                return Err(err);
+                return Err(HookError::fatal("hook dispatch cancelled"));
             }
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                 handler(cancel.clone(), event)
@@ -128,16 +138,35 @@ impl HookRegistry {
                     panic_message(payload)
                 )))
             });
-            if let Err(err) = result {
-                if err.is_fatal() {
-                    return Err(err);
+            let Err(err) = result else {
+                continue;
+            };
+            if err.is_fatal() {
+                return Err(join_errors(aggregate, err));
+            }
+            aggregate = Some(join_errors(aggregate.take(), err.clone()));
+            if is_on_error {
+                continue;
+            }
+            if let Err(emit_err) = self.emit_error(&event_type, &err, &cancel) {
+                if emit_err.is_fatal() {
+                    return Err(join_errors(aggregate, emit_err));
                 }
-                if first_error.is_none() {
-                    first_error = Some(err);
-                }
+                aggregate = Some(join_errors(aggregate.take(), emit_err));
             }
         }
-        first_error.map_or(Ok(()), Err)
+        aggregate.map_or(Ok(()), Err)
+    }
+
+    /// Re-emit a non-fatal error as an [`ErrorEvent`] to `on_error` handlers.
+    fn emit_error(
+        &self,
+        source: &EventType,
+        error: &HookError,
+        cancel: &CancellationToken,
+    ) -> HookResult {
+        let event = ErrorEvent::new(error.clone(), source.clone());
+        self.emit(&event, cancel.clone())
     }
 
     /// Check whether any handlers are registered for event `E` and `event_type`.
@@ -175,6 +204,13 @@ impl HookRegistry {
 /// the alias exists to make lifecycle-specific injection points self-documenting.
 pub type LifecycleHookRegistry = HookRegistry;
 
+fn join_errors(existing: Option<HookError>, next: HookError) -> HookError {
+    match existing {
+        None => next,
+        Some(prev) => prev.join(next),
+    }
+}
+
 fn panic_message(payload: Box<dyn std::any::Any + Send>) -> String {
     if let Some(message) = payload.downcast_ref::<&str>() {
         (*message).to_string()
@@ -193,7 +229,7 @@ mod tests {
     use tokio_util::sync::CancellationToken;
 
     use super::{HookRegistry, LifecycleHookRegistry, panic_message};
-    use crate::{Event, EventType, HookError};
+    use crate::{ErrorEvent, Event, EventType, HookError};
 
     struct Ping;
     impl Event for Ping {
@@ -249,6 +285,58 @@ mod tests {
         let result = registry.emit(&Ping, CancellationToken::new());
         assert_eq!(result.expect_err("error").message(), "warn");
         assert_eq!(counter.load(Ordering::SeqCst), 1);
+    }
+
+    #[test]
+    fn all_non_fatal_errors_are_aggregated() {
+        let registry = HookRegistry::new();
+        let _u1 = registry.on::<Ping>(ping_type(), |_, _| Err(HookError::new("first")));
+        let _u2 = registry.on::<Ping>(ping_type(), |_, _| Err(HookError::new("second")));
+        let err = registry
+            .emit(&Ping, CancellationToken::new())
+            .expect_err("aggregate");
+        assert!(err.message().contains("first"));
+        assert!(err.message().contains("second"));
+        assert!(!err.is_fatal());
+    }
+
+    #[test]
+    fn non_fatal_error_is_observed_by_on_error_handlers() {
+        let registry = HookRegistry::new();
+        let observed = Arc::new(parking_lot::Mutex::new(Vec::<String>::new()));
+        let sink = Arc::clone(&observed);
+        let _u1 = registry.on::<ErrorEvent>(EventType::on_error(), move |_, event| {
+            sink.lock()
+                .push(format!("{}:{}", event.source(), event.error().message()));
+            Ok(())
+        });
+        let _u2 = registry.on::<Ping>(ping_type(), |_, _| Err(HookError::new("warn")));
+
+        let err = registry
+            .emit(&Ping, CancellationToken::new())
+            .expect_err("original error propagates");
+        assert_eq!(err.message(), "warn");
+        assert_eq!(observed.lock().as_slice(), ["ping:warn"]);
+    }
+
+    #[test]
+    fn on_error_handler_errors_do_not_recurse() {
+        let registry = HookRegistry::new();
+        let calls = Arc::new(AtomicU32::new(0));
+        let counted = Arc::clone(&calls);
+        let _u1 = registry.on::<ErrorEvent>(EventType::on_error(), move |_, _| {
+            counted.fetch_add(1, Ordering::SeqCst);
+            Err(HookError::new("on_error failed"))
+        });
+        let _u2 = registry.on::<Ping>(ping_type(), |_, _| Err(HookError::new("warn")));
+
+        let err = registry
+            .emit(&Ping, CancellationToken::new())
+            .expect_err("aggregate");
+        // The on_error handler runs exactly once (no recursion) and its error is aggregated.
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert!(err.message().contains("warn"));
+        assert!(err.message().contains("on_error failed"));
     }
 
     #[test]

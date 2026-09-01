@@ -149,23 +149,77 @@ async fn tower_provider_bridges_request_response() {
     assert_eq!(provider.execute(41).await.unwrap(), 42);
 }
 
+#[derive(Debug, Clone)]
+struct NamedProvider {
+    name: &'static str,
+    available: bool,
+}
+
+impl NamedProvider {
+    fn new(name: &'static str) -> Self {
+        Self {
+            name,
+            available: true,
+        }
+    }
+
+    fn unavailable(name: &'static str) -> Self {
+        Self {
+            name,
+            available: false,
+        }
+    }
+}
+
+impl Provider for NamedProvider {
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
+    fn is_available(&self) -> bool {
+        self.available
+    }
+}
+
 #[test]
 fn registry_resolves_lowest_priority_matching_tier() {
     let mut registry = Registry::new();
     registry.bind(Binding {
         operation_id: "embed".to_string(),
-        provider: "basic",
+        provider: NamedProvider::new("basic"),
         tiers: Vec::new(),
         priority: 10,
     });
     registry.bind(Binding {
         operation_id: "embed".to_string(),
-        provider: "pro",
+        provider: NamedProvider::new("pro"),
         tiers: vec!["pro".to_string()],
         priority: 1,
     });
 
-    assert_eq!(*registry.resolve("embed", "free").unwrap(), "basic");
-    assert_eq!(*registry.resolve("embed", "pro").unwrap(), "pro");
+    assert_eq!(registry.resolve("embed", "free").unwrap().name(), "basic");
+    assert_eq!(registry.resolve("embed", "pro").unwrap().name(), "pro");
     assert_eq!(registry.list_bindings("embed").len(), 2);
+}
+
+#[test]
+fn registry_skips_unavailable_providers() {
+    let mut registry = Registry::new();
+    registry.bind(Binding {
+        operation_id: "embed".to_string(),
+        provider: NamedProvider::unavailable("preferred"),
+        tiers: Vec::new(),
+        priority: 1,
+    });
+    registry.bind(Binding {
+        operation_id: "embed".to_string(),
+        provider: NamedProvider::new("fallback"),
+        tiers: Vec::new(),
+        priority: 5,
+    });
+
+    assert_eq!(
+        registry.resolve("embed", "free").unwrap().name(),
+        "fallback"
+    );
 }

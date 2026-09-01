@@ -17,11 +17,11 @@ pub const SERVICE_NAME: &str = "service.name";
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[non_exhaustive]
 pub enum OtlpProtocol {
-    /// OTLP over gRPC/Tonic, usually port 4317.
+    /// OTLP over HTTP/protobuf, usually port 4318. This is the default transport.
     #[default]
-    Grpc,
-    /// OTLP over HTTP/protobuf, usually port 4318.
     HttpBinary,
+    /// OTLP over gRPC/Tonic, usually port 4317.
+    Grpc,
 }
 
 /// Configuration for an OTLP trace exporter.
@@ -66,8 +66,10 @@ impl TracerGuard {
 }
 
 /// Build an injectable OpenTelemetry tracer provider without touching global state.
+///
+/// Uses the default OTLP protocol ([`OtlpProtocol::HttpBinary`]).
 pub fn tracer_provider(cfg: &TracingConfig) -> AppResult<TracerGuard> {
-    tracer_provider_with_protocol(cfg, OtlpProtocol::Grpc)
+    tracer_provider_with_protocol(cfg, OtlpProtocol::default())
 }
 
 /// Build an injectable OpenTelemetry tracer provider with an explicit OTLP protocol.

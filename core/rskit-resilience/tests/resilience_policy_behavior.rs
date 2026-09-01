@@ -103,7 +103,7 @@ fn retry_public_builders_presets_error_and_layer_accessors() {
     );
     let linear_policy = RetryPolicy::new()
         .with_linear_backoff(linear)
-        .with_jitter(false);
+        .with_jitter(0.0);
     assert_eq!(linear_policy.backoff_kind, BackoffKind::Linear);
     assert_eq!(linear_policy.backoff_delay(1), Duration::from_millis(10));
     assert_eq!(linear_policy.backoff_delay(3), Duration::from_millis(18));
@@ -126,7 +126,7 @@ fn retry_public_builders_presets_error_and_layer_accessors() {
     assert!(debug.contains("retry_if"));
     assert!(debug.contains("on_retry"));
 
-    let fast = RetryPolicy::from_preset(RetryPreset::Fast).with_jitter(false);
+    let fast = RetryPolicy::from_preset(RetryPreset::Fast).with_jitter(0.0);
     assert_eq!(fast.max_attempts, 2);
     assert_eq!(fast.backoff_delay(1), Duration::from_millis(10));
     assert_eq!(RetryPolicy::external_service().max_attempts, 4);
@@ -408,7 +408,7 @@ async fn retry_success_on_first_attempt() {
     let policy = RetryPolicy::new()
         .with_max_attempts(3)
         .with_initial_backoff(Duration::from_millis(1))
-        .with_jitter(false);
+        .with_jitter(0.0);
 
     let c = counter.clone();
     let r = policy
@@ -431,7 +431,7 @@ async fn retry_success_on_nth_attempt() {
     let policy = RetryPolicy::new()
         .with_max_attempts(5)
         .with_initial_backoff(Duration::from_millis(1))
-        .with_jitter(false);
+        .with_jitter(0.0);
 
     let c = counter.clone();
     let r = policy
@@ -454,7 +454,7 @@ async fn retry_all_attempts_exhausted() {
     let policy = RetryPolicy::new()
         .with_max_attempts(3)
         .with_initial_backoff(Duration::from_millis(1))
-        .with_jitter(false);
+        .with_jitter(0.0);
 
     let c = counter.clone();
     let r = policy
@@ -479,7 +479,7 @@ async fn retry_if_filter_only_retries_specific_errors() {
     let policy = RetryPolicy::new()
         .with_max_attempts(5)
         .with_initial_backoff(Duration::from_millis(1))
-        .with_jitter(false)
+        .with_jitter(0.0)
         .with_retry_if(|e| e.code() == ErrorCode::Timeout);
 
     let c = counter.clone();
@@ -508,7 +508,7 @@ async fn retry_on_retry_callback() {
     let policy = RetryPolicy::new()
         .with_max_attempts(3)
         .with_initial_backoff(Duration::from_millis(1))
-        .with_jitter(false)
+        .with_jitter(0.0)
         .with_on_retry(move |attempt, err| {
             a.lock().push((attempt, err.message().to_string()));
         });
@@ -534,7 +534,7 @@ async fn retry_jitter_produces_varying_delays() {
     let policy = RetryPolicy::new()
         .with_max_attempts(5)
         .with_initial_backoff(Duration::from_millis(10))
-        .with_jitter(true)
+        .with_jitter(1.0)
         .with_on_retry(move |_attempt, _err| {
             d.lock().push(std::time::Instant::now());
         });
@@ -567,7 +567,7 @@ async fn retry_max_backoff_capping() {
         .with_initial_backoff(Duration::from_millis(100))
         .with_max_backoff(Duration::from_millis(200))
         .with_backoff_factor(10.0)
-        .with_jitter(false);
+        .with_jitter(0.0);
 
     let start = std::time::Instant::now();
     let _ = policy
@@ -589,7 +589,7 @@ async fn retry_non_retryable_immediate_failure() {
     let policy = RetryPolicy::new()
         .with_max_attempts(5)
         .with_initial_backoff(Duration::from_millis(1))
-        .with_jitter(false);
+        .with_jitter(0.0);
 
     let c = counter.clone();
     let r = policy
@@ -921,7 +921,7 @@ async fn layer_retry_wraps_service() {
     let policy = RetryPolicy::new()
         .with_max_attempts(3)
         .with_initial_backoff(Duration::from_millis(1))
-        .with_jitter(false);
+        .with_jitter(0.0);
 
     let c = counter.clone();
     let svc = tower::service_fn(move |_req: i32| {
@@ -1018,7 +1018,7 @@ async fn layer_all_four_composed() {
     let policy = RetryPolicy::new()
         .with_max_attempts(2)
         .with_initial_backoff(Duration::from_millis(1))
-        .with_jitter(false);
+        .with_jitter(0.0);
 
     let svc = tower::service_fn(|req: i32| async move { Ok::<i32, AppError>(req * 2) });
 
@@ -1043,7 +1043,7 @@ async fn layer_ordering_rate_limit_then_bulkhead_then_cb_then_retry() {
     let policy = RetryPolicy::new()
         .with_max_attempts(2)
         .with_initial_backoff(Duration::from_millis(1))
-        .with_jitter(false);
+        .with_jitter(0.0);
 
     let svc = tower::service_fn(|req: i32| async move { Ok::<i32, AppError>(req) });
 
@@ -1069,7 +1069,7 @@ async fn layer_error_propagation() {
     let policy = RetryPolicy::new()
         .with_max_attempts(1)
         .with_initial_backoff(Duration::from_millis(1))
-        .with_jitter(false);
+        .with_jitter(0.0);
 
     let svc = tower::service_fn(|_req: i32| async { Err::<i32, AppError>(non_retryable_err()) });
 
@@ -1133,7 +1133,7 @@ async fn multi_cb_plus_retry_exhausts_then_fast_fail() {
     let policy = RetryPolicy::new()
         .with_max_attempts(5)
         .with_initial_backoff(Duration::from_millis(1))
-        .with_jitter(false);
+        .with_jitter(0.0);
 
     // Execute through retry wrapping CB — always fails
     let c = counter.clone();
@@ -1299,7 +1299,7 @@ async fn multi_error_types_from_each_pattern() {
     let policy = RetryPolicy::new()
         .with_max_attempts(2)
         .with_initial_backoff(Duration::from_millis(1))
-        .with_jitter(false);
+        .with_jitter(0.0);
     let retry_err = policy
         .execute(|| async { Err::<i32, AppError>(fail_err()) })
         .await

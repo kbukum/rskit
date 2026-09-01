@@ -123,7 +123,7 @@ impl Component for DiscoveryComponent {
             let retry_policy = RetryPolicy::new()
                 .with_max_attempts(max_retries)
                 .with_constant_backoff(ConstantBackoff::new(config.registration.retry_duration()?))
-                .with_jitter(false)
+                .with_jitter(0.0)
                 .with_on_retry({
                     let instance_id = instance_id.clone();
                     move |attempt, error| {

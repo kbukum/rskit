@@ -579,7 +579,7 @@ mod tests {
             RetryPolicy::new()
                 .with_max_attempts(2)
                 .with_constant_backoff(ConstantBackoff::new(Duration::from_millis(1)))
-                .with_jitter(false),
+                .with_jitter(0.0),
         );
         let metric =
             semantic_similarity::<String>(Arc::clone(&provider) as Arc<dyn Provider>, model())

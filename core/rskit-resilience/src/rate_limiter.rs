@@ -5,8 +5,11 @@ use governor::{DefaultDirectRateLimiter, Quota, RateLimiter as GovRateLimiter};
 use rskit_errors::{AppError, AppResult};
 use tokio_util::sync::CancellationToken;
 
+/// Callback invoked with the limiter name when a request is rejected by the limit.
+pub type OnLimit = Arc<dyn Fn(&str) + Send + Sync>;
+
 /// Configuration for constructing a [`RateLimiter`].
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct RateLimiterConfig {
     /// Human-readable limiter name used in error details.
     pub name: String,
@@ -14,6 +17,19 @@ pub struct RateLimiterConfig {
     pub per_second: u32,
     /// Burst capacity.
     pub burst: u32,
+    /// Optional callback invoked when a request is rejected by the limit.
+    pub on_limit: Option<OnLimit>,
+}
+
+impl std::fmt::Debug for RateLimiterConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RateLimiterConfig")
+            .field("name", &self.name)
+            .field("per_second", &self.per_second)
+            .field("burst", &self.burst)
+            .field("on_limit", &self.on_limit.as_ref().map(|_| "<fn>"))
+            .finish()
+    }
 }
 
 impl RateLimiterConfig {
@@ -24,6 +40,7 @@ impl RateLimiterConfig {
             name: name.into(),
             per_second,
             burst,
+            on_limit: None,
         }
     }
 
@@ -38,6 +55,13 @@ impl RateLimiterConfig {
     #[must_use]
     pub fn with_burst(mut self, burst: u32) -> Self {
         self.burst = burst;
+        self
+    }
+
+    /// Register a callback invoked with the limiter name when a request is rejected.
+    #[must_use]
+    pub fn with_on_limit(mut self, f: impl Fn(&str) + Send + Sync + 'static) -> Self {
+        self.on_limit = Some(Arc::new(f));
         self
     }
 
@@ -64,12 +88,14 @@ impl RateLimiterConfig {
 pub struct RateLimiter {
     inner: Arc<DefaultDirectRateLimiter>,
     name: String,
+    on_limit: Option<OnLimit>,
 }
 
 impl std::fmt::Debug for RateLimiter {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RateLimiter")
             .field("name", &self.name)
+            .field("on_limit", &self.on_limit.as_ref().map(|_| "<fn>"))
             .finish()
     }
 }
@@ -105,19 +131,26 @@ impl RateLimiter {
         Ok(Self {
             inner: Arc::new(GovRateLimiter::direct(quota)),
             name: config.name,
+            on_limit: config.on_limit,
         })
     }
 
     /// Non-blocking check: returns `Ok(())` if a token was acquired,
     /// or `Err(AppError::rate_limited())` if the bucket is empty.
     ///
+    /// When the request is rejected, the configured `on_limit` callback (if any) is invoked
+    /// with the limiter name before the error is returned.
+    ///
     /// # Errors
     ///
     /// Returns [`AppError::rate_limited`] when no token is currently available.
     pub fn check(&self) -> AppResult<()> {
-        self.inner
-            .check()
-            .map_err(|_| AppError::rate_limited().with_detail("rate_limiter", self.name.clone()))
+        self.inner.check().map_err(|_| {
+            if let Some(callback) = &self.on_limit {
+                callback(&self.name);
+            }
+            AppError::rate_limited().with_detail("rate_limiter", self.name.clone())
+        })
     }
 
     /// Async wait: blocks until a token is available or `cancel` fires.
@@ -201,5 +234,24 @@ mod tests {
     fn from_config_rejects_zero_limits() {
         assert!(RateLimiter::from_config(RateLimiterConfig::new("zero-rate", 0, 1)).is_err());
         assert!(RateLimiter::from_config(RateLimiterConfig::new("zero-burst", 1, 0)).is_err());
+    }
+
+    #[test]
+    fn on_limit_callback_fires_when_request_is_rejected() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let hits = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&hits);
+        let limiter = RateLimiter::from_config(
+            RateLimiterConfig::new("limited", 1, 1).with_on_limit(move |name| {
+                assert_eq!(name, "limited");
+                observed.fetch_add(1, Ordering::SeqCst);
+            }),
+        )
+        .unwrap();
+
+        assert!(limiter.check().is_ok());
+        assert!(limiter.check().is_err());
+        assert_eq!(hits.load(Ordering::SeqCst), 1);
     }
 }

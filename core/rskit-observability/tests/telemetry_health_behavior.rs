@@ -325,6 +325,7 @@ fn component_health_construction() {
         name: "db".into(),
         status: HealthStatus::Healthy,
         message: None,
+        details: Default::default(),
     };
     assert_eq!(ch.name, "db");
     assert_eq!(ch.status, HealthStatus::Healthy);
@@ -337,6 +338,7 @@ fn component_health_with_message() {
         name: "cache".into(),
         status: HealthStatus::Degraded,
         message: Some("slow".into()),
+        details: Default::default(),
     };
     assert_eq!(ch.message.as_deref(), Some("slow"));
 }
@@ -347,6 +349,7 @@ fn component_health_clone() {
         name: "db".into(),
         status: HealthStatus::Healthy,
         message: Some("ok".into()),
+        details: Default::default(),
     };
     let ch2 = ch.clone();
     assert_eq!(ch.name, ch2.name);
@@ -359,6 +362,7 @@ fn component_health_debug() {
         name: "db".into(),
         status: HealthStatus::Healthy,
         message: None,
+        details: Default::default(),
     };
     let debug = format!("{:?}", ch);
     assert!(debug.contains("db"));
@@ -475,9 +479,9 @@ fn metrics_config_with_endpoint() {
     let cfg = MetricsConfig {
         service_name: "svc".into(),
         export_interval: Duration::from_secs(30),
-        otlp_endpoint: Some("http://localhost:4317".into()),
+        otlp_endpoint: Some("http://localhost:4318".into()),
     };
-    assert_eq!(cfg.otlp_endpoint.as_deref(), Some("http://localhost:4317"));
+    assert_eq!(cfg.otlp_endpoint.as_deref(), Some("http://localhost:4318"));
 }
 
 #[test]
@@ -518,7 +522,7 @@ fn init_metrics_without_endpoint_succeeds() {
 fn tracing_config_sampler_always_on() {
     let cfg = TracingConfig {
         service_name: "svc".into(),
-        endpoint: "http://localhost:4317".into(),
+        endpoint: "http://localhost:4318".into(),
         sample_rate: 1.0,
         export_timeout: Duration::from_secs(5),
     };
@@ -529,7 +533,7 @@ fn tracing_config_sampler_always_on() {
 fn tracing_config_sampler_always_off() {
     let cfg = TracingConfig {
         service_name: "svc".into(),
-        endpoint: "http://localhost:4317".into(),
+        endpoint: "http://localhost:4318".into(),
         sample_rate: 0.0,
         export_timeout: Duration::from_secs(5),
     };
@@ -540,7 +544,7 @@ fn tracing_config_sampler_always_off() {
 fn tracing_config_sampler_ratio() {
     let cfg = TracingConfig {
         service_name: "svc".into(),
-        endpoint: "http://localhost:4317".into(),
+        endpoint: "http://localhost:4318".into(),
         sample_rate: 0.5,
         export_timeout: Duration::from_secs(5),
     };
@@ -551,7 +555,7 @@ fn tracing_config_sampler_ratio() {
 fn tracing_config_debug() {
     let cfg = TracingConfig {
         service_name: "svc".into(),
-        endpoint: "http://localhost:4317".into(),
+        endpoint: "http://localhost:4318".into(),
         sample_rate: 1.0,
         export_timeout: Duration::from_secs(5),
     };
@@ -563,7 +567,7 @@ fn tracing_config_debug() {
 fn tracing_config_clone() {
     let cfg = TracingConfig {
         service_name: "svc".into(),
-        endpoint: "http://localhost:4317".into(),
+        endpoint: "http://localhost:4318".into(),
         sample_rate: 1.0,
         export_timeout: Duration::from_secs(5),
     };

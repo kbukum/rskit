@@ -36,8 +36,11 @@ pub struct RetryPolicy {
     pub max_elapsed_time: Duration,
     /// Multiplier applied on each successive retry when using exponential backoff.
     pub backoff_factor: f64,
-    /// Whether to add uniform jitter to each backoff delay.
-    pub jitter: bool,
+    /// Jitter fraction applied to each backoff delay, in `0.0..=1.0`.
+    ///
+    /// `0.0` disables jitter. A fraction `f` spreads each delay uniformly across
+    /// `base * (1 - f) ..= base * (1 + f)`, bounding the randomness to a documented range.
+    pub jitter: f64,
     /// Backoff algorithm applied between retry attempts.
     pub backoff_kind: BackoffKind,
     /// Linear increment applied when [`BackoffKind::Linear`] is selected.
@@ -98,7 +101,7 @@ impl Default for RetryPolicy {
             max_backoff: Duration::from_secs(10),
             max_elapsed_time: Duration::from_secs(30),
             backoff_factor: 2.0,
-            jitter: true,
+            jitter: 0.1,
             backoff_kind: BackoffKind::Exponential,
             linear_increment: Duration::from_millis(100),
             retry_if: None,
@@ -174,10 +177,13 @@ impl RetryPolicy {
         self
     }
 
-    /// Enable or disable uniform jitter on each backoff delay.
+    /// Set the jitter fraction applied to each backoff delay, in `0.0..=1.0`.
+    ///
+    /// `0.0` disables jitter; larger values widen the randomized spread around each delay.
+    /// Out-of-range or non-finite values are rejected by [`RetryPolicy::validate`].
     #[must_use]
-    pub fn with_jitter(mut self, enabled: bool) -> Self {
-        self.jitter = enabled;
+    pub fn with_jitter(mut self, fraction: f64) -> Self {
+        self.jitter = fraction;
         self
     }
 
@@ -318,13 +324,19 @@ impl RetryPolicy {
             }
         };
 
-        if self.jitter && !base_delay.is_zero() {
-            let jitter = self
+        if self.jitter > 0.0 && !base_delay.is_zero() {
+            let unit = self
                 .jitter_seed
                 .map(|seed| Self::deterministic_unit(seed, attempt))
                 .unwrap_or_else(rand::random::<f64>);
-            let factor = 0.5 + jitter;
-            Duration::from_millis((base_delay.as_millis() as f64 * factor) as u64)
+            let base_ms = base_delay.as_millis() as f64;
+            // Spread uniformly across base * (1 ± jitter): (unit*2 - 1) maps [0,1) → [-1,1).
+            let offset = (unit * 2.0 - 1.0) * base_ms * self.jitter;
+            // Cap the jittered delay at max_backoff so a positive offset never exceeds the
+            // documented upper bound (jitter is applied before the final cap, matching gokit).
+            let max_ms = self.max_backoff.as_millis() as f64;
+            let jittered = (base_ms + offset).clamp(0.0, max_ms);
+            Duration::from_millis(jittered as u64)
         } else {
             base_delay
         }
@@ -345,6 +357,12 @@ impl RetryPolicy {
             return Err(AppError::invalid_input(
                 "backoff_factor",
                 "retry backoff factor must be finite and greater than zero",
+            ));
+        }
+        if !self.jitter.is_finite() || !(0.0..=1.0).contains(&self.jitter) {
+            return Err(AppError::invalid_input(
+                "jitter",
+                "retry jitter must be a finite fraction within [0.0, 1.0]",
             ));
         }
         Ok(())

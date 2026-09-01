@@ -264,7 +264,7 @@ mod tests {
             RetryPolicy::new()
                 .with_max_attempts(3)
                 .with_constant_backoff(ConstantBackoff::new(Duration::from_millis(1)))
-                .with_jitter(false),
+                .with_jitter(0.0),
         );
 
         let result = policy
@@ -319,7 +319,7 @@ mod tests {
                 RetryPolicy::new()
                     .with_max_attempts(5)
                     .with_constant_backoff(ConstantBackoff::new(Duration::from_millis(5)))
-                    .with_jitter(false),
+                    .with_jitter(0.0),
             )
             .with_timeout(Duration::from_millis(20));
 
@@ -416,7 +416,7 @@ mod tests {
             RetryPolicy::new()
                 .with_max_attempts(3)
                 .with_constant_backoff(ConstantBackoff::new(Duration::from_millis(1)))
-                .with_jitter(false)
+                .with_jitter(0.0)
                 .with_retry_if(|e: &AppError| e.code() == ErrorCode::InvalidInput)
                 .with_on_retry(move |_attempt, _err| {
                     seen.fetch_add(1, Ordering::SeqCst);

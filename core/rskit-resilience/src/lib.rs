@@ -18,7 +18,7 @@ pub mod retry;
 pub use bulkhead::{Bulkhead, BulkheadConfig};
 pub use circuit_breaker::{CbConfig, CbState, CircuitBreaker};
 pub use policy::Policy;
-pub use rate_limiter::{RateLimiter, RateLimiterConfig};
+pub use rate_limiter::{OnLimit, RateLimiter, RateLimiterConfig};
 pub use retry::{
     BackoffKind, ConstantBackoff, LinearBackoff, RetryError, RetryPolicy, RetryPreset,
 };
