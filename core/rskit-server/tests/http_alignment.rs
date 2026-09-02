@@ -13,7 +13,7 @@ use rskit_security::TlsVersion;
 use rskit_server::{
     CorsPolicy, HTTP_BASELINE_LAYER_ORDER, HTTP_INTERCEPTOR_ORDER, HttpMiddlewareStack,
     HttpServerBuilder, HttpServerConfig, HttpTlsConfig, SecurityHeadersConfig, TransportSecurity,
-    health_router, healthz_router,
+    observability_router,
 };
 use rskit_validation::Validate;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -96,7 +96,9 @@ fn builder_accepts_ordered_middleware_stack() {
 
 #[tokio::test]
 async fn health_routes_return_expected_statuses() {
-    let ok_response = health_router(Arc::new(Registry::new()))
+    let router = observability_router(Arc::new(Registry::new()), "orders");
+    let ok_response = router
+        .clone()
         .oneshot(
             Request::builder()
                 .uri("/health")
@@ -107,7 +109,7 @@ async fn health_routes_return_expected_statuses() {
         .unwrap();
     assert_eq!(ok_response.status(), axum::http::StatusCode::OK);
 
-    let healthz_response = healthz_router()
+    let healthz_response = router
         .oneshot(
             Request::builder()
                 .uri("/healthz")
@@ -152,7 +154,7 @@ async fn health_router_returns_unavailable_when_any_component_is_unhealthy() {
         health: Health::unhealthy("database", "connection refused"),
     }));
 
-    let response = health_router(Arc::new(registry))
+    let response = observability_router(Arc::new(registry), "orders")
         .oneshot(
             Request::builder()
                 .uri("/health")
@@ -168,12 +170,32 @@ async fn health_router_returns_unavailable_when_any_component_is_unhealthy() {
     );
     let body = to_bytes(response.into_body(), 4096).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(json[0]["name"], "database");
+    assert_eq!(json["status"], "unhealthy");
+    assert_eq!(json["service"], "orders");
+    assert_eq!(json["components"][0]["name"], "database");
 }
 
 #[tokio::test]
-async fn healthz_router_returns_liveness_payload() {
-    let response = healthz_router()
+async fn liveness_and_healthz_expose_probe_and_health_payloads() {
+    let router = observability_router(Arc::new(Registry::new()), "orders");
+
+    let livez = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri("/livez")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(livez.status(), axum::http::StatusCode::OK);
+    let body = to_bytes(livez.into_body(), 4096).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(json["status"], "alive");
+    assert_eq!(json["service"], "orders");
+
+    let healthz = router
         .oneshot(
             Request::builder()
                 .uri("/healthz")
@@ -182,12 +204,11 @@ async fn healthz_router_returns_liveness_payload() {
         )
         .await
         .unwrap();
-
-    assert_eq!(response.status(), axum::http::StatusCode::OK);
-    let body = to_bytes(response.into_body(), 4096).await.unwrap();
+    assert_eq!(healthz.status(), axum::http::StatusCode::OK);
+    let body = to_bytes(healthz.into_body(), 4096).await.unwrap();
     let json: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(json["status"], "ok");
-    assert!(json["version"].as_str().unwrap().contains('.'));
+    assert_eq!(json["status"], "healthy");
+    assert!(json["components"].is_array());
 }
 
 #[test]

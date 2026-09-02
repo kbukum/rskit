@@ -6,6 +6,7 @@ mod duration;
 mod rfc2822;
 mod rfc3339;
 pub mod serde_duration;
+pub mod serde_duration_secs;
 mod timing;
 
 pub use civil::{

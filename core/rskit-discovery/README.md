@@ -22,19 +22,15 @@ rskit-discovery = "0.2.0-alpha.4"
 
 ```rust
 use rskit_discovery::{
-    InMemoryDiscovery, ServiceInstance, Discovery, Registry,
+    HealthState, InMemoryDiscovery, ServiceInstance, Discovery, Registry,
     LoadBalancer, RoundRobin,
 };
-use std::collections::HashMap;
 
 async fn example() {
     let disco = InMemoryDiscovery::new();
 
-    let inst = ServiceInstance {
-        id: "api-1".into(), name: "api".into(),
-        address: "10.0.0.1".into(), port: 8080,
-        healthy: true, weight: 1, tags: vec![], metadata: HashMap::new(),
-    };
+    let inst = ServiceInstance::new("api-1", "api", "10.0.0.1", 8080)
+        .with_health(HealthState::Healthy);
     disco.register(&inst).await.unwrap();
 
     let instances = disco.resolve("api").await.unwrap();

@@ -29,6 +29,7 @@ pub struct Health {
     /// Overall health status of the component.
     pub status: HealthStatus,
     /// Optional human-readable explanation for non-healthy status.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
 }
 

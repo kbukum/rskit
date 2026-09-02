@@ -1,5 +1,6 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use async_trait::async_trait;
 use axum::Router;
@@ -19,6 +20,7 @@ pub struct HttpServer {
     pub(super) cancel: CancellationToken,
     pub(super) router: Arc<tokio::sync::Mutex<Option<Router>>>,
     pub(super) local_addr: Arc<Mutex<Option<SocketAddr>>>,
+    pub(super) serve_handle: Arc<Mutex<Option<tokio::task::JoinHandle<bool>>>>,
 }
 
 impl HttpServer {
@@ -77,25 +79,55 @@ impl Component for HttpServer {
 
         let cancel = self.cancel.clone();
         let config = Arc::clone(&self.config);
-        tokio::spawn(async move {
+        let handle = tokio::spawn(async move {
             if let Some(acceptor) = tls_acceptor {
                 tracing::info!(addr = %actual_addr, "HTTPS server listening");
                 let context = ConnectionContext::new(router, Arc::clone(&config), true);
-                serve_tls_listener(listener, acceptor, context, cancel).await;
+                serve_tls_listener(listener, acceptor, context, cancel).await
             } else {
                 tracing::info!(addr = %actual_addr, "HTTP server listening");
                 let context =
                     ConnectionContext::new(router, Arc::clone(&config), config.enable_h2c);
-                serve_listener(listener, context, cancel).await;
+                serve_listener(listener, context, cancel).await
             }
         });
+        *self.serve_handle.lock() = Some(handle);
 
         Ok(())
     }
 
     async fn stop(&self) -> AppResult<()> {
         self.cancel.cancel();
-        Ok(())
+        let Some(handle) = self.serve_handle.lock().take() else {
+            return Ok(());
+        };
+        // The serve loop drains in-flight connections bounded by `shutdown_timeout`; allow a small
+        // slack before abandoning the wait so `stop` still returns promptly. `saturating_add`
+        // keeps an untrusted `shutdown_timeout` (e.g. `u64::MAX` seconds) from overflowing.
+        let deadline = self
+            .config
+            .shutdown_timeout
+            .saturating_add(Duration::from_secs(1));
+        let abort = handle.abort_handle();
+        match tokio::time::timeout(deadline, handle).await {
+            Ok(Ok(true)) => Ok(()),
+            Ok(Ok(false)) => Err(AppError::new(
+                ErrorCode::Timeout,
+                "HTTP server did not drain in-flight connections within shutdown timeout",
+            )),
+            Ok(Err(join_error)) => Err(AppError::new(
+                ErrorCode::Internal,
+                format!("HTTP serve task ended abnormally: {join_error}"),
+            )
+            .with_cause(join_error)),
+            Err(_) => {
+                abort.abort();
+                Err(AppError::new(
+                    ErrorCode::Timeout,
+                    "HTTP server shutdown exceeded its deadline",
+                ))
+            }
+        }
     }
 
     fn health(&self) -> Health {

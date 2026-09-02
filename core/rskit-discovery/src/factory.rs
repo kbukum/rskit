@@ -41,10 +41,16 @@ impl DiscoveryRegistry {
                         name: ep.name.clone(),
                         address: ep.address.clone(),
                         port: ep.port,
-                        healthy: ep.healthy,
+                        protocol: ep.protocol.clone(),
+                        health: if ep.healthy {
+                            crate::instance::HealthState::Healthy
+                        } else {
+                            crate::instance::HealthState::Unhealthy
+                        },
                         weight: ep.weight,
                         tags: ep.tags.clone(),
                         metadata: ep.metadata.clone(),
+                        last_seen: None,
                     };
                     tokio::task::block_in_place(|| {
                         tokio::runtime::Handle::current().block_on(mem.add(&ep.name, inst))
@@ -157,7 +163,7 @@ mod tests {
             Some("a")
         );
         assert_eq!(instances[0].weight, 3);
-        assert!(!instances[0].healthy);
+        assert!(!instances[0].is_healthy());
     }
 
     #[test]

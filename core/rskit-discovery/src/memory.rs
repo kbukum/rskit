@@ -89,10 +89,12 @@ mod tests {
             name: name.into(),
             address: "127.0.0.1".into(),
             port: 8080,
-            healthy: true,
+            protocol: String::new(),
+            health: crate::instance::HealthState::Healthy,
             weight: 1,
             tags: vec![],
             metadata: HashMap::new(),
+            last_seen: None,
         }
     }
 

@@ -14,7 +14,7 @@ pub mod config;
 /// [`ErrorLayer`] — auto-enriches gRPC error responses with structured RFC 9457 details.
 #[cfg(feature = "grpc")]
 pub mod error_layer;
-/// HTTP server lifecycle and health routers.
+/// HTTP server lifecycle and service endpoints.
 #[cfg(feature = "http")]
 pub mod http;
 /// HTTP server configuration owned by `rskit-server`.
@@ -33,7 +33,7 @@ pub use config::{GrpcServerConfig, TlsConfig};
 #[cfg(feature = "grpc")]
 pub use error_layer::ErrorLayer;
 #[cfg(feature = "http")]
-pub use http::{HttpServer, HttpServerBuilder, health_router, healthz_router};
+pub use http::{HttpServer, HttpServerBuilder, observability_router};
 #[cfg(feature = "http")]
 pub use http_config::{CorsPolicy, HttpServerConfig};
 #[cfg(feature = "http")]

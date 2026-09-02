@@ -1,0 +1,16 @@
+{
+  "status": "degraded",
+  "service": "orders",
+  "timestamp": "2024-01-01T00:00:00Z",
+  "components": [
+    {
+      "name": "cache",
+      "status": "healthy"
+    },
+    {
+      "name": "db",
+      "status": "degraded",
+      "message": "high latency"
+    }
+  ]
+}

@@ -1,7 +1,8 @@
 use std::collections::HashMap;
 
 use rskit_discovery::{
-    Discovery, InMemoryDiscovery, LoadBalancer, Random, Registry, RoundRobin, ServiceInstance,
+    Discovery, HealthState, InMemoryDiscovery, LoadBalancer, Random, Registry, RoundRobin,
+    ServiceInstance,
 };
 
 fn instance(id: &str, name: &str) -> ServiceInstance {
@@ -10,7 +11,9 @@ fn instance(id: &str, name: &str) -> ServiceInstance {
         name: name.into(),
         address: "127.0.0.1".into(),
         port: 8080,
-        healthy: true,
+        health: HealthState::Healthy,
+        protocol: String::new(),
+        last_seen: None,
         weight: 1,
         tags: vec![],
         metadata: HashMap::new(),

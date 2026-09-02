@@ -151,6 +151,7 @@ impl HttpServerBuilder {
             cancel: builder.cancel,
             router: Arc::new(tokio::sync::Mutex::new(Some(router))),
             local_addr: Arc::new(Mutex::new(None)),
+            serve_handle: Arc::new(Mutex::new(None)),
         })
     }
 }
@@ -183,11 +184,17 @@ fn apply_baseline_layers(
     cors: Option<crate::CorsPolicy>,
 ) -> AppResult<Router> {
     let security_headers = SecurityHeadersLayer::new(&security_headers.unwrap_or_default())?;
-    let router = router
-        .layer(TimeoutLayer::with_status_code(
+    // A zero request timeout disables the per-request deadline, matching the cross-kit contract;
+    // applying `TimeoutLayer` with a zero duration would instead time out every request instantly.
+    let router = if request_timeout.is_zero() {
+        router
+    } else {
+        router.layer(TimeoutLayer::with_status_code(
             StatusCode::REQUEST_TIMEOUT,
             request_timeout,
         ))
+    };
+    let router = router
         .layer(DefaultBodyLimit::max(max_body_bytes))
         .layer(security_headers);
     let router = if let Some(cors_cfg) = cors.as_ref() {
@@ -250,6 +257,48 @@ mod tests {
                 .expect("x-content-type-options header"),
             "nosniff"
         );
+    }
+
+    #[tokio::test]
+    async fn zero_request_timeout_disables_the_deadline() {
+        use std::time::Duration;
+
+        let mut config = local_config();
+        config.request_timeout = Duration::ZERO;
+        let server = HttpServerBuilder::new(config, CancellationToken::new())
+            .with_router(Router::new().route(
+                "/slow",
+                get(|| async {
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                    "done"
+                }),
+            ))
+            .build()
+            .expect("build server");
+        let router = server
+            .router
+            .lock()
+            .await
+            .take()
+            .expect("router is present");
+
+        let response = router
+            .oneshot(
+                Request::builder()
+                    .uri("/slow")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("route response");
+
+        // With the timeout layer disabled the slow handler runs to completion instead of
+        // returning `408 Request Timeout` the instant a zero-duration deadline fires.
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body bytes");
+        assert_eq!(&body[..], b"done");
     }
 
     #[tokio::test]

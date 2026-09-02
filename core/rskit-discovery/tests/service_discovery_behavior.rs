@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use rskit_discovery::{
-    Discovery, InMemoryDiscovery, LeastConnections, LoadBalancer, Random, Registry, RoundRobin,
-    ServiceInstance,
+    Discovery, HealthState, InMemoryDiscovery, LeastConnections, LoadBalancer, Random, Registry,
+    RoundRobin, ServiceInstance,
 };
 use rskit_errors::AppResult;
 
@@ -18,7 +18,9 @@ fn make_instance(id: &str, name: &str) -> ServiceInstance {
         name: name.into(),
         address: "127.0.0.1".into(),
         port: 8080,
-        healthy: true,
+        health: HealthState::Healthy,
+        protocol: String::new(),
+        last_seen: None,
         weight: 1,
         tags: vec![],
         metadata: HashMap::new(),
@@ -31,7 +33,9 @@ fn make_full_instance(id: &str, name: &str, addr: &str, port: u16) -> ServiceIns
         name: name.into(),
         address: addr.into(),
         port,
-        healthy: true,
+        health: HealthState::Healthy,
+        protocol: String::new(),
+        last_seen: None,
         weight: 1,
         tags: vec!["prod".into(), "us-east-1".into()],
         metadata: HashMap::from([
@@ -50,7 +54,7 @@ fn instance_creation_all_fields() {
     assert_eq!(inst.name, "payment");
     assert_eq!(inst.address, "192.168.1.10");
     assert_eq!(inst.port, 9090);
-    assert!(inst.healthy);
+    assert!(inst.is_healthy());
     assert_eq!(inst.tags.len(), 2);
     assert!(inst.tags.contains(&"prod".to_string()));
     assert_eq!(inst.metadata.get("version").unwrap(), "1.0");
@@ -83,7 +87,9 @@ fn instance_tags_and_metadata_preservation() {
         name: "svc".into(),
         address: "h".into(),
         port: 80,
-        healthy: true,
+        health: HealthState::Healthy,
+        protocol: String::new(),
+        last_seen: None,
         weight: 1,
         tags: vec!["canary".into(), "v2".into(), "gpu".into()],
         metadata,
@@ -108,7 +114,9 @@ fn instance_port_zero() {
         name: "svc".into(),
         address: "localhost".into(),
         port: 0,
-        healthy: true,
+        health: HealthState::Healthy,
+        protocol: String::new(),
+        last_seen: None,
         weight: 1,
         tags: vec![],
         metadata: HashMap::new(),
@@ -125,7 +133,7 @@ fn instance_serialization_roundtrip() {
     assert_eq!(deserialized.name, inst.name);
     assert_eq!(deserialized.address, inst.address);
     assert_eq!(deserialized.port, inst.port);
-    assert_eq!(deserialized.healthy, inst.healthy);
+    assert_eq!(deserialized.health, inst.health);
     assert_eq!(deserialized.tags, inst.tags);
     assert_eq!(deserialized.metadata, inst.metadata);
 }
@@ -137,7 +145,9 @@ fn instance_special_characters_in_name() {
         name: "my-service/v2.beta:latest".into(),
         address: "host".into(),
         port: 80,
-        healthy: true,
+        health: HealthState::Healthy,
+        protocol: String::new(),
+        last_seen: None,
         weight: 1,
         tags: vec![],
         metadata: HashMap::new(),
@@ -153,7 +163,9 @@ fn instance_very_long_service_name() {
         name: long_name.clone(),
         address: "h".into(),
         port: 80,
-        healthy: true,
+        health: HealthState::Healthy,
+        protocol: String::new(),
+        last_seen: None,
         weight: 1,
         tags: vec![],
         metadata: HashMap::new(),

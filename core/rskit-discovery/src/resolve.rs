@@ -17,7 +17,7 @@ pub async fn resolve_addr(disc: &dyn Discovery, service: &str) -> AppResult<(Str
 
     let inst = instances
         .iter()
-        .find(|instance| instance.healthy)
+        .find(|instance| instance.is_healthy())
         .ok_or_else(|| {
             AppError::new(
                 ErrorCode::NotFound,
@@ -79,10 +79,16 @@ mod tests {
             name: "api".to_string(),
             address: address.to_string(),
             port,
-            healthy,
+            protocol: String::new(),
+            health: if healthy {
+                crate::instance::HealthState::Healthy
+            } else {
+                crate::instance::HealthState::Unhealthy
+            },
             weight: 1,
             tags: Vec::new(),
             metadata: Default::default(),
+            last_seen: None,
         }
     }
 }

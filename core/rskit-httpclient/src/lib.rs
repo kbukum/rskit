@@ -52,6 +52,7 @@ pub mod auth;
 pub mod client;
 pub mod config;
 pub mod destination;
+pub mod error;
 pub mod request;
 pub mod response;
 
@@ -62,5 +63,6 @@ pub use auth::Auth;
 pub use client::HttpClient;
 pub use config::HttpClientConfig;
 pub use destination::DestinationPolicy;
+pub use error::TransportErrorKind;
 pub use request::{Request, RequestBody};
 pub use response::{ErrorResponse, Response};
