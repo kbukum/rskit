@@ -314,22 +314,44 @@ fn consul_context(error: AppError, context: &'static str) -> AppError {
 }
 
 fn entries_to_instances(entries: Vec<HealthEntry>) -> Vec<ServiceInstance> {
+    let last_seen = rskit_util::time::now_rfc3339();
     entries
         .into_iter()
         .map(|entry| {
             let svc = entry.service;
+            let protocol = instance_protocol(&svc.meta, &svc.tags);
+            let weight = svc
+                .meta
+                .get("weight")
+                .and_then(|w| w.parse::<u32>().ok())
+                .unwrap_or(1);
             ServiceInstance {
                 id: svc.id,
                 name: svc.service,
                 address: svc.address,
                 port: svc.port,
-                healthy: true,
-                weight: 1,
+                protocol,
+                // Discovery queries Consul with `passing=true`, so every returned entry is healthy.
+                health: crate::instance::HealthState::Healthy,
+                weight,
                 tags: svc.tags,
                 metadata: svc.meta,
+                last_seen: last_seen.clone(),
             }
         })
         .collect()
+}
+
+/// Derive an instance protocol from Consul service metadata, falling back to a well-known
+/// protocol tag and finally to an empty string when neither is present.
+fn instance_protocol(meta: &HashMap<String, String>, tags: &[String]) -> String {
+    if let Some(protocol) = meta.get("protocol") {
+        return protocol.clone();
+    }
+    tags.iter()
+        .find(|tag| matches!(tag.as_str(), "http" | "grpc" | "websocket"))
+        .cloned()
+        .unwrap_or_default()
 }
 
 fn consul_status_error(response: ErrorResponse) -> AppError {
@@ -428,6 +450,31 @@ mod tests {
         );
     }
 
+    #[test]
+    fn entries_to_instances_populates_protocol_weight_and_last_seen() {
+        let body = r#"[{"Service":{"ID":"api-1","Service":"api","Address":"10.0.0.5","Port":9090,"Meta":{"protocol":"grpc","weight":"7"},"Tags":["canary"]}}]"#;
+        let entries: Vec<HealthEntry> = serde_json::from_str(body).unwrap();
+
+        let instances = entries_to_instances(entries);
+
+        assert_eq!(instances.len(), 1);
+        assert_eq!(instances[0].protocol, "grpc");
+        assert_eq!(instances[0].weight, 7);
+        assert!(instances[0].is_healthy());
+        assert!(instances[0].last_seen.is_some());
+    }
+
+    #[test]
+    fn entries_to_instances_derives_protocol_from_tag_and_defaults_weight() {
+        let body = r#"[{"Service":{"ID":"web-1","Service":"web","Address":"10.0.0.6","Port":80,"Meta":{},"Tags":["primary","http"]}}]"#;
+        let entries: Vec<HealthEntry> = serde_json::from_str(body).unwrap();
+
+        let instances = entries_to_instances(entries);
+
+        assert_eq!(instances[0].protocol, "http");
+        assert_eq!(instances[0].weight, 1);
+    }
+
     #[tokio::test]
     async fn consul_register_sends_payload_and_token_to_local_http_server() {
         let server = FakeHttpServer::serve_once(FakeResponse::new(200))
@@ -444,10 +491,12 @@ mod tests {
             name: "api".to_string(),
             address: "127.0.0.1".to_string(),
             port: 8080,
-            healthy: true,
+            protocol: String::new(),
+            health: crate::instance::HealthState::Healthy,
             weight: 1,
             tags: vec!["blue".to_string()],
             metadata,
+            last_seen: None,
         };
 
         consul.register(&instance).await.unwrap();

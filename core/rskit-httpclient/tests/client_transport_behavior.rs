@@ -9,6 +9,7 @@ mod client_transport_behavior {
     use rskit_errors::ErrorCode;
     use rskit_httpclient::{
         Auth, DestinationPolicy, HttpClient, HttpClientConfig, Request, RequestBody,
+        TransportErrorKind,
     };
     use rskit_resilience::{ConstantBackoff, Policy, RetryPolicy};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -165,7 +166,11 @@ mod client_transport_behavior {
         let error = result.unwrap_err();
         assert_eq!(error.code(), ErrorCode::InvalidInput);
         assert!(!error.is_retryable());
-        assert!(error.message().contains("max_response_body_bytes"));
+        assert_eq!(
+            TransportErrorKind::classify(&error),
+            Some(TransportErrorKind::ResponseTooLarge)
+        );
+        assert!(error.details().contains_key("max_response_body_bytes"));
     }
 
     #[tokio::test]

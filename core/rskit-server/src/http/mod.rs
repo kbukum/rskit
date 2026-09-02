@@ -1,8 +1,8 @@
-//! HTTP server component: builder, lifecycle, connection serving, TLS, and health routers.
+//! HTTP server component: builder, lifecycle, connection serving, TLS, and service endpoints.
 
 mod builder;
 mod component;
-mod health;
+mod endpoints;
 mod serve;
 mod tls;
 
@@ -11,4 +11,4 @@ mod test_support;
 
 pub use builder::HttpServerBuilder;
 pub use component::HttpServer;
-pub use health::{health_router, healthz_router};
+pub use endpoints::observability_router;

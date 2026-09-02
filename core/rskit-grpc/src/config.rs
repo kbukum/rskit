@@ -16,15 +16,19 @@ pub struct GrpcClientConfig {
     pub tls: Option<TlsConfig>,
 
     /// Default timeout for unary RPCs.
+    #[serde(with = "rskit_util::time::serde_duration")]
     pub timeout: Duration,
 
     /// Timeout for establishing a connection.
+    #[serde(with = "rskit_util::time::serde_duration")]
     pub connect_timeout: Duration,
 
     /// Keepalive interval (time between pings when no active streams).
+    #[serde(with = "rskit_util::time::serde_duration::option")]
     pub keepalive_interval: Option<Duration>,
 
     /// Keepalive timeout (how long to wait for ping ack before closing).
+    #[serde(with = "rskit_util::time::serde_duration::option")]
     pub keepalive_timeout: Option<Duration>,
 
     /// Maximum message size for receiving (in bytes).
@@ -163,6 +167,30 @@ mod tests {
             format!("{:?}", cfg.with_resilience_policy(Policy::new()))
                 .contains("has_resilience_policy")
         );
+    }
+
+    #[test]
+    fn durations_deserialize_from_strings_and_round_trip_losslessly() {
+        let cfg: GrpcClientConfig = serde_json::from_str(
+            r#"{
+                "target":"api:50051",
+                "timeout":"45s",
+                "connect_timeout":"1.5s",
+                "keepalive_interval":"20s",
+                "keepalive_timeout":null
+            }"#,
+        )
+        .expect("string durations load");
+        assert_eq!(cfg.timeout, Duration::from_secs(45));
+        assert_eq!(cfg.connect_timeout, Duration::from_millis(1500));
+        assert_eq!(cfg.keepalive_interval, Some(Duration::from_secs(20)));
+        assert_eq!(cfg.keepalive_timeout, None);
+
+        let json = serde_json::to_value(&cfg).expect("serialize");
+        assert_eq!(json["timeout"], "45s");
+        assert_eq!(json["connect_timeout"], "1500ms");
+        assert_eq!(json["keepalive_interval"], "20s");
+        assert!(json["keepalive_timeout"].is_null());
     }
 
     #[test]

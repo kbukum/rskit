@@ -1,0 +1,13 @@
+{
+  "version": "1.2.3",
+  "git_commit": "abc123",
+  "git_branch": "main",
+  "build_time": "2024-01-01T00:00:00Z",
+  "build_date": "2024-01-01",
+  "rust_version": "rustc 1.97.0",
+  "is_release": true,
+  "is_dirty": false,
+  "service": "orders",
+  "uptime_seconds": 42,
+  "timestamp": "2024-01-01T00:00:00Z"
+}

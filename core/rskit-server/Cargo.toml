@@ -49,6 +49,7 @@ rskit-http = { workspace = true, optional = true }
 rskit-security = { workspace = true, optional = true }
 rskit-validation = { workspace = true }
 rskit-version = { workspace = true, optional = true }
+rskit-util = { workspace = true, optional = true }
 
 [features]
 default = ["http", "grpc"]
@@ -60,6 +61,7 @@ http = [
     "dep:rskit-http",
     "dep:rskit-security",
     "dep:rskit-version",
+    "dep:rskit-util",
     "dep:rustls",
     "dep:tokio-rustls",
     "dep:tower",

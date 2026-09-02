@@ -393,10 +393,12 @@ mod tests {
                     name: service.to_string(),
                     address: "localhost".to_string(),
                     port: 9090,
-                    healthy: true,
+                    protocol: String::new(),
+                    health: rskit_discovery::HealthState::Healthy,
                     weight: 1,
                     tags: vec![],
                     metadata: Default::default(),
+                    last_seen: None,
                 }])
             } else {
                 Err(rskit_errors::AppError::new(
@@ -728,10 +730,12 @@ mod tests {
             name: service.to_string(),
             address: address.to_string(),
             port: port.parse().unwrap(),
-            healthy: true,
+            protocol: String::new(),
+            health: rskit_discovery::HealthState::Healthy,
             weight: 1,
             tags: vec![],
             metadata: Default::default(),
+            last_seen: None,
         }
     }
 

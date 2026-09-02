@@ -17,16 +17,39 @@ pub struct HttpServerConfig {
     pub port: u16,
 
     /// Maximum time to wait for a request header (default: 30 s).
-    #[serde(default = "HttpServerConfig::default_timeout")]
+    #[serde(
+        default = "HttpServerConfig::default_timeout",
+        with = "rskit_util::time::serde_duration_secs"
+    )]
     pub read_timeout: Duration,
 
     /// Idle keep-alive connection timeout (default: 60 s).
-    #[serde(default = "HttpServerConfig::default_idle_timeout")]
+    #[serde(
+        default = "HttpServerConfig::default_idle_timeout",
+        with = "rskit_util::time::serde_duration_secs"
+    )]
     pub idle_timeout: Duration,
 
     /// End-to-end request timeout enforced by the HTTP middleware stack (default: 30 s).
-    #[serde(default = "HttpServerConfig::default_timeout")]
+    ///
+    /// A value of `0` disables the per-request timeout, matching the cross-kit contract.
+    #[serde(
+        default = "HttpServerConfig::default_timeout",
+        with = "rskit_util::time::serde_duration_secs"
+    )]
     pub request_timeout: Duration,
+
+    /// Maximum time allowed to write a response before the connection is abandoned (default: 30 s).
+    ///
+    /// Carried for cross-kit configuration compatibility. Hyper does not expose a per-write socket
+    /// deadline, so this value is not independently enforced by the transport; bound overall
+    /// response time with `request_timeout` instead. It is retained so shared configuration
+    /// documents round-trip unchanged across kits.
+    #[serde(
+        default = "HttpServerConfig::default_timeout",
+        with = "rskit_util::time::serde_duration_secs"
+    )]
+    pub write_timeout: Duration,
 
     /// Maximum accepted request body size in bytes (default: 2 MiB).
     #[serde(default = "HttpServerConfig::default_max_body_bytes")]
@@ -35,6 +58,13 @@ pub struct HttpServerConfig {
     /// Enable HTTP/2 cleartext (h2c) on the same port (default: `true`).
     #[serde(default = "HttpServerConfig::default_h2c")]
     pub enable_h2c: bool,
+
+    /// Maximum time to wait for in-flight connections to drain on shutdown (default: 30 s).
+    #[serde(
+        default = "HttpServerConfig::default_timeout",
+        with = "rskit_util::time::serde_duration_secs"
+    )]
+    pub shutdown_timeout: Duration,
 
     /// Optional CORS policy.
     pub cors: Option<CorsPolicy>,
@@ -52,6 +82,14 @@ impl Validate for HttpServerConfig {
 
         if self.port == 0 {
             errors.add("port", ValidationError::new("range"));
+        }
+
+        if self.shutdown_timeout.is_zero() {
+            errors.add("shutdown_timeout", ValidationError::new("range"));
+        }
+
+        if self.write_timeout.is_zero() {
+            errors.add("write_timeout", ValidationError::new("range"));
         }
 
         if let Some(cors) = &self.cors
@@ -103,8 +141,10 @@ impl Default for HttpServerConfig {
             read_timeout: Self::default_timeout(),
             idle_timeout: Self::default_idle_timeout(),
             request_timeout: Self::default_timeout(),
+            write_timeout: Self::default_timeout(),
             max_body_bytes: Self::default_max_body_bytes(),
             enable_h2c: Self::default_h2c(),
+            shutdown_timeout: Self::default_timeout(),
             cors: None,
             tls: None,
         }
@@ -169,6 +209,66 @@ mod tests {
             ..Default::default()
         };
         assert!(invalid.validate().is_err());
+    }
+
+    #[test]
+    fn defaults_cover_transport_timeouts() {
+        let cfg = HttpServerConfig::default();
+        assert_eq!(cfg.request_timeout, Duration::from_secs(30));
+        assert_eq!(cfg.write_timeout, Duration::from_secs(30));
+        assert_eq!(cfg.shutdown_timeout, Duration::from_secs(30));
+        assert_eq!(cfg.max_body_bytes, 2 * 1024 * 1024);
+        assert!(cfg.enable_h2c);
+    }
+
+    #[test]
+    fn serde_fills_shared_transport_keys_with_defaults() {
+        let cfg: HttpServerConfig = serde_json::from_str("{}").expect("empty config uses defaults");
+        assert_eq!(cfg.write_timeout, Duration::from_secs(30));
+        assert_eq!(cfg.shutdown_timeout, Duration::from_secs(30));
+        assert_eq!(cfg.max_body_bytes, 2 * 1024 * 1024);
+        assert!(cfg.enable_h2c);
+
+        // Cross-kit wire form: bare integer seconds, matching the sibling kit's config keys.
+        let cfg: HttpServerConfig =
+            serde_json::from_str(r#"{"write_timeout":5,"shutdown_timeout":10}"#)
+                .expect("integer-seconds timeouts load");
+        assert_eq!(cfg.write_timeout, Duration::from_secs(5));
+        assert_eq!(cfg.shutdown_timeout, Duration::from_secs(10));
+
+        // rskit convenience superset: human-readable duration strings.
+        let cfg: HttpServerConfig =
+            serde_json::from_str(r#"{"request_timeout":"1500ms","read_timeout":"2m"}"#)
+                .expect("string timeouts load");
+        assert_eq!(cfg.request_timeout, Duration::from_millis(1500));
+        assert_eq!(cfg.read_timeout, Duration::from_mins(2));
+    }
+
+    #[test]
+    fn validation_rejects_zero_write_and_shutdown_timeouts() {
+        let zero_write = HttpServerConfig {
+            write_timeout: Duration::ZERO,
+            ..Default::default()
+        };
+        assert!(
+            zero_write
+                .validate()
+                .unwrap_err()
+                .field_errors()
+                .contains_key("write_timeout")
+        );
+
+        let zero_shutdown = HttpServerConfig {
+            shutdown_timeout: Duration::ZERO,
+            ..Default::default()
+        };
+        assert!(
+            zero_shutdown
+                .validate()
+                .unwrap_err()
+                .field_errors()
+                .contains_key("shutdown_timeout")
+        );
     }
 
     #[test]

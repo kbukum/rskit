@@ -13,50 +13,62 @@ use hyper_util::server::conn::auto::Builder as HyperBuilder;
 use hyper_util::service::TowerToHyperService;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpListener;
+use tokio::task::JoinSet;
 use tokio_rustls::TlsAcceptor;
 use tokio_util::sync::CancellationToken;
 use tower::ServiceExt;
 
 use crate::http_config::HttpServerConfig;
 
+/// Serve accepted connections until cancelled, then drain in-flight work.
+///
+/// Returns `true` when every connection finished within `shutdown_timeout` and `false` when the
+/// drain deadline was exceeded and the remaining connection tasks had to be aborted.
 pub(super) async fn serve_listener<L>(
     mut listener: L,
     context: ConnectionContext,
     cancel: CancellationToken,
-) where
+) -> bool
+where
     L: Listener<Addr = SocketAddr> + Send + 'static,
     L::Io: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
+    let mut tasks = JoinSet::new();
     loop {
         tokio::select! {
             () = cancel.cancelled() => break,
+            Some(_) = tasks.join_next(), if !tasks.is_empty() => {}
             (io, addr) = listener.accept() => {
                 let context = context.clone();
                 let shutdown = cancel.clone().cancelled_owned();
-                tokio::spawn(async move {
+                tasks.spawn(async move {
                     serve_connection(io, addr, context, shutdown).await;
                 });
             }
         }
     }
+    drain_connections(tasks, context.config.shutdown_timeout).await
 }
 
+/// TLS variant of [`serve_listener`]; see it for the returned drain semantics.
 pub(super) async fn serve_tls_listener(
     listener: TcpListener,
     acceptor: TlsAcceptor,
     context: ConnectionContext,
     cancel: CancellationToken,
-) {
+) -> bool {
+    let mut tasks = JoinSet::new();
     loop {
         tokio::select! {
             () = cancel.cancelled() => break,
+            Some(_) = tasks.join_next(), if !tasks.is_empty() => {}
             result = listener.accept() => {
                 match result {
                     Ok((stream, addr)) => {
                         let acceptor = acceptor.clone();
                         let context = context.clone();
                         let shutdown = cancel.clone().cancelled_owned();
-                        tokio::spawn(async move {
+                        tasks.spawn(async move {
                             match tokio::time::timeout(context.config.read_timeout, acceptor.accept(stream)).await {
                                 Ok(Ok(stream)) => {
                                     serve_connection(stream, addr, context, shutdown).await;
@@ -82,6 +94,29 @@ pub(super) async fn serve_tls_listener(
             }
         }
     }
+    drain_connections(tasks, context.config.shutdown_timeout).await
+}
+
+/// Wait for in-flight connection tasks to finish, bounded by `shutdown_timeout`.
+///
+/// Connections already begin a graceful shutdown when the cancellation token fires. If they do not
+/// complete within `shutdown_timeout` (for example a stalled TLS handshake or a peer that never
+/// reads), the remaining tasks are aborted and awaited so no connection outlives the drain
+/// detached. Returns `true` on a clean drain and `false` when an abort was required.
+async fn drain_connections(mut tasks: JoinSet<()>, shutdown_timeout: Duration) -> bool {
+    let drained = tokio::time::timeout(shutdown_timeout, async {
+        while tasks.join_next().await.is_some() {}
+    })
+    .await
+    .is_ok();
+    if !drained {
+        tasks.shutdown().await;
+        tracing::warn!(
+            ?shutdown_timeout,
+            "HTTP server shutdown timed out; aborted in-flight connections"
+        );
+    }
+    drained
 }
 
 /// Shared inputs for serving an accepted connection: the router, server config,

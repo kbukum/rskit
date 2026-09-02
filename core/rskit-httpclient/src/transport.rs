@@ -5,6 +5,7 @@ use std::error::Error;
 use rskit_errors::{AppError, AppResult, ErrorCode};
 
 use crate::config::HttpClientConfig;
+use crate::error::{TransportErrorKind, transport_error};
 
 pub(crate) fn redirect_policy(config: &HttpClientConfig) -> reqwest::redirect::Policy {
     if !config.follow_redirects {
@@ -40,13 +41,7 @@ pub(crate) async fn read_response_body(
 
     let mut total = 0usize;
     let mut body = bytes::BytesMut::new();
-    while let Some(chunk) = response.chunk().await.map_err(|error| {
-        AppError::new(
-            ErrorCode::ExternalService,
-            format!("failed to read response body: {error}"),
-        )
-        .with_cause(error)
-    })? {
+    while let Some(chunk) = response.chunk().await.map_err(map_transport_error)? {
         total = total
             .checked_add(chunk.len())
             .ok_or_else(|| response_body_too_large(max_bytes))?;
@@ -59,10 +54,11 @@ pub(crate) async fn read_response_body(
 }
 
 fn response_body_too_large(max_bytes: usize) -> AppError {
-    AppError::invalid_input(
-        "max_response_body_bytes",
+    transport_error(
+        TransportErrorKind::ResponseTooLarge,
         format!("HTTP response body exceeds configured limit of {max_bytes} bytes"),
     )
+    .with_detail("max_response_body_bytes", max_bytes as u64)
 }
 
 pub(crate) fn map_transport_error(error: reqwest::Error) -> AppError {
@@ -73,14 +69,25 @@ pub(crate) fn map_transport_error(error: reqwest::Error) -> AppError {
         return AppError::new(policy_error.code(), policy_error.message()).with_cause(error);
     }
 
-    let code = if error.is_timeout() {
-        ErrorCode::Timeout
-    } else if error.is_connect() {
-        ErrorCode::ConnectionFailed
-    } else {
-        ErrorCode::ExternalService
-    };
-    AppError::new(code, format!("http request failed: {error}")).with_cause(error)
+    if error.is_timeout() {
+        return transport_error(
+            TransportErrorKind::Timeout,
+            format!("http request failed: {error}"),
+        )
+        .with_cause(error);
+    }
+    if error.is_connect() {
+        return transport_error(
+            TransportErrorKind::Connection,
+            format!("http request failed: {error}"),
+        )
+        .with_cause(error);
+    }
+    AppError::new(
+        ErrorCode::ExternalService,
+        format!("http request failed: {error}"),
+    )
+    .with_cause(error)
 }
 
 pub(crate) fn parse_header_name(name: &str) -> AppResult<reqwest::header::HeaderName> {

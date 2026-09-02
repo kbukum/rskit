@@ -107,10 +107,12 @@ impl DiscoveryConfig {
             name: reg.service_name.clone(),
             address: reg.service_address.clone(),
             port: reg.service_port,
-            healthy: true,
+            protocol: String::new(),
+            health: crate::instance::HealthState::Healthy,
             weight: 1,
             tags: reg.tags.clone(),
             metadata: reg.metadata.clone(),
+            last_seen: None,
         }
     }
 }

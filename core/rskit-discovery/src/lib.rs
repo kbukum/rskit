@@ -38,7 +38,7 @@ pub use config::DiscoveryConfig;
 #[cfg(feature = "consul")]
 pub use consul::ConsulDiscovery;
 pub use factory::{DiscoveryRegistry, ProviderFactory, ProviderPair};
-pub use instance::ServiceInstance;
+pub use instance::{HealthState, ServiceInstance};
 pub use memory::InMemoryDiscovery;
 pub use resolve::resolve_addr;
 #[cfg(feature = "server")]
