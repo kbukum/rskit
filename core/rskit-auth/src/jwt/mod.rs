@@ -4,6 +4,6 @@ mod codec;
 mod config;
 mod service;
 
-pub use codec::{JwtCodec, JwtHeader};
+pub use codec::{ACCESS_TOKEN_TYPE, JwtCodec, JwtHeader, REFRESH_TOKEN_TYPE};
 pub use config::{AsymmetricAlgorithm, JwtAlgorithm, JwtConfig, JwtKeyMaterial, KeyPair};
 pub use service::JwtService;

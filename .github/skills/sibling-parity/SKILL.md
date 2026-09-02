@@ -13,6 +13,8 @@ rskit is a sibling kit to gokit (Go): the same capabilities and the same enginee
 
 **No kit is the canonical reference.** Parity is judged per capability, and for each scope the kit with the *better, more complete, more correct* implementation is the one the other mirrors. Parity levels the kits **up, never down** — never weaken a stronger implementation to match a weaker sibling. When rskit is stronger in a scope, propagate outward to gokit; when gokit is stronger, bring rskit up to it rather than assume rskit leads.
 
+**Precedence — best practices first, then project consistency, then parity.** Parity is good-to-have, not a mandate. Rank decisions in this order: (1) current, idiomatic best practices for Rust and the tech stack; (2) internal consistency across the rskit project — naming, shapes, error/option ergonomics, and patterns that already read as native here; (3) cross-kit parity. When the idiomatic Rust approach is more efficient, clearer, or better for development than the sibling's shape, follow it and record the divergence — never adopt a non-idiomatic type or API purely to match gokit. Parity binds **wire/contract compatibility and intuition transfer** (concepts, behavior, serialized shapes line up), not internal types or symbol-for-symbol layout.
+
 ## Parity is scoped and capability-first, not symbol-for-symbol
 
 Cross-kit parity weighs where each language is strongest — it is **not** a demand that every rskit symbol appear in gokit. Decide per capability:

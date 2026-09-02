@@ -130,6 +130,54 @@ fn config_round_trips_duration_as_seconds() {
 }
 
 #[test]
+fn config_serializes_canonical_addr_and_db_wire_shape() {
+    let config = Config {
+        host: "redis.example.test".to_owned(),
+        port: 6380,
+        database: 3,
+        key_prefix: Some("svc".to_owned()),
+        ..Config::default()
+    };
+
+    let json = serde_json::to_value(&config).unwrap();
+    assert_eq!(json["addr"], "redis.example.test:6380");
+    assert_eq!(json["db"], 3);
+    assert!(json.get("host").is_none());
+    assert!(json.get("port").is_none());
+    assert!(json.get("database").is_none());
+
+    // The canonical wire shape deserializes back into the same typed config.
+    let decoded: Config = serde_json::from_value(json).unwrap();
+    assert_eq!(decoded.host, "redis.example.test");
+    assert_eq!(decoded.port, 6380);
+    assert_eq!(decoded.database, 3);
+    assert_eq!(decoded.key_prefix.as_deref(), Some("svc"));
+}
+
+#[test]
+fn config_accepts_shared_addr_and_db_keys() {
+    let json = r#"{"addr":"redis.example.test:6380","db":3}"#;
+    let config: Config = serde_json::from_str(json).unwrap();
+
+    assert_eq!(config.host, "redis.example.test");
+    assert_eq!(config.port, 6380);
+    assert_eq!(config.database, 3);
+}
+
+#[test]
+fn config_rejects_addr_combined_with_host_or_port() {
+    let json = r#"{"addr":"redis.example.test:6380","host":"other"}"#;
+    let err = serde_json::from_str::<Config>(json).unwrap_err();
+    assert!(err.to_string().contains("not both"));
+}
+
+#[test]
+fn config_rejects_malformed_addr() {
+    assert!(serde_json::from_str::<Config>(r#"{"addr":"no-port"}"#).is_err());
+    assert!(serde_json::from_str::<Config>(r#"{"addr":"host:notaport"}"#).is_err());
+}
+
+#[test]
 fn connection_url_uses_auth_when_password_is_set() {
     let config = Config {
         host: "redis.example.test".to_owned(),
@@ -285,8 +333,11 @@ async fn cache_operations_use_prefixed_keys_against_redis_protocol() {
     .unwrap();
 
     assert_eq!(client.get("missing").await.unwrap(), None);
-    client.set("plain", "value", None).await.unwrap();
-    assert_eq!(client.get("plain").await.unwrap().as_deref(), Some("value"));
+    client.set("plain", b"value", None).await.unwrap();
+    assert_eq!(
+        client.get("plain").await.unwrap().as_deref(),
+        Some(b"value".as_slice())
+    );
     assert!(client.exists("plain").await.unwrap());
     assert!(client.delete("plain").await.unwrap());
     assert!(!client.exists("plain").await.unwrap());
@@ -304,11 +355,11 @@ async fn cache_set_accepts_positive_ttl_and_rejects_zero_ttl() {
     .unwrap();
 
     client
-        .set("ttl", "value", Some(Duration::from_millis(1)))
+        .set("ttl", b"value", Some(Duration::from_millis(1)))
         .await
         .unwrap();
     let err = client
-        .set("ttl", "value", Some(Duration::ZERO))
+        .set("ttl", b"value", Some(Duration::ZERO))
         .await
         .unwrap_err();
 

@@ -31,8 +31,8 @@ pub use bearer::{BearerAuthLayer, BearerAuthService};
 pub use context::AuthClaims;
 #[cfg(feature = "jwt")]
 pub use jwt::{
-    AsymmetricAlgorithm, JwtAlgorithm, JwtCodec, JwtConfig, JwtHeader, JwtKeyMaterial, JwtService,
-    KeyPair,
+    ACCESS_TOKEN_TYPE, AsymmetricAlgorithm, JwtAlgorithm, JwtCodec, JwtConfig, JwtHeader,
+    JwtKeyMaterial, JwtService, KeyPair, REFRESH_TOKEN_TYPE,
 };
 #[cfg(feature = "oidc")]
 pub use oidc::{

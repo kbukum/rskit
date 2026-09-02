@@ -32,6 +32,24 @@ impl<C> JwtService<C> {
     }
 }
 
+impl<C: Serialize + DeserializeOwned + Send + Sync> JwtService<C> {
+    /// Sign claims as a refresh token using the configured refresh key material.
+    ///
+    /// # Errors
+    /// Returns an error when claim serialization or signing fails.
+    pub fn generate_refresh(&self, claims: &C) -> AppResult<String> {
+        self.codec.encode_refresh(claims)
+    }
+
+    /// Validate a refresh token and return its claims.
+    ///
+    /// # Errors
+    /// Returns an authentication error when the refresh token is invalid.
+    pub fn validate_refresh(&self, token: &str) -> AppResult<C> {
+        self.codec.decode_refresh(token)
+    }
+}
+
 #[async_trait]
 impl<C: Serialize + DeserializeOwned + Send + Sync> TokenGenerator<C> for JwtService<C> {
     async fn generate(&self, claims: &C) -> AppResult<String> {
@@ -89,7 +107,7 @@ mod tests {
     }
 
     fn symmetric_service() -> JwtService<TestClaims> {
-        JwtService::new(JwtConfig::hs256_internal(
+        JwtService::new(JwtConfig::hmac(
             "test-secret-key-32-bytes-minimum!",
             ISSUER,
             vec![AUDIENCE.to_string()],

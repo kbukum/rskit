@@ -38,8 +38,8 @@ impl<T: Serialize + DeserializeOwned + Send + Sync> TypedStore<T> {
     pub async fn get(&self, key: &str) -> AppResult<Option<T>> {
         let raw = self.client.get(&self.full_key(key)).await?;
         match raw {
-            Some(json) => {
-                let val = serde_json::from_str(&json).map_err(|e| {
+            Some(bytes) => {
+                let val = serde_json::from_slice(&bytes).map_err(|e| {
                     AppError::new(ErrorCode::Internal, format!("json deserialise error: {e}"))
                         .with_cause(e)
                 })?;
@@ -51,7 +51,7 @@ impl<T: Serialize + DeserializeOwned + Send + Sync> TypedStore<T> {
 
     /// Store a value by key, serialising to JSON. An optional TTL may be set.
     pub async fn set(&self, key: &str, val: &T, ttl: Option<Duration>) -> AppResult<()> {
-        let json = serde_json::to_string(val).map_err(|e| {
+        let json = serde_json::to_vec(val).map_err(|e| {
             AppError::new(ErrorCode::Internal, format!("json serialise error: {e}")).with_cause(e)
         })?;
         self.client.set(&self.full_key(key), &json, ttl).await
@@ -77,17 +77,17 @@ mod tests {
 
     #[derive(Default)]
     struct MemoryStore {
-        values: Mutex<BTreeMap<String, String>>,
+        values: Mutex<BTreeMap<String, Vec<u8>>>,
     }
 
     #[async_trait::async_trait]
     impl CacheStore for MemoryStore {
-        async fn get(&self, key: &str) -> AppResult<Option<String>> {
+        async fn get(&self, key: &str) -> AppResult<Option<Vec<u8>>> {
             Ok(self.values.lock().get(key).cloned())
         }
 
-        async fn set(&self, key: &str, val: &str, _ttl: Option<Duration>) -> AppResult<()> {
-            self.values.lock().insert(key.to_string(), val.to_string());
+        async fn set(&self, key: &str, val: &[u8], _ttl: Option<Duration>) -> AppResult<()> {
+            self.values.lock().insert(key.to_string(), val.to_vec());
             Ok(())
         }
 
@@ -147,7 +147,7 @@ mod tests {
     async fn get_rejects_invalid_json() {
         let store = Arc::new(MemoryStore::default());
         store
-            .set("numbers:bad", "not-json", None)
+            .set("numbers:bad", b"not-json", None)
             .await
             .expect("fixture write succeeds");
         let typed = TypedStore::<u32>::new(store, "numbers");
@@ -171,7 +171,7 @@ mod tests {
         assert_eq!(err.code(), ErrorCode::Internal);
 
         store
-            .set("bad:value", "null", None)
+            .set("bad:value", b"null", None)
             .await
             .expect("fixture write succeeds");
         assert!(

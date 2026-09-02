@@ -10,7 +10,7 @@ pub use config::FileCacheConfig;
 pub use registration::register_file_cache;
 pub use store::FileCache;
 #[cfg(test)]
-pub(crate) use store::{Entry, now_millis, ttl_millis};
+pub(crate) use store::{ENTRY_FORMAT_VERSION, Entry, now_millis, ttl_millis};
 
 #[cfg(test)]
 mod tests;

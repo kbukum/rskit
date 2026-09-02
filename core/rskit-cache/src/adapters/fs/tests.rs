@@ -2,6 +2,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
+use base64::Engine;
 use rskit_errors::ErrorCode;
 
 use crate::{CacheConfig, CacheRegistry, CacheStore};
@@ -13,12 +14,30 @@ async fn stores_and_reads_values() {
     let root = temp_root();
     let cache = FileCache::new(FileCacheConfig::new(&root));
 
-    cache.set("key", "value", None).await.unwrap();
+    cache.set("key", b"value", None).await.unwrap();
 
-    assert_eq!(cache.get("key").await.unwrap().as_deref(), Some("value"));
+    assert_eq!(
+        cache.get("key").await.unwrap().as_deref(),
+        Some(b"value".as_slice())
+    );
     assert!(cache.exists("key").await.unwrap());
     assert!(cache.delete("key").await.unwrap());
     assert!(!cache.exists("key").await.unwrap());
+    let _ = tokio::fs::remove_dir_all(root).await;
+}
+
+#[tokio::test]
+async fn round_trips_non_utf8_bytes() {
+    let root = temp_root();
+    let cache = FileCache::new(FileCacheConfig::new(&root));
+    let bytes = [0xff, 0x00, 0xfe, 0x80, b'a'];
+
+    cache.set("binary", &bytes, None).await.unwrap();
+
+    assert_eq!(
+        cache.get("binary").await.unwrap().as_deref(),
+        Some(bytes.as_slice())
+    );
     let _ = tokio::fs::remove_dir_all(root).await;
 }
 
@@ -27,10 +46,13 @@ async fn updates_existing_values() {
     let root = temp_root();
     let cache = FileCache::new(FileCacheConfig::new(&root));
 
-    cache.set("key", "old", None).await.unwrap();
-    cache.set("key", "new", None).await.unwrap();
+    cache.set("key", b"old", None).await.unwrap();
+    cache.set("key", b"new", None).await.unwrap();
 
-    assert_eq!(cache.get("key").await.unwrap().as_deref(), Some("new"));
+    assert_eq!(
+        cache.get("key").await.unwrap().as_deref(),
+        Some(b"new".as_slice())
+    );
     let _ = tokio::fs::remove_dir_all(root).await;
 }
 
@@ -44,7 +66,7 @@ async fn registry_build_inherits_global_key_prefix() {
         .await
         .unwrap();
 
-    cache.set("key", "value", None).await.unwrap();
+    cache.set("key", b"value", None).await.unwrap();
 
     let mut global_config = FileCacheConfig::new(&root);
     global_config.key_prefix = Some("global".to_owned());
@@ -54,7 +76,7 @@ async fn registry_build_inherits_global_key_prefix() {
             .await
             .unwrap()
             .as_deref(),
-        Some("value")
+        Some(b"value".as_slice())
     );
     assert_eq!(
         FileCache::new(FileCacheConfig::new(&root))
@@ -78,7 +100,7 @@ async fn registry_build_preserves_adapter_key_prefix_override() {
         .await
         .unwrap();
 
-    cache.set("key", "value", None).await.unwrap();
+    cache.set("key", b"value", None).await.unwrap();
 
     let mut adapter_reader_config = FileCacheConfig::new(&root);
     adapter_reader_config.key_prefix = Some("adapter".to_owned());
@@ -90,7 +112,7 @@ async fn registry_build_preserves_adapter_key_prefix_override() {
             .await
             .unwrap()
             .as_deref(),
-        Some("value")
+        Some(b"value".as_slice())
     );
     assert_eq!(
         FileCache::new(global_reader_config)
@@ -110,7 +132,7 @@ async fn rejects_entries_exceeding_configured_size() {
     let cache = FileCache::new(config);
 
     let err = cache
-        .set("key", "value larger than limit", None)
+        .set("key", b"value larger than limit", None)
         .await
         .expect_err("oversized entries must be rejected");
 
@@ -146,7 +168,7 @@ async fn rejects_zero_ttl() {
     let cache = FileCache::new(FileCacheConfig::new(&root));
 
     let err = cache
-        .set("key", "value", Some(Duration::ZERO))
+        .set("key", b"value", Some(Duration::ZERO))
         .await
         .expect_err("zero TTL must be rejected");
 
@@ -183,8 +205,9 @@ async fn cleanup_expired_removes_expired_entries_without_deleting_live_entries()
     write_entry(
         &live_path,
         &Entry {
+            version: ENTRY_FORMAT_VERSION,
             key: live_key,
-            value: "live".to_owned(),
+            value: b"live".to_vec(),
             expires_at_millis: Some(now_millis().unwrap() + 60_000),
         },
     )
@@ -193,7 +216,10 @@ async fn cleanup_expired_removes_expired_entries_without_deleting_live_entries()
     assert_eq!(cache.cleanup_expired(16).await.unwrap(), 1);
     assert!(tokio::fs::metadata(expired_path).await.is_err());
     assert!(tokio::fs::metadata(live_path).await.is_ok());
-    assert_eq!(cache.get("live").await.unwrap().as_deref(), Some("live"));
+    assert_eq!(
+        cache.get("live").await.unwrap().as_deref(),
+        Some(b"live".as_slice())
+    );
     let _ = tokio::fs::remove_dir_all(root).await;
 }
 
@@ -286,8 +312,9 @@ async fn get_reports_key_collision() {
     write_entry(
         &path,
         &Entry {
+            version: ENTRY_FORMAT_VERSION,
             key: "different".to_owned(),
-            value: "value".to_owned(),
+            value: b"value".to_vec(),
             expires_at_millis: None,
         },
     )
@@ -302,7 +329,7 @@ async fn get_reports_key_collision() {
 }
 
 #[tokio::test]
-async fn get_rejects_corrupt_entry_file() {
+async fn get_quarantines_corrupt_entry_file_with_observable_error() {
     let root = temp_root();
     let cache = FileCache::new(FileCacheConfig::new(&root));
     let key = cache.prefixed_key("key");
@@ -311,11 +338,84 @@ async fn get_rejects_corrupt_entry_file() {
         .await
         .unwrap();
 
+    // A corrupt file surfaces an error instead of masquerading as a clean miss...
     let err = cache
         .get("key")
         .await
-        .expect_err("corrupt entry files must be rejected");
+        .expect_err("corrupt entry must not be reported as a miss");
     assert_eq!(err.code(), ErrorCode::Internal);
+    // ...and is quarantined (deleted) so it is not reparsed on every subsequent read.
+    assert!(tokio::fs::metadata(&path).await.is_err());
+
+    // Subsequent reads confirm the quarantined state: a clean miss, then self-heal on write.
+    assert!(cache.get("key").await.unwrap().is_none());
+    cache.set("key", b"value", None).await.unwrap();
+    assert_eq!(
+        cache.get("key").await.unwrap().as_deref(),
+        Some(b"value".as_slice())
+    );
+    let _ = tokio::fs::remove_dir_all(root).await;
+}
+
+#[tokio::test]
+async fn get_treats_legacy_plain_string_entry_as_a_miss() {
+    let root = temp_root();
+    let cache = FileCache::new(FileCacheConfig::new(&root));
+    let key = cache.prefixed_key("key");
+    let path = cache.entry_path(&key);
+    // A legacy record whose plain-string value ("live") is coincidentally valid base64 must not be
+    // silently reinterpreted as binary bytes.
+    let legacy = serde_json::json!({
+        "key": key,
+        "value": "live",
+        "expires_at_millis": null,
+    });
+    rskit_fs::async_io::file::write_atomic_replace(
+        &path,
+        serde_json::to_vec(&legacy).unwrap(),
+        "rskit-cache-test",
+    )
+    .await
+    .unwrap();
+
+    // The legacy value is reported as a miss, not decoded into unrelated bytes.
+    assert!(cache.get("key").await.unwrap().is_none());
+
+    // A new binary write in the versioned format round-trips exactly.
+    cache
+        .set("key", &[0xde, 0xad, 0xbe, 0xef], None)
+        .await
+        .unwrap();
+    assert_eq!(
+        cache.get("key").await.unwrap().as_deref(),
+        Some([0xde, 0xad, 0xbe, 0xef].as_slice())
+    );
+    let _ = tokio::fs::remove_dir_all(root).await;
+}
+
+#[tokio::test]
+async fn entry_values_are_stored_as_base64() {
+    let root = temp_root();
+    let cache = FileCache::new(FileCacheConfig::new(&root));
+    let value = [0_u8, 159, 146, 150, 255];
+    cache.set("binary", &value, None).await.unwrap();
+
+    let raw = tokio::fs::read_to_string(cache.entry_path(&cache.prefixed_key("binary")))
+        .await
+        .unwrap();
+    let stored: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    assert_eq!(
+        stored["value"].as_str(),
+        Some(
+            base64::engine::general_purpose::STANDARD
+                .encode(value)
+                .as_str()
+        )
+    );
+    assert_eq!(
+        cache.get("binary").await.unwrap().as_deref(),
+        Some(value.as_slice())
+    );
     let _ = tokio::fs::remove_dir_all(root).await;
 }
 
@@ -340,7 +440,7 @@ fn new_config_uses_default_entry_size_limit() {
 
 fn cache_config_with_prefix(prefix: &str) -> CacheConfig {
     CacheConfig {
-        store: "fs".to_owned(),
+        provider: "fs".to_owned(),
         key_prefix: Some(prefix.to_owned()),
         ..CacheConfig::default()
     }
@@ -348,8 +448,9 @@ fn cache_config_with_prefix(prefix: &str) -> CacheConfig {
 
 fn expired_entry(key: String, value: &str) -> Entry {
     Entry {
+        version: ENTRY_FORMAT_VERSION,
         key,
-        value: value.to_owned(),
+        value: value.as_bytes().to_vec(),
         expires_at_millis: Some(now_millis().unwrap().saturating_sub(1)),
     }
 }

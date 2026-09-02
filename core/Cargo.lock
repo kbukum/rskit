@@ -5597,6 +5597,7 @@ name = "rskit-cache"
 version = "0.2.0-alpha.5"
 dependencies = [
  "async-trait",
+ "base64 0.22.1",
  "parking_lot",
  "rskit-errors",
  "rskit-fs",

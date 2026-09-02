@@ -9,7 +9,7 @@ use crate::registry::CacheStore;
 
 #[derive(Clone)]
 pub(crate) struct Entry {
-    value: String,
+    value: Vec<u8>,
     expires_at: Option<Instant>,
 }
 
@@ -81,14 +81,14 @@ impl MemoryCache {
 
 #[async_trait::async_trait]
 impl CacheStore for MemoryCache {
-    async fn get(&self, key: &str) -> AppResult<Option<String>> {
+    async fn get(&self, key: &str) -> AppResult<Option<Vec<u8>>> {
         let mut entries = self.entries.lock();
         Self::prune_expired(&mut entries, self.now());
         let full_key = self.key(key);
         Ok(entries.get(&full_key).map(|entry| entry.value.clone()))
     }
 
-    async fn set(&self, key: &str, val: &str, ttl: Option<Duration>) -> AppResult<()> {
+    async fn set(&self, key: &str, val: &[u8], ttl: Option<Duration>) -> AppResult<()> {
         let mut entries = self.entries.lock();
         let now = self.now();
         Self::prune_expired(&mut entries, now);
@@ -113,7 +113,7 @@ impl CacheStore for MemoryCache {
         entries.insert(
             key,
             Entry {
-                value: val.to_owned(),
+                value: val.to_vec(),
                 expires_at,
             },
         );

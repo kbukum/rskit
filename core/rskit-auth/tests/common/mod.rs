@@ -32,7 +32,7 @@ pub(crate) fn standard_config(secret: &str) -> JwtConfig {
     } else {
         secret
     };
-    JwtConfig::hs256_internal(key, ISSUER, vec![AUDIENCE.to_string()])
+    JwtConfig::hmac(key, ISSUER, vec![AUDIENCE.to_string()])
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

@@ -170,7 +170,7 @@ async fn jwt_algorithm_confusion_attack_is_rejected() {
     .unwrap();
 
     let claims = StandardClaims::new("user-123");
-    let attack_codec = JwtCodec::new(JwtConfig::hs256_internal(
+    let attack_codec = JwtCodec::new(JwtConfig::hmac(
         RSA_PUBLIC_KEY,
         ISSUER,
         vec![AUDIENCE.into()],

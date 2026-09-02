@@ -408,4 +408,25 @@ mod tests {
         config.dlq.suffix = "bad suffix".to_string();
         assert!(config.validate().is_err());
     }
+
+    #[test]
+    fn broker_config_deserializes_millisecond_duration_fields() {
+        // rskit's broker-neutral config expresses retry counts and durations as plain
+        // millisecond integers, consistent with the rest of the messaging layer. This is
+        // rskit's own contract, not a cross-kit shared wire shape, so no parity is implied.
+        let json = r#"{
+            "retries": 5,
+            "retry_backoff": 250,
+            "request_timeout": 1000
+        }"#;
+        let config: BrokerConfig = serde_json::from_str(json).unwrap();
+
+        assert_eq!(config.retries, 5);
+        assert_eq!(config.retry_backoff, 250);
+        assert_eq!(config.retry_backoff_duration(), Duration::from_millis(250));
+        assert_eq!(
+            config.request_timeout_duration(),
+            Some(Duration::from_secs(1))
+        );
+    }
 }

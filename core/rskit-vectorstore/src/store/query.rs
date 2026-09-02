@@ -139,3 +139,68 @@ impl SearchQuery {
         self
     }
 }
+
+#[cfg(test)]
+mod golden_tests {
+    use super::*;
+
+    #[test]
+    fn similarity_metric_wire_tokens_are_locked() {
+        assert_eq!(
+            serde_json::to_string(&SimilarityMetric::Cosine).unwrap(),
+            "\"cosine\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SimilarityMetric::Dot).unwrap(),
+            "\"dot\""
+        );
+        assert_eq!(
+            serde_json::to_string(&SimilarityMetric::L2).unwrap(),
+            "\"l2\""
+        );
+
+        for (token, metric) in [
+            ("cosine", SimilarityMetric::Cosine),
+            ("dot", SimilarityMetric::Dot),
+            ("l2", SimilarityMetric::L2),
+        ] {
+            let decoded: SimilarityMetric = serde_json::from_str(&format!("\"{token}\"")).unwrap();
+            assert_eq!(decoded, metric);
+        }
+    }
+
+    #[test]
+    fn filter_condition_wire_shape_is_field_and_equals() {
+        let condition = FilterCondition {
+            field: "platform".to_owned(),
+            equals: PayloadValue::String("youtube".to_owned()),
+        };
+
+        let json = serde_json::to_value(&condition).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({ "field": "platform", "equals": "youtube" })
+        );
+
+        let decoded: FilterCondition = serde_json::from_value(json).unwrap();
+        assert_eq!(decoded, condition);
+    }
+
+    #[test]
+    fn search_filter_serializes_must_conditions() {
+        let filter = SearchFilter::new()
+            .must_match("platform", "youtube")
+            .must_match("views", 100_i64);
+
+        let json = serde_json::to_value(&filter).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "must": [
+                    { "field": "platform", "equals": "youtube" },
+                    { "field": "views", "equals": 100 }
+                ]
+            })
+        );
+    }
+}
