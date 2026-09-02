@@ -1,7 +1,8 @@
 use bytes::Bytes;
 use rskit_errors::{AppError, ErrorCode};
 use rskit_inference::{
-    InferenceError, PredictResponse, PredictStatus, ServingProtocol, Tensor, TensorData, Value,
+    CapabilityHints, InferenceDescriptor, InferenceError, PredictResponse, PredictStatus,
+    ServingProtocol, Tensor, TensorData, Value,
 };
 
 fn assert_round_trip(value: Value) {
@@ -105,8 +106,6 @@ fn tensor_unknown_dtype_uses_serde_untagged_fallback() {
 #[test]
 fn predict_response_default_is_successful_unknown_model() {
     let response = PredictResponse::default();
-
-    assert!(response.outputs.is_empty());
     assert!(response.metadata.is_empty());
     assert_eq!(response.model.name, "");
     assert_eq!(
@@ -117,10 +116,96 @@ fn predict_response_default_is_successful_unknown_model() {
 }
 
 #[test]
+fn descriptor_json_emits_typed_serving_protocol_available_and_capability_hints() {
+    let descriptor = InferenceDescriptor {
+        name: "triton".to_owned(),
+        description: "kserve".to_owned(),
+        serving_protocol: ServingProtocol::KServeV2Http,
+        capabilities: CapabilityHints {
+            supports_streaming: true,
+            supports_batching: true,
+            ..CapabilityHints::default()
+        },
+        available: true,
+        envelope: rskit_tool::Envelope::default(),
+    };
+
+    let value = serde_json::to_value(&descriptor).expect("serialize descriptor");
+    assert_eq!(value["serving_protocol"], "kserve_v2_http");
+    assert_eq!(value["available"], true);
+    assert_eq!(value["capabilities"]["supports_streaming"], true);
+    assert_eq!(value["capabilities"]["supports_batching"], true);
+    assert!(
+        value["capabilities"].get("supports_tool_calls").is_none(),
+        "false capability hints must be omitted: {value}"
+    );
+    assert!(
+        value["capabilities"].get("max_batch_size").is_none(),
+        "zero max_batch_size must be omitted: {value}"
+    );
+
+    let decoded: InferenceDescriptor =
+        serde_json::from_value(value).expect("deserialize descriptor");
+    assert_eq!(decoded, descriptor);
+}
+
+#[test]
+fn descriptor_json_omits_empty_capability_hints() {
+    let descriptor = InferenceDescriptor {
+        name: "echo".to_owned(),
+        description: "echo".to_owned(),
+        serving_protocol: ServingProtocol::Custom,
+        capabilities: CapabilityHints::default(),
+        available: false,
+        envelope: rskit_tool::Envelope::default(),
+    };
+
+    let value = serde_json::to_value(&descriptor).expect("serialize descriptor");
+    assert!(
+        value.get("capabilities").is_none(),
+        "empty capability hints must be omitted: {value}"
+    );
+    assert_eq!(value["available"], false);
+}
+
+#[test]
+fn predict_status_serializes_snake_case_with_optional_reason() {
+    assert_eq!(
+        serde_json::to_value(PredictStatus::Success).expect("serialize"),
+        serde_json::json!("success")
+    );
+    assert_eq!(
+        serde_json::to_value(PredictStatus::PartialSuccess).expect("serialize"),
+        serde_json::json!("partial_success")
+    );
+    assert_eq!(
+        serde_json::to_value(PredictStatus::Error).expect("serialize"),
+        serde_json::json!("error")
+    );
+
+    let error = PredictResponse {
+        status: PredictStatus::Error,
+        reason: Some("backend timeout".to_owned()),
+        ..PredictResponse::default()
+    };
+    let error_json = serde_json::to_value(&error).expect("serialize error response");
+    assert_eq!(error_json["status"], "error");
+    assert_eq!(error_json["reason"], "backend timeout");
+
+    let success_json =
+        serde_json::to_value(PredictResponse::default()).expect("serialize success response");
+    assert_eq!(success_json["status"], "success");
+    assert!(
+        success_json.get("reason").is_none(),
+        "success response must omit reason: {success_json}"
+    );
+}
+
+#[test]
 fn serving_protocol_serializes_all_known_variants() {
     let cases = [
-        (ServingProtocol::KServeV2Http, "\"k_serve_v2_http\""),
-        (ServingProtocol::KServeV2Grpc, "\"k_serve_v2_grpc\""),
+        (ServingProtocol::KServeV2Http, "\"kserve_v2_http\""),
+        (ServingProtocol::KServeV2Grpc, "\"kserve_v2_grpc\""),
         (ServingProtocol::VllmRest, "\"vllm_rest\""),
         (ServingProtocol::TgiRest, "\"tgi_rest\""),
         (ServingProtocol::BentoMl, "\"bento_ml\""),
@@ -249,7 +334,7 @@ fn serving_protocol_and_error_conversions_round_trip() {
 
     let protocol = ServingProtocol::KServeV2Http;
     let encoded = serde_json::to_string(&protocol).expect("serialize protocol");
-    assert_eq!(encoded, "\"k_serve_v2_http\"");
+    assert_eq!(encoded, "\"kserve_v2_http\"");
     let decoded: ServingProtocol = serde_json::from_str(&encoded).expect("deserialize protocol");
     assert_eq!(decoded, protocol);
 

@@ -20,9 +20,11 @@ struct OpenAiAdapter {
 
 /// Create a new [`Provider`] wired to `OpenAI` with Bearer auth.
 fn new_adapter(cfg: &Config) -> AppResult<OpenAiAdapter> {
-    let http_cfg = HttpClientConfig::new()
-        .with_base_url(&cfg.base_url)
-        .with_auth(Auth::bearer_secret(cfg.api_key.clone()));
+    let http_cfg = cfg.transport.apply_to(
+        HttpClientConfig::new()
+            .with_base_url(&cfg.base_url)
+            .with_auth(Auth::bearer_secret(cfg.api_key.clone())),
+    );
 
     let client = HttpClient::new(http_cfg)?;
 
@@ -112,6 +114,7 @@ impl Component for OpenAiAdapter {
 mod tests {
     use super::*;
     use rskit_llm::types;
+    use rskit_llm_common::HttpTransportConfig;
     use rskit_provider::RequestResponse;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
@@ -124,6 +127,7 @@ mod tests {
             model: "gpt-4o".into(),
             embedding_model: "text-embedding-3-small".into(),
             embedding_dimensions: Some(1536),
+            transport: HttpTransportConfig::default(),
         };
         let adapter = new_adapter(&cfg);
         assert!(adapter.is_ok());
@@ -137,6 +141,7 @@ mod tests {
             model: "gpt-4o".into(),
             embedding_model: "text-embedding-3-small".into(),
             embedding_dimensions: Some(1536),
+            transport: HttpTransportConfig::default(),
         };
         let adapter = new_adapter(&cfg).unwrap();
         let _boxed: Box<dyn Provider> = Box::new(adapter);
@@ -150,6 +155,7 @@ mod tests {
             model: "gpt-4o".into(),
             embedding_model: "text-embedding-3-small".into(),
             embedding_dimensions: Some(1536),
+            transport: HttpTransportConfig::default(),
         };
         let adapter = new_adapter(&cfg).unwrap();
         let component: &dyn Component = &adapter;
@@ -165,6 +171,7 @@ mod tests {
             model: "gpt-4o".into(),
             embedding_model: "text-embedding-3-small".into(),
             embedding_dimensions: Some(1536),
+            transport: HttpTransportConfig::default(),
         };
         let mut registry = rskit_llm::Registry::new();
         register(&mut registry, cfg).unwrap();
@@ -179,6 +186,7 @@ mod tests {
             stream: false,
             tools: None,
             tool_choice: None,
+            ..Default::default()
         };
         openai_request(&req).unwrap();
     }
@@ -191,6 +199,7 @@ mod tests {
             model: "gpt-4o".into(),
             embedding_model: "text-embedding-3-small".into(),
             embedding_dimensions: Some(1536),
+            transport: HttpTransportConfig::default(),
         };
         let adapter = new_adapter(&cfg).unwrap();
 
@@ -213,6 +222,7 @@ mod tests {
             model: "gpt-4o".into(),
             embedding_model: "text-embedding-3-small".into(),
             embedding_dimensions: None,
+            transport: HttpTransportConfig::default(),
         })
         .unwrap();
 
@@ -225,6 +235,7 @@ mod tests {
                 stream: false,
                 tools: None,
                 tool_choice: None,
+                ..Default::default()
             })
             .await
             .unwrap();
@@ -244,6 +255,7 @@ mod tests {
             model: "gpt-4o".into(),
             embedding_model: "text-embedding-3-small".into(),
             embedding_dimensions: None,
+            transport: HttpTransportConfig::default(),
         })
         .unwrap();
 
@@ -256,6 +268,7 @@ mod tests {
                 stream: false,
                 tools: None,
                 tool_choice: None,
+                ..Default::default()
             })
             .await
             .unwrap_err();

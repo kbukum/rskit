@@ -1,5 +1,6 @@
 //! Configuration for the `OpenAI` provider.
 
+use rskit_llm_common::HttpTransportConfig;
 use rskit_util::SecretString;
 use serde::Deserialize;
 
@@ -30,6 +31,10 @@ pub struct Config {
     /// or when the model default dimensionality should be used.
     #[serde(default)]
     pub embedding_dimensions: Option<usize>,
+
+    /// Optional HTTP transport tuning (timeout, headers, TLS, resilience).
+    #[serde(default, flatten)]
+    pub transport: HttpTransportConfig,
 }
 
 fn default_base_url() -> String {

@@ -4,7 +4,7 @@ assertion_line: 76
 expression: "&meta"
 ---
 {
-  "media_type": "Audio",
+  "media_type": "audio",
   "format": "wav",
   "duration": "[duration]",
   "size": "[size]",

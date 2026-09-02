@@ -5098,6 +5098,8 @@ dependencies = [
  "rskit-llm",
  "rskit-observability",
  "rskit-resilience",
+ "rskit-security",
+ "rskit-util",
  "serde",
  "serde_json",
  "tokio",

@@ -234,6 +234,7 @@ impl<L> LlmJudge<L> {
             stream: false,
             tools: None,
             tool_choice: None,
+            ..Default::default()
         };
 
         // Route every provider call through the injected resilience policy (default: a per-call timeout). The request is cloned per attempt so a retrying policy re-issues an identical call.
@@ -811,7 +812,8 @@ mod tests {
         ];
         let judges = judges_from_results(&results);
         let judge = judges
-            .get("llm_judge[fake_llm/m@p@1.0.0#abc123]")
+            .iter()
+            .find(|j| j.metric == "llm_judge[fake_llm/m@p@1.0.0#abc123]")
             .expect("judge found");
         assert_eq!(judge.provider, "fake_llm");
         assert_eq!(judge.model, "m");
@@ -1073,7 +1075,7 @@ mod tests {
             })),
         }];
         let judges = judges_from_results(&results);
-        let judge = judges.values().next().expect("judge found");
+        let judge = judges.first().expect("judge found");
         assert_eq!(judge.resolved_model.as_deref(), Some("m-0613"));
     }
 }

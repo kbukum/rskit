@@ -1,4 +1,5 @@
 use super::*;
+use rskit_llm_common::HttpTransportConfig;
 
 fn config() -> Config {
     Config {
@@ -7,6 +8,7 @@ fn config() -> Config {
         model: "gpt-4o".into(),
         embedding_model: "text-embedding-3-small".into(),
         embedding_dimensions: Some(1536),
+        transport: HttpTransportConfig::default(),
     }
 }
 

@@ -3,7 +3,7 @@ source: crates/rskit-media-image/tests/golden.rs
 expression: "&meta"
 ---
 {
-  "media_type": "Image",
+  "media_type": "image",
   "format": "jpeg",
   "duration": "[duration]",
   "size": "[size]",

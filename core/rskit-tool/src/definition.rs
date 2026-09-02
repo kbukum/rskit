@@ -45,6 +45,7 @@ impl ExecutionHint {
 
 /// Optional hints about tool behavior (MCP-aligned).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Annotations {
     /// Human-readable title.
     #[serde(skip_serializing_if = "String::is_empty", default)]
@@ -65,6 +66,7 @@ pub struct Annotations {
 
 /// Describes a tool — MCP-aligned metadata.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Definition {
     /// Unique tool identifier.
     pub name: String,

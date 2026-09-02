@@ -72,7 +72,7 @@ fn message_system_role() {
 #[test]
 fn message_tool_result_role() {
     let msg = tool_result_msg("call_1", "result", false);
-    assert_eq!(msg.role(), "tool_result");
+    assert_eq!(msg.role(), "tool");
 }
 
 #[test]
@@ -190,6 +190,7 @@ fn completion_request_construction() {
         stream: false,
         tools: None,
         tool_choice: None,
+        ..Default::default()
     };
     assert_eq!(req.model, "gpt-4");
     assert_eq!(req.messages.len(), 2);
@@ -205,6 +206,7 @@ fn completion_request_tools_omitted_when_none() {
         stream: false,
         tools: None,
         tool_choice: None,
+        ..Default::default()
     };
     let json = serde_json::to_value(&req).unwrap();
     assert!(json.get("tools").is_none());

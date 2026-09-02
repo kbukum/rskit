@@ -1,5 +1,6 @@
 //! Configuration for the Ollama provider.
 
+use rskit_llm_common::HttpTransportConfig;
 use rskit_util::SecretString;
 use serde::Deserialize;
 
@@ -23,6 +24,10 @@ pub struct Config {
     /// and adapters pass it to `rskit-httpclient` as redacting auth state when configured.
     #[serde(default)]
     pub api_key: Option<SecretString>,
+
+    /// Optional HTTP transport tuning (timeout, headers, TLS, resilience).
+    #[serde(default, flatten)]
+    pub transport: HttpTransportConfig,
 }
 
 fn default_base_url() -> String {

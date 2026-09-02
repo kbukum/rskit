@@ -35,6 +35,7 @@ fn test_pre_llm_call_event() {
             stream: false,
             tools: None,
             tool_choice: None,
+            ..Default::default()
         },
     };
     assert_eq!(event.event_type(), EventType::new("on_llm_call"));

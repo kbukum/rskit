@@ -40,6 +40,7 @@ rskit-component = { path = "../core/rskit-component", version = "0.2.0-alpha.1" 
 rskit-provider = { path = "../core/rskit-provider", version = "0.2.0-alpha.1" }
 rskit-httpclient = { path = "../core/rskit-httpclient", version = "0.2.0-alpha.1" }
 rskit-resilience = { path = "../core/rskit-resilience", version = "0.2.0-alpha.1" }
+rskit-security = { path = "../core/rskit-security", version = "0.2.0-alpha.1" }
 rskit-embedding = { path = "../core/rskit-embedding", version = "0.2.0-alpha.1" }
 rskit-observability = { path = "../core/rskit-observability", version = "0.2.0-alpha.1" }
 rskit-util = { path = "../core/rskit-util", version = "0.2.0-alpha.1" }

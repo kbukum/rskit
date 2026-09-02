@@ -80,6 +80,7 @@ pub(crate) fn vllm_predict_response(
             capabilities: Capabilities::default(),
         },
         status: PredictStatus::Success,
+        reason: None,
         metadata: finish,
     }
 }

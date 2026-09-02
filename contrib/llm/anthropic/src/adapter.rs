@@ -25,10 +25,12 @@ struct AnthropicAdapter {
 
 /// Create a new [`Provider`] wired to Anthropic with `x-api-key` + `anthropic-version` headers.
 fn new_adapter(cfg: &Config) -> AppResult<AnthropicAdapter> {
-    let http_cfg = HttpClientConfig::new()
-        .with_base_url(&cfg.base_url)
-        .with_auth(Auth::api_key_secret(API_KEY_HEADER, cfg.api_key.clone()))
-        .with_header(API_VERSION_HEADER, &cfg.api_version);
+    let http_cfg = cfg.transport.apply_to(
+        HttpClientConfig::new()
+            .with_base_url(&cfg.base_url)
+            .with_auth(Auth::api_key_secret(API_KEY_HEADER, cfg.api_key.clone()))
+            .with_header(API_VERSION_HEADER, &cfg.api_version),
+    );
 
     let client = HttpClient::new(http_cfg)?;
 
@@ -121,6 +123,7 @@ impl Component for AnthropicAdapter {
 mod tests {
     use super::*;
     use rskit_llm::types;
+    use rskit_llm_common::HttpTransportConfig;
     use rskit_provider::RequestResponse;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
@@ -132,6 +135,7 @@ mod tests {
             base_url: "https://api.anthropic.com".into(),
             model: "claude-sonnet-4-20250514".into(),
             api_version: "2023-06-01".into(),
+            transport: HttpTransportConfig::default(),
         };
         let adapter = new_adapter(&cfg);
         assert!(adapter.is_ok());
@@ -144,6 +148,7 @@ mod tests {
             base_url: "https://api.anthropic.com".into(),
             model: "claude-sonnet-4-20250514".into(),
             api_version: "2023-06-01".into(),
+            transport: HttpTransportConfig::default(),
         };
         let adapter = new_adapter(&cfg).unwrap();
         let _boxed: Box<dyn Provider> = Box::new(adapter);
@@ -156,6 +161,7 @@ mod tests {
             base_url: "https://api.anthropic.com".into(),
             model: "claude-sonnet-4-20250514".into(),
             api_version: "2023-06-01".into(),
+            transport: HttpTransportConfig::default(),
         };
         let adapter = new_adapter(&cfg).unwrap();
         let component: &dyn Component = &adapter;
@@ -170,6 +176,7 @@ mod tests {
             base_url: "https://api.anthropic.com".into(),
             model: "claude-sonnet-4-20250514".into(),
             api_version: "2023-06-01".into(),
+            transport: HttpTransportConfig::default(),
         };
         let mut registry = rskit_llm::Registry::new();
         register(&mut registry, cfg).unwrap();
@@ -184,6 +191,7 @@ mod tests {
             stream: false,
             tools: None,
             tool_choice: None,
+            ..Default::default()
         };
         anthropic_request(&req, "2023-06-01").unwrap();
     }
@@ -195,6 +203,7 @@ mod tests {
             base_url: "https://api.anthropic.com".into(),
             model: "claude-sonnet-4-20250514".into(),
             api_version: "2023-06-01".into(),
+            transport: HttpTransportConfig::default(),
         };
         let adapter = new_adapter(&cfg).unwrap();
 
@@ -216,6 +225,7 @@ mod tests {
             base_url,
             model: "claude-sonnet".into(),
             api_version: "2023-06-01".into(),
+            transport: HttpTransportConfig::default(),
         })
         .unwrap();
 
@@ -228,6 +238,7 @@ mod tests {
                 stream: false,
                 tools: None,
                 tool_choice: None,
+                ..Default::default()
             })
             .await
             .unwrap();
@@ -246,6 +257,7 @@ mod tests {
             base_url,
             model: "claude-sonnet".into(),
             api_version: "2023-06-01".into(),
+            transport: HttpTransportConfig::default(),
         })
         .unwrap();
 
@@ -258,6 +270,7 @@ mod tests {
                 stream: false,
                 tools: None,
                 tool_choice: None,
+                ..Default::default()
             })
             .await
             .unwrap_err();

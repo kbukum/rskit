@@ -528,7 +528,10 @@ async fn test_agent_stream() {
             ..
         })
     ));
-    assert!(matches!(events.last(), Some(AgentEvent::Complete { .. })));
+    assert!(matches!(
+        events.last(),
+        Some(AgentEvent::RunComplete { .. })
+    ));
 }
 
 #[tokio::test]

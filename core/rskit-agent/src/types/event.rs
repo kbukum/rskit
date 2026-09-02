@@ -13,7 +13,7 @@ pub enum AgentEvent {
         turn: u32,
     },
     /// An LLM streaming event was received.
-    LlmStreamEvent {
+    LlmDelta {
         /// Streaming event received from the LLM provider.
         event: StreamEventRef,
     },
@@ -38,7 +38,7 @@ pub enum AgentEvent {
         error: Option<String>,
     },
     /// Context was compacted to fit within the token budget.
-    ContextCompacted {
+    Compacted {
         /// Previous approximate token count.
         old_tokens: usize,
         /// New approximate token count.
@@ -54,7 +54,7 @@ pub enum AgentEvent {
         usage: Usage,
     },
     /// The agent run is complete.
-    Complete {
+    RunComplete {
         /// Final agent result.
         result: AgentResult,
     },

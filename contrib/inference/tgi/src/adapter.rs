@@ -4,8 +4,8 @@ use rskit_component::{Component, Health};
 use rskit_errors::AppResult;
 use rskit_httpclient::{Auth, HttpClient, HttpClientConfig, Request};
 use rskit_inference::{
-    Inference, InferenceDescriptor, InferenceError, PredictRequest, PredictResponse,
-    ServingProtocol, StreamingInference,
+    CapabilityHints, Inference, InferenceDescriptor, InferenceError, PredictRequest,
+    PredictResponse, ServingProtocol, StreamingInference,
 };
 use rskit_tool::Envelope;
 use tokio_stream::Stream;
@@ -77,6 +77,11 @@ impl Inference for TgiAdapter {
             description: "Hugging Face TGI text generation via OAI-compatible /v1/chat/completions"
                 .to_string(),
             serving_protocol: ServingProtocol::TgiRest,
+            capabilities: CapabilityHints {
+                supports_streaming: true,
+                ..CapabilityHints::default()
+            },
+            available: true,
             envelope: Envelope::default(),
         }
     }

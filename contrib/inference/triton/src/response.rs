@@ -32,6 +32,7 @@ pub(crate) fn decode_response(response: TritonResponse) -> Result<PredictRespons
             capabilities: Capabilities::default(),
         },
         status: PredictStatus::Success,
+        reason: None,
         metadata,
     })
 }

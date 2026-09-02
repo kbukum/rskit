@@ -59,6 +59,7 @@ fn request(stream: bool) -> CompletionRequest {
         stream,
         tools: None,
         tool_choice: Some(ToolChoice::auto()),
+        ..Default::default()
     }
 }
 

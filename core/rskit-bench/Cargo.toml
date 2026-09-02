@@ -26,6 +26,7 @@ parking_lot    = { workspace = true }
 rand           = { workspace = true }
 rand_chacha    = { workspace = true }
 semver         = { workspace = true }
+uuid           = { workspace = true }
 
 # Internal
 rskit-errors = { workspace = true }

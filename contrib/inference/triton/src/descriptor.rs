@@ -1,5 +1,7 @@
 use rskit_authz::{AuthzDecision, AuthzRequest, Decider};
-use rskit_inference::{InferenceDescriptor, InferenceError, PredictRequest, ServingProtocol};
+use rskit_inference::{
+    CapabilityHints, InferenceDescriptor, InferenceError, PredictRequest, ServingProtocol,
+};
 use rskit_tool::{Envelope, NetworkPolicy, NetworkRule};
 use serde_json::json;
 
@@ -10,6 +12,12 @@ pub(crate) fn descriptor_from_config(config: &Config) -> InferenceDescriptor {
         name: config.name.clone(),
         description: config.description.clone(),
         serving_protocol: ServingProtocol::KServeV2Http,
+        capabilities: CapabilityHints {
+            supports_streaming: true,
+            supports_batching: true,
+            ..CapabilityHints::default()
+        },
+        available: true,
         envelope: Envelope {
             scopes: config.scopes.clone(),
             network: NetworkPolicy::AllowList {

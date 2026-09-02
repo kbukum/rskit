@@ -32,7 +32,7 @@ fn message_system_role() {
 
 #[test]
 fn message_tool_result_role() {
-    assert_eq!(tool_result_msg("id", "ok", false).role(), "tool_result");
+    assert_eq!(tool_result_msg("id", "ok", false).role(), "tool");
 }
 
 #[test]
@@ -85,7 +85,22 @@ fn message_serde_roundtrip_tool_result() {
     let msg = tool_result_msg("call_1", "output", false);
     let json = serde_json::to_string(&msg).unwrap();
     let back: Message = serde_json::from_str(&json).unwrap();
-    assert_eq!(back.role(), "tool_result");
+    assert_eq!(back.role(), "tool");
+}
+
+#[test]
+fn tool_result_message_golden_wire_shape() {
+    let msg = tool_result_msg("call_1", "output", true);
+    let val = serde_json::to_value(&msg).unwrap();
+    assert_eq!(val["role"], "tool");
+    assert_eq!(val["tool_use_id"], "call_1");
+    assert_eq!(val["content"], "output");
+    assert_eq!(val["is_error"], true);
+    assert!(val.get("id").is_none(), "id field must not be emitted");
+    assert!(
+        val.get("tool_call_id").is_none(),
+        "tool_call_id field must not be emitted"
+    );
 }
 
 #[test]
@@ -212,6 +227,7 @@ fn completion_request_minimal() {
         stream: false,
         tools: None,
         tool_choice: None,
+        ..Default::default()
     };
     assert!(req.model.is_empty());
     assert!(req.messages.is_empty());
@@ -244,6 +260,7 @@ fn completion_request_all_fields() {
         stream: true,
         tools: Some(vec![tool_def]),
         tool_choice: Some(ToolChoice::auto()),
+        ..Default::default()
     };
     assert_eq!(req.model, "gpt-4o");
     assert_eq!(req.messages.len(), 3);
@@ -265,6 +282,7 @@ fn completion_request_zero_temperature() {
         stream: false,
         tools: None,
         tool_choice: None,
+        ..Default::default()
     };
     assert_eq!(req.temperature, Some(0.0));
 }
@@ -279,6 +297,7 @@ fn completion_request_serialize() {
         stream: false,
         tools: None,
         tool_choice: None,
+        ..Default::default()
     };
     let json = serde_json::to_value(&req).unwrap();
     assert_eq!(json["model"], "gpt-4");
@@ -298,6 +317,7 @@ fn completion_request_serialize_none_fields() {
         stream: false,
         tools: None,
         tool_choice: None,
+        ..Default::default()
     };
     let json = serde_json::to_value(&req).unwrap();
     assert!(json["max_tokens"].is_null());
@@ -314,6 +334,7 @@ fn completion_request_serde_roundtrip() {
         stream: true,
         tools: None,
         tool_choice: None,
+        ..Default::default()
     };
     let json = serde_json::to_string(&req).unwrap();
     let back: CompletionRequest = serde_json::from_str(&json).unwrap();
@@ -480,12 +501,13 @@ fn multi_turn_conversation() {
         stream: false,
         tools: None,
         tool_choice: None,
+        ..Default::default()
     };
     assert_eq!(req.messages.len(), 5);
     assert_eq!(req.messages[0].role(), "system");
     assert_eq!(req.messages[1].role(), "user");
     assert_eq!(req.messages[2].role(), "assistant");
-    assert_eq!(req.messages[3].role(), "tool_result");
+    assert_eq!(req.messages[3].role(), "tool");
     assert_eq!(req.messages[4].role(), "user");
 }
 
@@ -503,6 +525,7 @@ fn completion_request_json_field_names() {
         stream: true,
         tools: None,
         tool_choice: None,
+        ..Default::default()
     };
     let val = serde_json::to_value(&req).unwrap();
     assert!(val.get("model").is_some());

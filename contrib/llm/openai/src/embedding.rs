@@ -24,9 +24,11 @@ pub struct EmbeddingProvider {
 impl EmbeddingProvider {
     /// Create a new embedding provider from an `OpenAI` [`Config`].
     pub fn new(cfg: &Config) -> AppResult<Self> {
-        let http_cfg = HttpClientConfig::new()
-            .with_base_url(&cfg.base_url)
-            .with_auth(Auth::bearer_secret(cfg.api_key.clone()));
+        let http_cfg = cfg.transport.apply_to(
+            HttpClientConfig::new()
+                .with_base_url(&cfg.base_url)
+                .with_auth(Auth::bearer_secret(cfg.api_key.clone())),
+        );
 
         let client = HttpClient::new(http_cfg)?;
 
@@ -238,6 +240,7 @@ impl rskit_provider::RequestResponse<EmbedRequest, EmbedResponse> for EmbeddingP
 mod tests {
     use super::*;
     use rskit_embedding::EmbedAsset;
+    use rskit_llm_common::HttpTransportConfig;
     use rskit_resilience::{ConstantBackoff, RetryPolicy};
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -253,6 +256,7 @@ mod tests {
             model: "gpt-4o".into(),
             embedding_model: "text-embedding-3-small".into(),
             embedding_dimensions: Some(1536),
+            transport: HttpTransportConfig::default(),
         };
         let provider = EmbeddingProvider::new(&cfg).unwrap();
         assert_eq!(provider.dimensions, Some(1536));
@@ -398,6 +402,7 @@ mod tests {
             model: "gpt-4o".into(),
             embedding_model: "text-embedding-3-small".into(),
             embedding_dimensions: Some(3),
+            transport: HttpTransportConfig::default(),
         };
         let provider = EmbeddingProvider::new(&cfg).unwrap().with_policy(
             Policy::new().with_retry(
@@ -432,6 +437,7 @@ mod tests {
             model: "gpt-4o".into(),
             embedding_model: "text-embedding-3-small".into(),
             embedding_dimensions: Some(3),
+            transport: HttpTransportConfig::default(),
         }
     }
 

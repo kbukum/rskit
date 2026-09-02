@@ -31,6 +31,7 @@ fn completion_request_construction() {
         stream: false,
         tools: None,
         tool_choice: None,
+        ..Default::default()
     };
     assert_eq!(req.model, "gpt-4");
     assert_eq!(req.messages.len(), 2);
@@ -48,6 +49,7 @@ fn completion_request_serde_roundtrip() {
         stream: true,
         tools: None,
         tool_choice: None,
+        ..Default::default()
     };
     let json = serde_json::to_string(&req).unwrap();
     let back: CompletionRequest = serde_json::from_str(&json).unwrap();

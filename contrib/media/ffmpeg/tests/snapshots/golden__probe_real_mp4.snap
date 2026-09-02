@@ -3,7 +3,7 @@ source: crates/rskit-media-ffmpeg/tests/golden.rs
 expression: "&meta"
 ---
 {
-  "media_type": "Video",
+  "media_type": "video",
   "format": "mp4",
   "duration": "[duration]",
   "size": "[size]",
