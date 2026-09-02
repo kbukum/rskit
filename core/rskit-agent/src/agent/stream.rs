@@ -21,7 +21,7 @@ impl Agent {
             let mut state = RunState::new(&self.config.system_prompt, messages);
 
             if let Some(stop_reason) = stop::initial_stop(&self.config) {
-                yield AgentEvent::Complete {
+                yield AgentEvent::RunComplete {
                     result: state.finish(0, stop_reason),
                 };
                 return;
@@ -31,7 +31,7 @@ impl Agent {
 
             for turn in 0..self.config.max_turns {
                 if let Some(stop_reason) = stop::wall_clock_stop(&state, &self.config) {
-                    yield AgentEvent::Complete {
+                    yield AgentEvent::RunComplete {
                         result: state.finish(turn, stop_reason),
                     };
                     return;
@@ -52,7 +52,7 @@ impl Agent {
                     Ok(outcome) => outcome,
                     Err(error) => {
                         tracing::error!(error = %error, "agent.run.failed");
-                        yield AgentEvent::Complete {
+                        yield AgentEvent::RunComplete {
                             result: state.finish(turn, StopReason::Aborted),
                         };
                         return;
@@ -76,7 +76,7 @@ impl Agent {
                 match outcome {
                     TurnOutcome::Continue => {}
                     TurnOutcome::Stop { turn_count, reason } => {
-                        yield AgentEvent::Complete {
+                        yield AgentEvent::RunComplete {
                             result: state.finish(turn_count, reason),
                         };
                         return;
@@ -84,7 +84,7 @@ impl Agent {
                 }
             }
 
-            yield AgentEvent::Complete {
+            yield AgentEvent::RunComplete {
                 result: state.finish(self.config.max_turns, StopReason::MaxTurns),
             };
         })

@@ -40,6 +40,7 @@ pub struct BenchRunner<L> {
     comparator: Option<RunComparator>,
     clock: SharedClock,
     probe: Arc<dyn ProvenanceProbe>,
+    id_suffix: Arc<dyn Fn() -> String + Send + Sync>,
 }
 
 impl<L> Default for BenchRunner<L>
@@ -65,6 +66,7 @@ where
             comparator: None,
             clock: system_clock(),
             probe: Arc::new(SystemProvenanceProbe),
+            id_suffix: Arc::new(crate::run_id::random_id_suffix),
         }
     }
 
@@ -115,6 +117,16 @@ where
     #[must_use]
     pub fn with_clock(mut self, clock: SharedClock) -> Self {
         self.clock = clock;
+        self
+    }
+
+    /// Sets the source of the unique run-id suffix (the `<uuid8>` of `<tag|run>_<ts>_<uuid8>`).
+    ///
+    /// Defaults to a random UUID fragment. Inject a fixed source together with a fixed
+    /// [`with_clock`](Self::with_clock) for deterministic, reproducible run identifiers in tests.
+    #[must_use]
+    pub fn with_id_suffix(mut self, suffix: Arc<dyn Fn() -> String + Send + Sync>) -> Self {
+        self.id_suffix = suffix;
         self
     }
 
@@ -327,7 +339,7 @@ where
 
         let duration_ms = elapsed_millis(start, self.clock.monotonic_millis());
         let epoch_seconds = self.clock.epoch_seconds();
-        let run_id = generate_run_id(&opts.tag, epoch_seconds);
+        let run_id = generate_run_id(&opts.tag, epoch_seconds, &(self.id_suffix)());
         let timestamp = i64::try_from(epoch_seconds)
             .ok()
             .and_then(format_rfc3339)

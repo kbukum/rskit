@@ -34,6 +34,8 @@ impl Inference for FakeInference {
             name: "fake".to_owned(),
             description: "fake adapter".to_owned(),
             serving_protocol: ServingProtocol::Custom,
+            capabilities: Default::default(),
+            available: true,
             envelope: Envelope::default(),
         }
     }

@@ -7,8 +7,8 @@ use rskit_errors::AppResult;
 use rskit_tool::Envelope;
 
 use crate::{
-    Factory, Inference, InferenceDescriptor, InferenceError, PredictRequest, PredictResponse,
-    PredictStatus, Registry, RegistryError, ServingProtocol,
+    CapabilityHints, Factory, Inference, InferenceDescriptor, InferenceError, PredictRequest,
+    PredictResponse, PredictStatus, Registry, RegistryError, ServingProtocol,
 };
 
 /// Registry kind for the echo adapter.
@@ -45,6 +45,7 @@ impl Inference for Echo {
                 capabilities: Capabilities::default(),
             },
             status: PredictStatus::Success,
+            reason: None,
             metadata: Default::default(),
         })
     }
@@ -54,6 +55,8 @@ impl Inference for Echo {
             name: ECHO_KIND.to_string(),
             description: "Echo inputs unchanged for tests".to_string(),
             serving_protocol: ServingProtocol::Custom,
+            capabilities: CapabilityHints::default(),
+            available: true,
             envelope: Envelope::default(),
         }
     }

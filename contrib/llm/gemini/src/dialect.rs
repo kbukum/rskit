@@ -67,6 +67,10 @@ struct GenerationConfig {
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     max_output_tokens: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    stop_sequences: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -148,21 +152,30 @@ fn parse_function_call(function_call: WireFunctionCall, index: usize) -> AppResu
 impl GeminiDialect {
     /// Build the JSON body for a `generateContent` request.
     pub(crate) fn build_body(req: &CompletionRequest) -> AppResult<serde_json::Value> {
-        let system_instruction = req.messages.iter().find_map(|m| match m {
-            Message::System(s) => Some(WireContent {
-                role: None,
-                parts: vec![WirePart {
-                    text: Some(s.content.clone()),
-                    function_call: None,
-                }],
-            }),
-            _ => None,
+        let system_text = req.system_prompt.clone().or_else(|| {
+            req.messages.iter().find_map(|m| match m {
+                Message::System(s) => Some(s.content.clone()),
+                _ => None,
+            })
+        });
+        let system_instruction = system_text.map(|text| WireContent {
+            role: None,
+            parts: vec![WirePart {
+                text: Some(text),
+                function_call: None,
+            }],
         });
 
-        let generation_config = if req.temperature.is_some() || req.max_tokens.is_some() {
+        let generation_config = if req.temperature.is_some()
+            || req.max_tokens.is_some()
+            || req.top_p.is_some()
+            || !req.stop_sequences.is_empty()
+        {
             Some(GenerationConfig {
                 temperature: req.temperature,
                 max_output_tokens: req.max_tokens,
+                top_p: req.top_p,
+                stop_sequences: req.stop_sequences.clone(),
             })
         } else {
             None
@@ -174,12 +187,14 @@ impl GeminiDialect {
             generation_config,
         };
 
-        serde_json::to_value(&wire).map_err(|e| {
+        let mut body = serde_json::to_value(&wire).map_err(|e| {
             AppError::new(
                 ErrorCode::Internal,
                 format!("failed to serialize Gemini request: {e}"),
             )
-        })
+        })?;
+        common::merge_extra(&mut body, &req.extra);
+        Ok(body)
     }
 
     /// Parse a successful `generateContent` response body.
@@ -330,6 +345,7 @@ mod tests {
             stream: false,
             tools: None,
             tool_choice: None,
+            ..Default::default()
         };
         let body = GeminiDialect::build_body(&req).unwrap();
         assert!(
@@ -359,6 +375,7 @@ mod tests {
             stream: false,
             tools: None,
             tool_choice: None,
+            ..Default::default()
         };
         let body = GeminiDialect::build_body(&req).unwrap();
         assert_eq!(body["contents"][1]["role"], "model");
@@ -374,6 +391,7 @@ mod tests {
             stream: false,
             tools: None,
             tool_choice: None,
+            ..Default::default()
         };
 
         let body = GeminiDialect::build_body(&req).unwrap();
@@ -381,6 +399,48 @@ mod tests {
         assert!(body.get("generationConfig").is_none());
         assert_eq!(body["contents"][0]["role"], "user");
         assert_eq!(body["contents"][0]["parts"][0]["text"], "forecast");
+    }
+
+    #[test]
+    fn build_body_wires_top_p_stop_sequences_and_extra() {
+        let mut req = CompletionRequest {
+            model: "gemini-2.5-flash".to_string(),
+            messages: vec![types::user("hello")],
+            max_tokens: None,
+            temperature: None,
+            stream: false,
+            tools: None,
+            tool_choice: None,
+            system_prompt: Some("explicit system".to_string()),
+            top_p: Some(0.7),
+            stop_sequences: vec!["HALT".to_string()],
+            ..Default::default()
+        };
+        req.extra
+            .insert("cachedContent".to_string(), serde_json::json!("caches/abc"));
+
+        let body = GeminiDialect::build_body(&req).unwrap();
+
+        assert_eq!(
+            body["systemInstruction"]["parts"][0]["text"],
+            "explicit system"
+        );
+        let top_p = body["generationConfig"]["topP"].as_f64().unwrap();
+        assert!((top_p - 0.7).abs() < 1e-6);
+        assert_eq!(body["generationConfig"]["stopSequences"][0], "HALT");
+        assert_eq!(body["cachedContent"], "caches/abc");
+    }
+
+    #[test]
+    fn build_body_prefers_explicit_system_prompt_over_message() {
+        let req = CompletionRequest {
+            model: "gemini-2.5-flash".to_string(),
+            messages: vec![types::system("from message"), types::user("hi")],
+            system_prompt: Some("explicit".to_string()),
+            ..Default::default()
+        };
+        let body = GeminiDialect::build_body(&req).unwrap();
+        assert_eq!(body["systemInstruction"]["parts"][0]["text"], "explicit");
     }
 
     #[test]

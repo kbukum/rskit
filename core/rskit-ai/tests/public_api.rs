@@ -29,7 +29,7 @@ fn chat_helpers_preserve_roles_text_and_tool_aliases() {
 
     assert_eq!(
         messages.iter().map(Message::role).collect::<Vec<_>>(),
-        ["user", "assistant", "system", "tool_result"]
+        ["user", "assistant", "system", "tool"]
     );
 
     let Message::Assistant(reply) = &messages[1] else {
@@ -38,18 +38,18 @@ fn chat_helpers_preserve_roles_text_and_tool_aliases() {
     assert_eq!(reply.text(), "world");
     assert!(!reply.has_tool_calls());
 
-    let legacy = json!({
+    let wire = json!({
         "role": "tool",
-        "id": "call-2",
-        "content": "legacy",
+        "tool_use_id": "call-2",
+        "content": "result",
         "is_error": false
     });
-    let decoded: Message = serde_json::from_value(legacy).unwrap();
+    let decoded: Message = serde_json::from_value(wire).unwrap();
     assert_eq!(
         decoded,
         Message::Tool(ToolResultMessage {
-            id: "call-2".to_owned(),
-            content: "legacy".to_owned(),
+            tool_use_id: "call-2".to_owned(),
+            content: "result".to_owned(),
             is_error: false,
         })
     );

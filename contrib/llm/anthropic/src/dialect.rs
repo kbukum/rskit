@@ -28,6 +28,10 @@ struct ChatRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    stop_sequences: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     system: Option<String>,
 }
 
@@ -100,9 +104,11 @@ fn parse_stop_reason(reason: Option<&str>) -> FinishReason {
 impl AnthropicDialect {
     /// Build the JSON body for the Anthropic Messages API.
     pub(crate) fn build_body(req: &CompletionRequest) -> AppResult<serde_json::Value> {
-        let system_msg = req.messages.iter().find_map(|m| match m {
-            Message::System(s) => Some(s.content.clone()),
-            _ => None,
+        let system = req.system_prompt.clone().or_else(|| {
+            req.messages.iter().find_map(|m| match m {
+                Message::System(s) => Some(s.content.clone()),
+                _ => None,
+            })
         });
 
         let wire = ChatRequest {
@@ -110,14 +116,18 @@ impl AnthropicDialect {
             messages: req.messages.iter().filter_map(to_wire).collect(),
             max_tokens: req.max_tokens.unwrap_or(1024),
             temperature: req.temperature,
-            system: system_msg,
+            top_p: req.top_p,
+            stop_sequences: req.stop_sequences.clone(),
+            system,
         };
-        serde_json::to_value(&wire).map_err(|e| {
+        let mut body = serde_json::to_value(&wire).map_err(|e| {
             AppError::new(
                 ErrorCode::Internal,
                 format!("failed to serialize Anthropic request: {e}"),
             )
-        })
+        })?;
+        common::merge_extra(&mut body, &req.extra);
+        Ok(body)
     }
 
     /// Parse a successful Messages API response body.
@@ -281,6 +291,7 @@ mod tests {
             stream: false,
             tools: None,
             tool_choice: None,
+            ..Default::default()
         };
         let body = AnthropicDialect::build_body(&req).unwrap();
         assert_eq!(body["system"], "You are helpful.");
@@ -307,6 +318,7 @@ mod tests {
             stream: false,
             tools: None,
             tool_choice: None,
+            ..Default::default()
         };
 
         let body = AnthropicDialect::build_body(&req).unwrap();
@@ -317,6 +329,46 @@ mod tests {
         assert_eq!(body["messages"][0]["content"], "use the tool");
         assert_eq!(body["messages"][1]["role"], "user");
         assert_eq!(body["messages"][1]["content"], "forecast");
+    }
+
+    #[test]
+    fn build_body_prefers_explicit_system_prompt_and_wires_sampling_extra() {
+        let mut req = CompletionRequest {
+            model: "claude-sonnet-4-20250514".to_string(),
+            messages: vec![types::system("from message"), types::user("hello")],
+            max_tokens: Some(128),
+            temperature: None,
+            stream: false,
+            tools: None,
+            tool_choice: None,
+            system_prompt: Some("explicit system".to_string()),
+            top_p: Some(0.8),
+            stop_sequences: vec!["END".to_string()],
+            ..Default::default()
+        };
+        req.extra
+            .insert("service_tier".to_string(), serde_json::json!("auto"));
+
+        let body = AnthropicDialect::build_body(&req).unwrap();
+
+        assert_eq!(body["system"], "explicit system");
+        let top_p = body["top_p"].as_f64().unwrap();
+        assert!((top_p - 0.8).abs() < 1e-6);
+        assert_eq!(body["stop_sequences"][0], "END");
+        assert_eq!(body["service_tier"], "auto");
+    }
+
+    #[test]
+    fn build_body_falls_back_to_system_message_when_no_prompt() {
+        let req = CompletionRequest {
+            model: "claude-sonnet-4-20250514".to_string(),
+            messages: vec![types::system("from message"), types::user("hi")],
+            ..Default::default()
+        };
+        let body = AnthropicDialect::build_body(&req).unwrap();
+        assert_eq!(body["system"], "from message");
+        assert!(body.get("top_p").is_none());
+        assert!(body.get("stop_sequences").is_none());
     }
 
     #[test]

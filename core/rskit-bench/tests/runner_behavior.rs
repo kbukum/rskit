@@ -209,6 +209,7 @@ async fn runner_records_successes_failures_metrics_and_storage() {
         .with_storage(Box::new(storage))
         .with_reporter(Box::new(reporter))
         .with_clock(Arc::new(FixedClock::new(1_704_067_200, 42)))
+        .with_id_suffix(Arc::new(|| "deadbeef".to_owned()))
         .run(
             &loader,
             RunOptions::default()
@@ -218,7 +219,7 @@ async fn runner_records_successes_failures_metrics_and_storage() {
         .await
         .unwrap();
 
-    assert_eq!(result.id, "release-candidate-20240101-000000");
+    assert_eq!(result.id, "release-candidate_20240101-000000_deadbeef");
     assert_eq!(result.timestamp, "2024-01-01T00:00:00Z");
     assert_eq!(result.dataset.name, "fixture-dataset");
     assert_eq!(result.dataset.sample_count, 2);
@@ -394,6 +395,7 @@ async fn runner_records_reproducible_provenance() {
             .register("fixture", Box::new(evaluator), 1)
             .with_metrics(exact_match_suite())
             .with_clock(Arc::new(FixedClock::new(1_704_067_200, 42)))
+            .with_id_suffix(Arc::new(|| "fixed1234".to_owned()))
             .with_provenance_probe(probe)
             .run(&loader, RunOptions::default().with_seed(7).with_tag("eval"))
             .await
@@ -575,7 +577,7 @@ async fn runner_records_judge_model_and_prompt_version_in_provenance() {
     let judge1 = result
         .provenance
         .judges
-        .values()
+        .iter()
         .find(|judge| judge.model == "judge-model-1")
         .expect("judge 1 recorded");
     assert_eq!(judge1.provider, "fake_llm");
@@ -587,7 +589,7 @@ async fn runner_records_judge_model_and_prompt_version_in_provenance() {
     let judge2 = result
         .provenance
         .judges
-        .values()
+        .iter()
         .find(|judge| judge.model == "judge-model-2")
         .expect("judge 2 recorded");
     assert_eq!(judge2.provider, "fake_llm");

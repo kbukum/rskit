@@ -168,6 +168,7 @@ mod tests {
             stream: false,
             tools: None,
             tool_choice: None,
+            ..Default::default()
         }
     }
 

@@ -15,7 +15,7 @@ pub enum Message {
     /// System instruction.
     System(SystemMessage),
     /// Tool execution result.
-    #[serde(rename = "tool_result", alias = "tool")]
+    #[serde(rename = "tool")]
     Tool(ToolResultMessage),
 }
 
@@ -27,7 +27,7 @@ impl Message {
             Self::User(_) => "user",
             Self::Assistant(_) => "assistant",
             Self::System(_) => "system",
-            Self::Tool(_) => "tool_result",
+            Self::Tool(_) => "tool",
         }
     }
 }
@@ -88,8 +88,7 @@ pub struct SystemMessage {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ToolResultMessage {
     /// Tool-use identifier satisfied by this result.
-    #[serde(alias = "tool_use_id")]
-    pub id: String,
+    pub tool_use_id: String,
     /// Human-readable tool output.
     pub content: String,
     /// Whether the tool execution failed.
@@ -125,7 +124,7 @@ pub fn system(text: &str) -> Message {
 #[must_use]
 pub fn tool_result_msg(tool_use_id: &str, content: &str, is_error: bool) -> Message {
     Message::Tool(ToolResultMessage {
-        id: tool_use_id.to_string(),
+        tool_use_id: tool_use_id.to_string(),
         content: content.to_string(),
         is_error,
     })

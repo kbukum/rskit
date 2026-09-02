@@ -17,11 +17,11 @@ pub(crate) const DETAIL_JUDGE_PROMPT_FINGERPRINT: &str = "judge_prompt_fingerpri
 
 /// Extracts the judge identities recorded by [`llm_judge`](super::llm_judge) metrics from a result set into judge provenance records.
 ///
-/// Records every judge metric present in the result set, keyed by metric name; returns an empty map when the suite ran no judge metric.
+/// Records every judge metric present in the result set as a [`JudgeProvenance`](crate::provenance::JudgeProvenance) entry sorted by metric name, so the recorded provenance is deterministic regardless of suite order (D2); returns an empty vector when the suite ran no judge metric.
 pub(crate) fn judges_from_results(
     results: &[MetricResult],
-) -> std::collections::BTreeMap<String, crate::provenance::JudgeProvenance> {
-    let mut judges = std::collections::BTreeMap::new();
+) -> Vec<crate::provenance::JudgeProvenance> {
+    let mut judges = Vec::new();
     for result in results {
         let Some(detail) = &result.detail else {
             continue;
@@ -41,6 +41,7 @@ pub(crate) fn judges_from_results(
             detail_str(DETAIL_JUDGE_PROMPT_FINGERPRINT),
         ) {
             let mut provenance = crate::provenance::JudgeProvenance::new(
+                result.name.clone(),
                 provider,
                 model,
                 prompt_id,
@@ -50,8 +51,9 @@ pub(crate) fn judges_from_results(
             if let Some(resolved) = detail_str(DETAIL_JUDGE_RESOLVED_MODEL) {
                 provenance = provenance.with_resolved_model(resolved);
             }
-            judges.insert(result.name.clone(), provenance);
+            judges.push(provenance);
         }
     }
+    judges.sort_by(|a, b| a.metric.cmp(&b.metric));
     judges
 }

@@ -84,12 +84,18 @@ impl RunComparator {
         }
 
         let mut incompatible = Vec::new();
-        for (metric, target_judge) in &target.provenance.judges {
-            if let Some(base_judge) = base.provenance.judges.get(metric)
+        let base_judges: std::collections::HashMap<&str, &crate::provenance::JudgeProvenance> =
+            base.provenance
+                .judges
+                .iter()
+                .map(|judge| (judge.metric.as_str(), judge))
+                .collect();
+        for target_judge in &target.provenance.judges {
+            if let Some(base_judge) = base_judges.get(target_judge.metric.as_str())
                 && base_judge.resolved_model != target_judge.resolved_model
             {
                 incompatible.push(JudgeIncompatibility {
-                    metric: metric.clone(),
+                    metric: target_judge.metric.clone(),
                     base_resolved_model: base_judge.resolved_model.clone(),
                     target_resolved_model: target_judge.resolved_model.clone(),
                 });
@@ -389,6 +395,7 @@ mod tests {
             values.insert(key.to_owned(), v);
         }
         let mut provenance_judge = JudgeProvenance::new(
+            metric,
             "openai",
             "gpt-judge",
             "rskit.builtin.judge",
@@ -398,8 +405,7 @@ mod tests {
         if let Some(model) = resolved_model {
             provenance_judge = provenance_judge.with_resolved_model(model);
         }
-        let mut judges = BTreeMap::new();
-        judges.insert(metric.to_owned(), provenance_judge);
+        let judges = vec![provenance_judge];
         BenchRunResult {
             id: id.to_owned(),
             metrics: vec![MetricResult {

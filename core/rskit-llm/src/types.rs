@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use rskit_tool::ToolSchema;
 use serde::{Deserialize, Serialize};
 
@@ -72,7 +74,7 @@ impl ToolChoice {
 }
 
 /// Request to generate a chat completion.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct CompletionRequest {
     /// Provider model identifier to use for generation.
     pub model: String,
@@ -90,6 +92,24 @@ pub struct CompletionRequest {
     /// Optional policy controlling how the model may select tools.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_choice: Option<ToolChoice>,
+    /// Optional system prompt applied ahead of the conversation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub system_prompt: Option<String>,
+    /// Optional nucleus-sampling probability mass.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub top_p: Option<f32>,
+    /// Optional stop sequences that halt generation.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stop_sequences: Vec<String>,
+    /// Caller-supplied metadata for request tracking and observability.
+    ///
+    /// Not serialized to the provider wire; use [`Self::extra`] for
+    /// provider-native metadata fields.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub metadata: BTreeMap<String, String>,
+    /// Opaque provider-specific extension fields passed through untouched.
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub extra: serde_json::Map<String, serde_json::Value>,
 }
 
 /// Response from a chat completion.

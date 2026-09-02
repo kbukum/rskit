@@ -20,6 +20,7 @@ pub(crate) fn build_completion_request(
             .as_ref()
             .map(|registry| tool_definitions(registry.as_ref())),
         tool_choice: None,
+        ..Default::default()
     }
 }
 

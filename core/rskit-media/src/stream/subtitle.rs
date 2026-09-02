@@ -13,6 +13,7 @@ pub struct SubtitleEntry {
     /// The subtitle text.
     pub text: String,
     /// Optional styling for this entry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub style: Option<SubtitleStyle>,
 }
 
@@ -20,12 +21,16 @@ pub struct SubtitleEntry {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SubtitleStyle {
     /// Font family name.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub font_family: Option<String>,
     /// Font size in points.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub font_size: Option<u16>,
     /// Text color (CSS format, e.g., "#FFFFFF").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub color: Option<String>,
     /// Background color.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub background: Option<String>,
     /// Whether text is bold.
     pub bold: bool,
@@ -60,8 +65,10 @@ pub struct SubtitleTrack {
     /// Subtitle entries sorted by time.
     pub entries: Vec<SubtitleEntry>,
     /// Track language (BCP 47 tag).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub language: Option<String>,
     /// Default style for all entries (can be overridden per entry).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default_style: Option<SubtitleStyle>,
 }
 
@@ -435,5 +442,43 @@ mod tests {
         assert_eq!(parse_vtt_time("01:02.003"), Some(62_003));
         assert_eq!(parse_time_dotted("bad"), None);
         assert_eq!(strip_html_tags("<b>a</b><i>b</i>"), "ab");
+    }
+
+    #[test]
+    fn subtitle_track_omits_absent_optional_fields() {
+        let track = SubtitleTrack::new().add(TimeRange::from_millis(0, 1_000), "hi");
+        let value = serde_json::to_value(&track).expect("serialize subtitle track");
+        assert!(
+            value.get("language").is_none(),
+            "absent language must be omitted: {value}"
+        );
+        assert!(
+            value.get("default_style").is_none(),
+            "absent default_style must be omitted: {value}"
+        );
+        assert!(
+            value["entries"][0].get("style").is_none(),
+            "absent entry style must be omitted: {value}"
+        );
+
+        let styled = SubtitleStyle {
+            font_family: None,
+            font_size: Some(18),
+            color: None,
+            background: None,
+            bold: true,
+            italic: false,
+            position: SubtitlePosition::Bottom,
+        };
+        let value = serde_json::to_value(&styled).expect("serialize subtitle style");
+        assert!(
+            value.get("font_family").is_none(),
+            "absent font_family must be omitted: {value}"
+        );
+        assert_eq!(value["font_size"], 18);
+        assert!(
+            value.get("color").is_none() && value.get("background").is_none(),
+            "absent color/background must be omitted: {value}"
+        );
     }
 }

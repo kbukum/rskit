@@ -25,9 +25,11 @@ struct GeminiAdapter {
 
 /// Create a new [`Provider`] wired to Gemini with API key via the `x-goog-api-key` request header.
 fn new_adapter(cfg: &Config) -> AppResult<GeminiAdapter> {
-    let http_cfg = HttpClientConfig::new()
-        .with_base_url(&cfg.base_url)
-        .with_auth(Auth::api_key_secret(API_KEY_HEADER, cfg.api_key.clone()));
+    let http_cfg = cfg.transport.apply_to(
+        HttpClientConfig::new()
+            .with_base_url(&cfg.base_url)
+            .with_auth(Auth::api_key_secret(API_KEY_HEADER, cfg.api_key.clone())),
+    );
 
     let client = HttpClient::new(http_cfg)?;
 
@@ -119,6 +121,7 @@ impl Component for GeminiAdapter {
 mod tests {
     use super::*;
     use rskit_llm::types;
+    use rskit_llm_common::HttpTransportConfig;
     use rskit_provider::RequestResponse;
     use rskit_util::SecretString;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -130,6 +133,7 @@ mod tests {
             api_key: SecretString::new("AIza-test"),
             base_url: "https://generativelanguage.googleapis.com".into(),
             model: "gemini-2.5-flash".into(),
+            transport: HttpTransportConfig::default(),
         };
         let adapter = new_adapter(&cfg);
         assert!(adapter.is_ok());
@@ -141,6 +145,7 @@ mod tests {
             api_key: SecretString::new("AIza-test"),
             base_url: "https://generativelanguage.googleapis.com".into(),
             model: "gemini-2.5-flash".into(),
+            transport: HttpTransportConfig::default(),
         };
         let adapter = new_adapter(&cfg).unwrap();
         let _boxed: Box<dyn Provider> = Box::new(adapter);
@@ -152,6 +157,7 @@ mod tests {
             api_key: SecretString::new("AIza-test"),
             base_url: "https://generativelanguage.googleapis.com".into(),
             model: "gemini-2.5-flash".into(),
+            transport: HttpTransportConfig::default(),
         };
         let adapter = new_adapter(&cfg).unwrap();
         let component: &dyn Component = &adapter;
@@ -165,6 +171,7 @@ mod tests {
             api_key: SecretString::new("AIza-test"),
             base_url: "https://generativelanguage.googleapis.com".into(),
             model: "gemini-2.5-flash".into(),
+            transport: HttpTransportConfig::default(),
         };
         let mut registry = rskit_llm::Registry::new();
         register(&mut registry, cfg).unwrap();
@@ -179,6 +186,7 @@ mod tests {
             stream: false,
             tools: None,
             tool_choice: None,
+            ..Default::default()
         };
         gemini_request(&req, "gemini-2.5-flash").unwrap();
     }
@@ -189,6 +197,7 @@ mod tests {
             api_key: SecretString::new("AIza-test"),
             base_url: "https://generativelanguage.googleapis.com".into(),
             model: "gemini-2.5-flash".into(),
+            transport: HttpTransportConfig::default(),
         };
         let adapter = new_adapter(&cfg).unwrap();
 
@@ -209,6 +218,7 @@ mod tests {
             api_key: SecretString::new("AIza-test"),
             base_url,
             model: "gemini-2.5-flash".into(),
+            transport: HttpTransportConfig::default(),
         })
         .unwrap();
 
@@ -221,6 +231,7 @@ mod tests {
                 stream: false,
                 tools: None,
                 tool_choice: None,
+                ..Default::default()
             })
             .await
             .unwrap();
@@ -238,6 +249,7 @@ mod tests {
             api_key: SecretString::new("AIza-test"),
             base_url,
             model: "gemini-2.5-flash".into(),
+            transport: HttpTransportConfig::default(),
         })
         .unwrap();
 
@@ -250,6 +262,7 @@ mod tests {
                 stream: false,
                 tools: None,
                 tool_choice: None,
+                ..Default::default()
             })
             .await
             .unwrap_err();

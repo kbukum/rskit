@@ -33,6 +33,8 @@ fn new_adapter(cfg: &Config) -> AppResult<OllamaAdapter> {
         http_cfg = http_cfg.with_auth(Auth::bearer_secret(key.clone()));
     }
 
+    let http_cfg = cfg.transport.apply_to(http_cfg);
+
     let client = HttpClient::new(http_cfg)?;
 
     Ok(OllamaAdapter {
@@ -132,6 +134,7 @@ impl Component for OllamaAdapter {
 mod tests {
     use super::*;
     use rskit_llm::types;
+    use rskit_llm_common::HttpTransportConfig;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
 
@@ -140,6 +143,7 @@ mod tests {
             base_url,
             model: "llama3.2".into(),
             api_key: None,
+            transport: HttpTransportConfig::default(),
         }
     }
 
@@ -201,6 +205,7 @@ mod tests {
                 stream: false,
                 tools: None,
                 tool_choice: None,
+                ..Default::default()
             })
             .await
             .unwrap();

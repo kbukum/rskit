@@ -1,5 +1,6 @@
 //! Configuration for the Anthropic provider.
 
+use rskit_llm_common::HttpTransportConfig;
 use rskit_util::SecretString;
 use serde::Deserialize;
 
@@ -23,6 +24,10 @@ pub struct Config {
     /// Anthropic API version header value.
     #[serde(default = "default_api_version")]
     pub api_version: String,
+
+    /// Optional HTTP transport tuning (timeout, headers, TLS, resilience).
+    #[serde(default, flatten)]
+    pub transport: HttpTransportConfig,
 }
 
 fn default_base_url() -> String {

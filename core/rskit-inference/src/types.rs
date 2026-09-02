@@ -46,6 +46,9 @@ pub struct PredictResponse {
     pub model: Model,
     /// Prediction status.
     pub status: PredictStatus,
+    /// Explanatory reason for a `partial_success` or `error` status. Omitted on success.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
     /// Response metadata such as model version or finish reason.
     #[serde(default)]
     pub metadata: HashMap<String, String>,
@@ -63,12 +66,16 @@ impl Default for PredictResponse {
                 capabilities: Capabilities::default(),
             },
             status: PredictStatus::Success,
+            reason: None,
             metadata: HashMap::new(),
         }
     }
 }
 
 /// Prediction status.
+///
+/// A `PartialSuccess` or `Error` status carries an explanatory
+/// [`PredictResponse::reason`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
@@ -78,10 +85,7 @@ pub enum PredictStatus {
     /// Prediction completed with partial outputs.
     PartialSuccess,
     /// Serving runtime reported an error.
-    Error {
-        /// Error reason.
-        reason: String,
-    },
+    Error,
 }
 
 /// Runtime-neutral input or output value.
@@ -211,8 +215,46 @@ pub struct InferenceDescriptor {
     pub description: String,
     /// Serving protocol implemented by this adapter.
     pub serving_protocol: ServingProtocol,
+    /// Lean adapter capability hints for downstream policy and observability.
+    #[serde(default, skip_serializing_if = "CapabilityHints::is_empty")]
+    pub capabilities: CapabilityHints,
+    /// Reports whether the adapter is a working backend (`true`) or a
+    /// not-yet-live skeleton (`false`).
+    pub available: bool,
     /// Executable permission envelope declared by the adapter.
     pub envelope: rskit_tool::Envelope,
+}
+
+/// Lean inference-adapter capability hints for downstream policy and observability.
+///
+/// These advertise coarse adapter behavior (streaming, batching, tool-calls) without
+/// coupling the inference layer to the richer permission envelope owned by `rskit-tool`.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CapabilityHints {
+    /// Adapter can emit canonical streaming events.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub supports_streaming: bool,
+    /// Adapter can batch multiple predictions in one request.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub supports_batching: bool,
+    /// Maximum batch size when batching is supported.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub max_batch_size: u32,
+    /// Adapter can execute tool calls.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub supports_tool_calls: bool,
+}
+
+impl CapabilityHints {
+    /// Reports whether every hint is at its default (empty) value.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+fn is_zero(value: &u32) -> bool {
+    *value == 0
 }
 
 /// Model-serving runtime protocol.
@@ -221,8 +263,10 @@ pub struct InferenceDescriptor {
 #[non_exhaustive]
 pub enum ServingProtocol {
     /// KServe v2 over HTTP.
+    #[serde(rename = "kserve_v2_http")]
     KServeV2Http,
     /// KServe v2 over gRPC.
+    #[serde(rename = "kserve_v2_grpc")]
     KServeV2Grpc,
     /// vLLM raw REST generation APIs.
     VllmRest,

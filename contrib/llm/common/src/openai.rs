@@ -24,6 +24,10 @@ struct ChatRequest {
     max_tokens: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     temperature: Option<f32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    top_p: Option<f32>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    stop: Vec<String>,
     stream: bool,
 }
 
@@ -122,19 +126,32 @@ fn parse_tool_call(tool_call: ResponseToolCall, index: usize) -> AppResult<ToolU
 impl OpenAiDialect {
     /// Build the JSON body for a chat completion request.
     pub fn build_body(req: &CompletionRequest) -> AppResult<serde_json::Value> {
+        let mut messages = Vec::with_capacity(req.messages.len() + 1);
+        if let Some(system) = &req.system_prompt {
+            messages.push(WireMessage {
+                role: "system".to_string(),
+                content: system.clone(),
+            });
+        }
+        messages.extend(req.messages.iter().map(to_wire));
+
         let wire = ChatRequest {
             model: req.model.clone(),
-            messages: req.messages.iter().map(to_wire).collect(),
+            messages,
             max_tokens: req.max_tokens,
             temperature: req.temperature,
+            top_p: req.top_p,
+            stop: req.stop_sequences.clone(),
             stream: false,
         };
-        serde_json::to_value(&wire).map_err(|e| {
+        let mut body = serde_json::to_value(&wire).map_err(|e| {
             AppError::new(
                 ErrorCode::Internal,
                 format!("failed to serialize OpenAI request: {e}"),
             )
-        })
+        })?;
+        common::merge_extra(&mut body, &req.extra);
+        Ok(body)
     }
 
     /// Parse a successful chat-completion response body.
@@ -287,6 +304,7 @@ mod tests {
             stream: false,
             tools: None,
             tool_choice: None,
+            ..Default::default()
         };
         let body = OpenAiDialect::build_body(&req).unwrap();
         assert_eq!(body["model"], "gpt-4o");
@@ -309,6 +327,7 @@ mod tests {
             stream: false,
             tools: None,
             tool_choice: None,
+            ..Default::default()
         };
 
         let body = OpenAiDialect::build_body(&req).unwrap();
@@ -316,6 +335,61 @@ mod tests {
         assert_eq!(body["messages"][0]["role"], "system");
         assert_eq!(body["messages"][1]["role"], "assistant");
         assert_eq!(body["messages"][2]["role"], "tool");
+    }
+
+    #[test]
+    fn build_body_wires_sampling_system_and_extra_fields() {
+        let mut req = CompletionRequest {
+            model: "gpt-4o".to_string(),
+            messages: vec![types::user("hello")],
+            max_tokens: Some(64),
+            temperature: Some(0.5),
+            stream: false,
+            tools: None,
+            tool_choice: None,
+            system_prompt: Some("be terse".to_string()),
+            top_p: Some(0.9),
+            stop_sequences: vec!["STOP".to_string()],
+            ..Default::default()
+        };
+        req.extra.insert("seed".to_string(), serde_json::json!(7));
+
+        let body = OpenAiDialect::build_body(&req).unwrap();
+
+        assert_eq!(body["messages"][0]["role"], "system");
+        assert_eq!(body["messages"][0]["content"], "be terse");
+        assert_eq!(body["messages"][1]["role"], "user");
+        let top_p = body["top_p"].as_f64().unwrap();
+        assert!((top_p - 0.9).abs() < 1e-6);
+        assert_eq!(body["stop"][0], "STOP");
+        assert_eq!(body["seed"], 7);
+    }
+
+    #[test]
+    fn build_body_extra_does_not_override_typed_fields() {
+        let mut req = CompletionRequest {
+            model: "gpt-4o".to_string(),
+            messages: vec![types::user("hi")],
+            ..Default::default()
+        };
+        req.extra
+            .insert("model".to_string(), serde_json::json!("evil"));
+
+        let body = OpenAiDialect::build_body(&req).unwrap();
+
+        assert_eq!(body["model"], "gpt-4o");
+    }
+
+    #[test]
+    fn build_body_omits_optional_sampling_fields_when_unset() {
+        let req = CompletionRequest {
+            model: "gpt-4o".to_string(),
+            messages: vec![types::user("hi")],
+            ..Default::default()
+        };
+        let body = OpenAiDialect::build_body(&req).unwrap();
+        assert!(body.get("top_p").is_none());
+        assert!(body.get("stop").is_none());
     }
 
     #[test]

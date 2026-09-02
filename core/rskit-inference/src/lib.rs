@@ -25,6 +25,6 @@ pub use inference::{Inference, StreamingInference};
 pub use registry::{Factory, Registry, RegistryError, default_registry};
 pub use rskit_ai::{Model, StreamEvent, StreamEventRef, Usage};
 pub use types::{
-    InferenceDescriptor, InferenceError, PredictRequest, PredictResponse, PredictStatus,
-    ServingProtocol, Tensor, TensorData, Value,
+    CapabilityHints, InferenceDescriptor, InferenceError, PredictRequest, PredictResponse,
+    PredictStatus, ServingProtocol, Tensor, TensorData, Value,
 };

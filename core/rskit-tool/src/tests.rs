@@ -33,6 +33,32 @@ fn test_definition_serialization() {
     assert_eq!(json["name"], "test");
     assert_eq!(json["annotations"]["title"], "Test");
     assert!(json.get("output_schema").is_none());
+    assert!(json.get("outputSchema").is_none());
+    assert!(json.get("inputSchema").is_some());
+    assert!(
+        json.get("input_schema").is_none(),
+        "input_schema must serialize as camelCase inputSchema"
+    );
+}
+
+#[test]
+fn test_definition_output_schema_is_camel_case() {
+    let def = Definition {
+        name: "test".to_string(),
+        description: "Test tool".to_string(),
+        input_schema: ToolSchema::new(serde_json::json!({"type": "object"})).unwrap(),
+        output_schema: Some(ToolSchema::new(serde_json::json!({"type": "string"})).unwrap()),
+        annotations: Annotations {
+            idempotent_hint: Some(true),
+            ..Default::default()
+        },
+        envelope: Envelope::default(),
+    };
+    let json = serde_json::to_value(&def).unwrap();
+    assert!(json.get("outputSchema").is_some());
+    assert_eq!(json["annotations"]["idempotentHint"], true);
+    assert!(json["annotations"].get("idempotent_hint").is_none());
+    assert!(json["annotations"].get("executionHint").is_some());
 }
 
 #[test]
@@ -55,7 +81,7 @@ fn test_execution_hint_serialization() {
         ..Default::default()
     };
     let json = serde_json::to_value(&ann).unwrap();
-    assert_eq!(json["execution_hint"], "hybrid");
+    assert_eq!(json["executionHint"], "hybrid");
     assert_eq!(json["title"], "My Tool");
 
     let ann_default = Annotations {
@@ -63,14 +89,14 @@ fn test_execution_hint_serialization() {
         ..Default::default()
     };
     let json_default = serde_json::to_value(&ann_default).unwrap();
-    assert_eq!(json_default["execution_hint"], "backend");
+    assert_eq!(json_default["executionHint"], "backend");
 }
 
 #[test]
 fn test_execution_hint_deserialization() {
     let json = serde_json::json!({
         "title": "T",
-        "execution_hint": "backend"
+        "executionHint": "backend"
     });
     let ann: Annotations = serde_json::from_value(json).unwrap();
     assert_eq!(ann.execution_hint, ExecutionHint::Backend);

@@ -1,5 +1,6 @@
 //! Configuration for the Gemini provider.
 
+use rskit_llm_common::HttpTransportConfig;
 use rskit_util::SecretString;
 use serde::Deserialize;
 
@@ -19,6 +20,10 @@ pub struct Config {
     /// Model name (e.g. `gemini-2.5-flash`).
     #[serde(default = "default_model")]
     pub model: String,
+
+    /// Optional HTTP transport tuning (timeout, headers, TLS, resilience).
+    #[serde(default, flatten)]
+    pub transport: HttpTransportConfig,
 }
 
 fn default_base_url() -> String {

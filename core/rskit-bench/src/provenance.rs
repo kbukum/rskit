@@ -2,8 +2,6 @@
 //!
 //! A [`RunProvenance`] record captures everything needed to reproduce and audit a benchmark run — the deterministic seed and RNG algorithm, the source-control commit, the tool and host identity, and an order-independent content hash of the evaluated dataset. Host and commit values are gathered through an injected [`ProvenanceProbe`], so unit tests can supply fixed values with no process, environment, or network access.
 
-use std::collections::BTreeMap;
-
 use serde::{Deserialize, Serialize};
 
 use rskit_util::hash::ContentHasher;
@@ -14,6 +12,8 @@ use crate::types::BenchSample;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[non_exhaustive]
 pub struct JudgeProvenance {
+    /// Full judge metric name — the identity two runs are joined on.
+    pub metric: String,
     /// Provider that served the judge model.
     pub provider: String,
     /// Model name used by the judge.
@@ -33,6 +33,7 @@ impl JudgeProvenance {
     /// Creates a new judge provenance record.
     #[must_use]
     pub fn new(
+        metric: impl Into<String>,
         provider: impl Into<String>,
         model: impl Into<String>,
         prompt_id: impl Into<String>,
@@ -40,6 +41,7 @@ impl JudgeProvenance {
         prompt_fingerprint: impl Into<String>,
     ) -> Self {
         Self {
+            metric: metric.into(),
             provider: provider.into(),
             model: model.into(),
             prompt_id: prompt_id.into(),
@@ -99,9 +101,9 @@ pub struct RunProvenance {
     /// Metric names computed for the run, in suite order.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub metrics: Vec<String>,
-    /// Judge identities for LLM-judge metrics, keyed by metric name.
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub judges: BTreeMap<String, JudgeProvenance>,
+    /// Judge identities for LLM-judge metrics, a sorted array with one entry per judge metric (sorted by [`JudgeProvenance::metric`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub judges: Vec<JudgeProvenance>,
 }
 
 /// Gathers host and source-control provenance for a benchmark run.
@@ -276,17 +278,14 @@ mod tests {
 
     #[test]
     fn populated_provenance_round_trips() {
-        let mut judges = BTreeMap::new();
-        judges.insert(
-            "llm_judge[openai/gpt-judge@rskit.builtin.judge@1.0.0]".to_string(),
-            JudgeProvenance::new(
-                "openai",
-                "gpt-judge",
-                "rskit.builtin.judge",
-                "1.0.0",
-                "0123456789abcdef",
-            ),
-        );
+        let judges = vec![JudgeProvenance::new(
+            "llm_judge[openai/gpt-judge@rskit.builtin.judge@1.0.0]",
+            "openai",
+            "gpt-judge",
+            "rskit.builtin.judge",
+            "1.0.0",
+            "0123456789abcdef",
+        )];
         let provenance = RunProvenance {
             seed: 42,
             rng_algorithm: "rand_chacha:ChaCha8Rng".into(),
