@@ -355,11 +355,7 @@ impl Dag {
     }
 
     /// Record one node's outcome and apply its failure policy to the rest of the run.
-    fn record_execution(
-        &self,
-        execution: NodeExecution,
-        run: &mut ExecutionRun,
-    ) -> AppResult<()> {
+    fn record_execution(&self, execution: NodeExecution, run: &mut ExecutionRun) -> AppResult<()> {
         run.pending.remove(&execution.node_id);
         let duration_ms = duration_millis(execution.duration);
 
@@ -1007,13 +1003,11 @@ mod tests {
             });
 
         // The slow, independent node ignores the token; fail-fast must abort it rather than wait.
-        let result = tokio::time::timeout(
-            Duration::from_secs(5),
-            dag.run(CancellationToken::new()),
-        )
-        .await
-        .expect("fail-fast must abort the token-ignoring node, not block on it")
-        .unwrap();
+        let result =
+            tokio::time::timeout(Duration::from_secs(5), dag.run(CancellationToken::new()))
+                .await
+                .expect("fail-fast must abort the token-ignoring node, not block on it")
+                .unwrap();
 
         assert_eq!(result.status("boom"), Some(NodeStatus::Failed));
         assert_eq!(result.status("slow"), Some(NodeStatus::Canceled));
