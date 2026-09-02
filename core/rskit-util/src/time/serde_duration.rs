@@ -1,8 +1,8 @@
 //! Lossless serde adapters for [`Duration`], for use with `#[serde(with = ...)]`.
 //!
 //! Both the required and [`option`] adapters encode a [`Duration`] as the round-trip-safe string
-//! produced by [`format_duration_exact`](super::format_duration_exact) and decode it with
-//! [`parse_duration`](super::parse_duration), so a serialized configuration value never drifts
+//! produced by [`super::format_duration_exact`] and decode it with
+//! [`super::parse_duration`], so a serialized configuration value never drifts
 //! from the value it was written with.
 //!
 //! ```
@@ -56,7 +56,9 @@ where
 
 /// Lossless serde adapter for [`Option<Duration>`].
 pub mod option {
-    use super::{Deserialize, Deserializer, Duration, Serializer, format_duration_exact, parse_duration};
+    use super::{
+        Deserialize, Deserializer, Duration, Serializer, format_duration_exact, parse_duration,
+    };
 
     /// Serialize an [`Option<Duration>`] as a lossless string or `null`.
     ///

@@ -142,7 +142,11 @@ mod tests {
             Duration::from_nanos(1),
         ] {
             let text = format_duration_exact(d);
-            assert_eq!(parse_duration(&text), Some(d), "round trip failed for {text}");
+            assert_eq!(
+                parse_duration(&text),
+                Some(d),
+                "round trip failed for {text}"
+            );
         }
         assert_eq!(format_duration_exact(Duration::from_secs(3601)), "3601s");
         assert_eq!(format_duration_exact(Duration::from_hours(2)), "2h");
