@@ -41,8 +41,15 @@ impl FileCache {
     }
 
     async fn read_entry(&self, path: &Path, expected_key: &str) -> AppResult<Option<Entry>> {
-        let Some(entry) = self.read_entry_file(path).await? else {
-            return Ok(None);
+        let entry = match self.read_entry_file(path).await? {
+            EntryFile::Hit(entry) => entry,
+            EntryFile::Miss => return Ok(None),
+            EntryFile::Corrupt(error) => {
+                // Remove the unreadable file so it is not reparsed on every read, and surface the
+                // failure instead of masquerading a corrupt entry as a clean miss.
+                self.quarantine_corrupt_entry(path).await?;
+                return Err(corrupt_entry_error(path).with_cause(error));
+            }
         };
         if entry.key != expected_key {
             return Err(AppError::new(
@@ -56,21 +63,38 @@ impl FileCache {
         Ok(Some(entry))
     }
 
-    async fn read_entry_file(&self, path: &Path) -> AppResult<Option<Entry>> {
+    /// Read and classify an entry file without mutating it.
+    ///
+    /// A missing file, or one written in the legacy plain-string layout that predates the
+    /// versioned binary format, is reported as [`EntryFile::Miss`] so an older value is never
+    /// silently reinterpreted as base64 bytes. A file that is neither the current format nor a
+    /// recognizable legacy entry is reported as [`EntryFile::Corrupt`] for observable handling by
+    /// the caller.
+    async fn read_entry_file(&self, path: &Path) -> AppResult<EntryFile> {
         let bytes =
             match rskit_fs::async_io::file::read_bounded(path, self.config.max_entry_bytes).await {
                 Ok(bytes) => bytes,
-                Err(error) if is_not_found_error(&error) => return Ok(None),
+                Err(error) if is_not_found_error(&error) => return Ok(EntryFile::Miss),
                 Err(error) => return Err(error),
             };
-        let entry: Entry = serde_json::from_slice(&bytes).map_err(|error| {
-            AppError::new(
+        Ok(classify_entry_bytes(&bytes))
+    }
+
+    /// Delete a corrupt entry file so it does not accumulate or get reparsed on every read.
+    async fn quarantine_corrupt_entry(&self, path: &Path) -> AppResult<()> {
+        let _guard = self.mutation_lock.lock().await;
+        match tokio::fs::remove_file(path).await {
+            Ok(()) => Ok(()),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(error) => Err(AppError::new(
                 ErrorCode::Internal,
-                format!("failed to decode cache entry '{}'", path.display()),
+                format!(
+                    "failed to quarantine corrupt cache entry '{}'",
+                    path.display()
+                ),
             )
-            .with_cause(error)
-        })?;
-        Ok(Some(entry))
+            .with_cause(error)),
+        }
     }
 
     /// Remove expired cache entries, checking at most `max_entries` files.
@@ -102,8 +126,27 @@ impl FileCache {
                     return Ok(removed);
                 }
                 checked += 1;
-                let Some(cache_entry) = self.read_entry_file(&entry.path).await? else {
-                    continue;
+                let cache_entry = match self.read_entry_file(&entry.path).await? {
+                    EntryFile::Hit(cache_entry) => cache_entry,
+                    EntryFile::Miss => continue,
+                    EntryFile::Corrupt(_) => {
+                        // Unlink corrupt files during maintenance so they stop being reparsed.
+                        match tokio::fs::remove_file(&entry.path).await {
+                            Ok(()) => removed += 1,
+                            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                            Err(error) => {
+                                return Err(AppError::new(
+                                    ErrorCode::Internal,
+                                    format!(
+                                        "failed to delete corrupt cache entry '{}'",
+                                        entry.path.display()
+                                    ),
+                                )
+                                .with_cause(error));
+                            }
+                        }
+                        continue;
+                    }
                 };
                 if cache_entry.is_expired()? {
                     match tokio::fs::remove_file(&entry.path).await {
@@ -130,13 +173,13 @@ impl FileCache {
 
 #[async_trait::async_trait]
 impl CacheStore for FileCache {
-    async fn get(&self, key: &str) -> AppResult<Option<String>> {
+    async fn get(&self, key: &str) -> AppResult<Option<Vec<u8>>> {
         let key = self.prefixed_key(key);
         let path = self.entry_path(&key);
         Ok(self.read_entry(&path, &key).await?.map(|entry| entry.value))
     }
 
-    async fn set(&self, key: &str, val: &str, ttl: Option<Duration>) -> AppResult<()> {
+    async fn set(&self, key: &str, val: &[u8], ttl: Option<Duration>) -> AppResult<()> {
         if ttl.is_some_and(|ttl| ttl.is_zero()) {
             return Err(AppError::new(
                 ErrorCode::InvalidInput,
@@ -146,8 +189,9 @@ impl CacheStore for FileCache {
         let key = self.prefixed_key(key);
         let path = self.entry_path(&key);
         let entry = Entry {
+            version: ENTRY_FORMAT_VERSION,
             key,
-            value: val.to_owned(),
+            value: val.to_vec(),
             expires_at_millis: expires_at_millis(ttl)?,
         };
         let json = serde_json::to_vec(&entry).map_err(|error| {
@@ -186,9 +230,76 @@ impl CacheStore for FileCache {
 
 #[derive(Deserialize, Serialize)]
 pub(crate) struct Entry {
+    /// On-disk format version. A required discriminator that distinguishes the versioned base64
+    /// binary layout from the legacy plain-string layout, so a legacy value that happens to be
+    /// valid base64 (e.g. `"live"`) is never silently decoded into unrelated bytes.
+    #[serde(rename = "v")]
+    pub(crate) version: u8,
     pub(crate) key: String,
-    pub(crate) value: String,
+    /// Base64-encoded on disk so binary values stay compact instead of expanding into a JSON
+    /// array of integers, which would consume roughly four times the `max_entry_bytes` budget.
+    #[serde(with = "base64_value")]
+    pub(crate) value: Vec<u8>,
     pub(crate) expires_at_millis: Option<u128>,
+}
+
+/// Current on-disk entry format version.
+pub(crate) const ENTRY_FORMAT_VERSION: u8 = 1;
+
+/// Legacy plain-string entry layout that predates [`ENTRY_FORMAT_VERSION`].
+///
+/// Used only to recognize (and reject as a clean miss) files written by an older binary, so they
+/// are distinguished from genuinely corrupt data.
+#[derive(Deserialize)]
+#[allow(dead_code)]
+struct LegacyEntry {
+    key: String,
+    value: String,
+    expires_at_millis: Option<u128>,
+}
+
+/// Classification of an on-disk entry file's contents.
+enum EntryFile {
+    /// A valid current-format entry.
+    Hit(Entry),
+    /// A recognizable legacy-format entry that must be treated as a miss rather than reinterpreted.
+    Miss,
+    /// Bytes that match neither the current nor the legacy layout.
+    Corrupt(serde_json::Error),
+}
+
+/// Classify entry bytes as a current hit, a legacy miss, or corrupt.
+fn classify_entry_bytes(bytes: &[u8]) -> EntryFile {
+    match serde_json::from_slice::<Entry>(bytes) {
+        Ok(entry) if entry.version == ENTRY_FORMAT_VERSION => EntryFile::Hit(entry),
+        // A recognized JSON entry with an unknown version is a format from a different binary;
+        // treat it like a legacy record rather than trusting or corrupting it.
+        Ok(_) => EntryFile::Miss,
+        Err(error) => {
+            if serde_json::from_slice::<LegacyEntry>(bytes).is_ok() {
+                EntryFile::Miss
+            } else {
+                EntryFile::Corrupt(error)
+            }
+        }
+    }
+}
+
+/// Serde adapter storing [`Entry::value`] as a base64 string.
+mod base64_value {
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    use serde::{Deserialize, Deserializer, Serializer, de::Error as _};
+
+    pub(super) fn serialize<S: Serializer>(value: &[u8], serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&STANDARD.encode(value))
+    }
+
+    pub(super) fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Vec<u8>, D::Error> {
+        let encoded = String::deserialize(deserializer)?;
+        STANDARD.decode(&encoded).map_err(D::Error::custom)
+    }
 }
 
 impl Entry {
@@ -239,6 +350,17 @@ fn is_not_found_error(error: &AppError) -> bool {
         .cause()
         .and_then(|cause| cause.downcast_ref::<std::io::Error>())
         .is_some_and(|cause| cause.kind() == std::io::ErrorKind::NotFound)
+}
+
+fn corrupt_entry_error(path: &Path) -> AppError {
+    AppError::new(
+        ErrorCode::Internal,
+        format!(
+            "cache entry '{}' is corrupt and was quarantined",
+            path.display()
+        ),
+    )
+    .with_detail("rskit_cache_error", "entry_corrupt")
 }
 
 fn cache_entry_too_large_error(path: &Path, actual: u64, limit: u64) -> AppError {

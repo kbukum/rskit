@@ -11,16 +11,18 @@ use crate::config::CacheConfig;
 pub use crate::adapters::memory::register_memory;
 
 /// Minimal async cache storage operations shared by all store adapters.
+///
+/// Values are opaque byte strings; callers own any encoding (JSON, protobuf, …).
 #[async_trait::async_trait]
 pub trait CacheStore: Send + Sync {
-    /// Retrieve a string value by key.
-    async fn get(&self, key: &str) -> AppResult<Option<String>>;
-    /// Store a string value with an optional TTL.
+    /// Retrieve a raw value by key.
+    async fn get(&self, key: &str) -> AppResult<Option<Vec<u8>>>;
+    /// Store a raw value with an optional TTL.
     ///
     /// `Duration::ZERO` is invalid.
     /// Stores should honor sub-second TTLs with at least millisecond precision;
     /// durations below one millisecond may be rounded up.
-    async fn set(&self, key: &str, val: &str, ttl: Option<Duration>) -> AppResult<()>;
+    async fn set(&self, key: &str, val: &[u8], ttl: Option<Duration>) -> AppResult<()>;
     /// Delete a key and report whether it existed.
     async fn delete(&self, key: &str) -> AppResult<bool>;
     /// Check whether a key currently exists.
@@ -88,9 +90,9 @@ impl CacheRegistry {
         self.factories.is_empty()
     }
 
-    /// Build the store selected by [`CacheConfig::store`].
+    /// Build the store selected by [`CacheConfig::provider`].
     pub async fn build(&self, config: &CacheConfig) -> AppResult<Arc<dyn CacheStore>> {
-        let store = config.store.trim();
+        let store = config.provider.trim();
         if store.is_empty() {
             return Err(AppError::new(
                 ErrorCode::InvalidInput,
@@ -116,11 +118,11 @@ mod tests {
 
     #[async_trait::async_trait]
     impl CacheStore for DummyStore {
-        async fn get(&self, _key: &str) -> AppResult<Option<String>> {
+        async fn get(&self, _key: &str) -> AppResult<Option<Vec<u8>>> {
             Ok(None)
         }
 
-        async fn set(&self, _key: &str, _val: &str, _ttl: Option<Duration>) -> AppResult<()> {
+        async fn set(&self, _key: &str, _val: &[u8], _ttl: Option<Duration>) -> AppResult<()> {
             Ok(())
         }
 
@@ -169,7 +171,7 @@ mod tests {
     async fn build_rejects_empty_selected_store() {
         let registry = CacheRegistry::new();
         let config = CacheConfig {
-            store: " ".into(),
+            provider: " ".into(),
             ..CacheConfig::default()
         };
 
@@ -183,7 +185,7 @@ mod tests {
     async fn build_rejects_unregistered_selected_store() {
         let registry = CacheRegistry::new();
         let config = CacheConfig {
-            store: "redis".into(),
+            provider: "redis".into(),
             ..CacheConfig::default()
         };
 
@@ -204,7 +206,7 @@ mod tests {
         assert!(!registry.is_empty());
 
         let config = CacheConfig {
-            store: " memory ".into(),
+            provider: " memory ".into(),
             ..CacheConfig::default()
         };
 
@@ -219,7 +221,10 @@ mod tests {
                 .expect("get should succeed")
                 .is_none()
         );
-        store.set("k", "v", None).await.expect("set should succeed");
+        store
+            .set("k", b"v", None)
+            .await
+            .expect("set should succeed");
         assert!(!store.delete("k").await.expect("delete should succeed"));
         assert!(
             !store

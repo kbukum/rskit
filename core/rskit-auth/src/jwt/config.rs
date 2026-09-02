@@ -1,20 +1,26 @@
 use std::{fmt, time::Duration};
 
 use rskit_util::SecretString;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 /// Public JWT algorithm policy for rskit.
-#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+///
+/// The allow-list uses canonical JWA spellings (`HS256`, `RS256`, `ES256`, `EdDSA`).
+/// `none` and any unlisted algorithm cannot be represented and are rejected during deserialization.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum JwtAlgorithm {
-    /// HMAC-SHA256 for explicitly internal symmetric deployments only.
-    Hs256Internal,
+    /// HMAC-SHA256. Symmetric; permitted only when `allow_symmetric_hmac` is enabled.
+    #[serde(rename = "HS256")]
+    Hs256,
     /// RSA-SHA256 — preferred public-key default.
+    #[serde(rename = "RS256")]
     Rs256,
     /// ECDSA P-256 / SHA-256.
+    #[serde(rename = "ES256")]
     Es256,
     /// Ed25519 / `EdDSA`.
+    #[serde(rename = "EdDSA")]
     EdDsa,
 }
 
@@ -23,7 +29,7 @@ impl JwtAlgorithm {
     #[must_use]
     pub const fn as_jsonwebtoken(self) -> jsonwebtoken::Algorithm {
         match self {
-            Self::Hs256Internal => jsonwebtoken::Algorithm::HS256,
+            Self::Hs256 => jsonwebtoken::Algorithm::HS256,
             Self::Rs256 => jsonwebtoken::Algorithm::RS256,
             Self::Es256 => jsonwebtoken::Algorithm::ES256,
             Self::EdDsa => jsonwebtoken::Algorithm::EdDSA,
@@ -33,7 +39,7 @@ impl JwtAlgorithm {
     /// True when the algorithm uses a symmetric shared secret.
     #[must_use]
     pub const fn is_symmetric(self) -> bool {
-        matches!(self, Self::Hs256Internal)
+        matches!(self, Self::Hs256)
     }
 }
 
@@ -48,7 +54,7 @@ pub enum AsymmetricAlgorithm {
     #[serde(rename = "ES256")]
     Es256,
     /// Ed25519 / `EdDSA`.
-    #[serde(rename = "EDDSA")]
+    #[serde(rename = "EdDSA")]
     EdDsa,
 }
 
@@ -101,8 +107,8 @@ impl fmt::Debug for KeyPair {
 #[derive(Clone, Deserialize, zeroize::Zeroize, zeroize::ZeroizeOnDrop)]
 #[non_exhaustive]
 pub enum JwtKeyMaterial {
-    /// Explicit internal-only HMAC secret.
-    Hs256Internal {
+    /// Symmetric HMAC secret. Permitted only when `allow_symmetric_hmac` is enabled.
+    Hmac {
         /// Shared secret used for signing and verification.
         secret: SecretString,
     },
@@ -121,7 +127,7 @@ impl JwtKeyMaterial {
     #[must_use]
     pub const fn algorithm(&self) -> JwtAlgorithm {
         match self {
-            Self::Hs256Internal { .. } => JwtAlgorithm::Hs256Internal,
+            Self::Hmac { .. } => JwtAlgorithm::Hs256,
             Self::Asymmetric { algorithm, .. } => algorithm.as_jwt_algorithm(),
         }
     }
@@ -130,10 +136,7 @@ impl JwtKeyMaterial {
 impl fmt::Debug for JwtKeyMaterial {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Hs256Internal { secret } => f
-                .debug_struct("Hs256Internal")
-                .field("secret", secret)
-                .finish(),
+            Self::Hmac { secret } => f.debug_struct("Hmac").field("secret", secret).finish(),
             Self::Asymmetric { algorithm, keys } => f
                 .debug_struct("Asymmetric")
                 .field("algorithm", algorithm)
@@ -152,17 +155,44 @@ pub struct JwtConfig {
     pub issuer: String,
     /// Accepted audience claims.
     pub audience: Vec<String>,
-    /// Token time-to-live. Generation helpers may use this value.
-    #[serde(default = "JwtConfig::default_ttl")]
+    /// Access-token time-to-live. Advisory: callers own claim construction and set `exp` themselves.
+    ///
+    /// Deserializes from the shared `access_token_ttl` key.
+    #[serde(rename = "access_token_ttl", default = "JwtConfig::default_ttl")]
     pub ttl: Duration,
+    /// Refresh-token time-to-live. Advisory: neither [`crate::JwtService::generate_refresh`] nor
+    /// [`crate::JwtCodec::encode_refresh`] reads this value or sets `exp` — callers building refresh
+    /// claims size the expiry themselves.
+    ///
+    /// Deserializes from the shared `refresh_token_ttl` key.
+    #[serde(
+        rename = "refresh_token_ttl",
+        default = "JwtConfig::default_refresh_ttl"
+    )]
+    pub refresh_ttl: Duration,
     /// Clock-skew tolerance. Defaults to 30 seconds and must not exceed 60 seconds.
-    #[serde(default = "JwtConfig::default_leeway")]
+    ///
+    /// Deserializes from the shared `clock_skew` key.
+    #[serde(rename = "clock_skew", default = "JwtConfig::default_leeway")]
     pub leeway: Duration,
+    /// Explicit opt-in required to use the symmetric HMAC (`HS256`) algorithm.
+    ///
+    /// HMAC signing is intended for internal-only deployments; asymmetric keys are preferred.
+    #[serde(default)]
+    pub allow_symmetric_hmac: bool,
+    /// Optional separate secret for refresh tokens (HMAC only). When unset, the primary
+    /// key material signs and verifies both access and refresh tokens.
+    #[serde(default)]
+    pub refresh_secret: Option<SecretString>,
 }
 
 impl JwtConfig {
     const fn default_ttl() -> Duration {
         Duration::from_hours(1)
+    }
+
+    const fn default_refresh_ttl() -> Duration {
+        Duration::from_hours(24 * 7)
     }
 
     const fn default_leeway() -> Duration {
@@ -189,25 +219,34 @@ impl JwtConfig {
             issuer: issuer.into(),
             audience,
             ttl: Self::default_ttl(),
+            refresh_ttl: Self::default_refresh_ttl(),
             leeway: Self::default_leeway(),
+            allow_symmetric_hmac: false,
+            refresh_secret: None,
         }
     }
 
-    /// Create an explicit internal-only HS256 configuration.
+    /// Create a symmetric HMAC (`HS256`) configuration.
+    ///
+    /// Constructing an HMAC configuration explicitly opts into symmetric signing
+    /// (`allow_symmetric_hmac`), which is intended for internal-only deployments.
     #[must_use]
-    pub fn hs256_internal(
+    pub fn hmac(
         secret: impl Into<String>,
         issuer: impl Into<String>,
         audience: Vec<String>,
     ) -> Self {
         Self {
-            key_material: JwtKeyMaterial::Hs256Internal {
+            key_material: JwtKeyMaterial::Hmac {
                 secret: SecretString::new(secret),
             },
             issuer: issuer.into(),
             audience,
             ttl: Self::default_ttl(),
+            refresh_ttl: Self::default_refresh_ttl(),
             leeway: Self::default_leeway(),
+            allow_symmetric_hmac: true,
+            refresh_secret: None,
         }
     }
 
@@ -262,10 +301,17 @@ impl JwtConfig {
         )
     }
 
-    /// Override the configured token TTL.
+    /// Override the configured access-token TTL.
     #[must_use]
     pub const fn with_ttl(mut self, ttl: Duration) -> Self {
         self.ttl = ttl;
+        self
+    }
+
+    /// Override the configured refresh-token TTL.
+    #[must_use]
+    pub const fn with_refresh_ttl(mut self, refresh_ttl: Duration) -> Self {
+        self.refresh_ttl = refresh_ttl;
         self
     }
 
@@ -273,6 +319,13 @@ impl JwtConfig {
     #[must_use]
     pub const fn with_leeway(mut self, leeway: Duration) -> Self {
         self.leeway = leeway;
+        self
+    }
+
+    /// Set a separate HMAC secret for refresh tokens.
+    #[must_use]
+    pub fn with_refresh_secret(mut self, refresh_secret: impl Into<String>) -> Self {
+        self.refresh_secret = Some(SecretString::new(refresh_secret));
         self
     }
 
@@ -291,7 +344,10 @@ impl fmt::Debug for JwtConfig {
             .field("issuer", &self.issuer)
             .field("audience", &self.audience)
             .field("ttl", &self.ttl)
+            .field("refresh_ttl", &self.refresh_ttl)
             .field("leeway", &self.leeway)
+            .field("allow_symmetric_hmac", &self.allow_symmetric_hmac)
+            .field("refresh_secret", &self.refresh_secret)
             .finish()
     }
 }
@@ -304,7 +360,7 @@ mod tests {
     fn jwt_key_material_debug_redacts_secret_values() {
         let symmetric = format!(
             "{:?}",
-            JwtKeyMaterial::Hs256Internal {
+            JwtKeyMaterial::Hmac {
                 secret: SecretString::new("super-secret-value"),
             }
         );
@@ -328,39 +384,67 @@ mod tests {
     }
 
     #[test]
-    fn jwt_algorithm_policy_identifies_symmetric_internal_mode() {
-        assert!(JwtAlgorithm::Hs256Internal.is_symmetric());
+    fn jwt_algorithm_policy_identifies_symmetric_hmac_mode() {
+        assert!(JwtAlgorithm::Hs256.is_symmetric());
         assert!(!JwtAlgorithm::Rs256.is_symmetric());
         assert!(!JwtAlgorithm::Es256.is_symmetric());
         assert!(!JwtAlgorithm::EdDsa.is_symmetric());
     }
 
     #[test]
+    fn jwt_algorithm_serde_uses_jwa_spellings() {
+        for (algorithm, wire) in [
+            (JwtAlgorithm::Hs256, "\"HS256\""),
+            (JwtAlgorithm::Rs256, "\"RS256\""),
+            (JwtAlgorithm::Es256, "\"ES256\""),
+            (JwtAlgorithm::EdDsa, "\"EdDSA\""),
+        ] {
+            assert_eq!(serde_json::to_string(&algorithm).unwrap(), wire);
+            assert_eq!(
+                serde_json::from_str::<JwtAlgorithm>(wire).unwrap(),
+                algorithm
+            );
+        }
+    }
+
+    #[test]
+    fn jwt_algorithm_rejects_none_and_legacy_internal_spellings() {
+        for wire in ["\"none\"", "\"HS256_INTERNAL\"", "\"EDDSA\"", "\"HS512\""] {
+            assert!(serde_json::from_str::<JwtAlgorithm>(wire).is_err());
+        }
+    }
+
+    #[test]
     fn jwt_config_builders_preserve_ttl_and_leeway_overrides() {
-        let config = JwtConfig::hs256_internal(
+        let config = JwtConfig::hmac(
             "secret-material-that-is-long-enough",
             "https://issuer.example",
             vec!["audience".into()],
         )
         .with_ttl(Duration::from_mins(5))
+        .with_refresh_ttl(Duration::from_hours(48))
         .with_leeway(Duration::from_secs(10));
 
         assert_eq!(config.ttl, Duration::from_mins(5));
+        assert_eq!(config.refresh_ttl, Duration::from_hours(48));
         assert_eq!(config.leeway, Duration::from_secs(10));
+        assert!(config.allow_symmetric_hmac);
     }
 
     #[test]
     fn jwt_config_debug_redacts_nested_key_material() {
-        let config = JwtConfig::hs256_internal(
+        let config = JwtConfig::hmac(
             "another-secret-value",
             "issuer.example",
             vec!["audience".into()],
-        );
+        )
+        .with_refresh_secret("refresh-secret-value-that-is-long");
 
         let formatted = format!("{config:?}");
 
         assert!(formatted.contains("***"));
         assert!(!formatted.contains("another-secret-value"));
+        assert!(!formatted.contains("refresh-secret-value-that-is-long"));
         assert!(formatted.contains("issuer.example"));
     }
 
@@ -368,6 +452,7 @@ mod tests {
     fn convenience_constructors_delegate_to_asymmetric() {
         let rs = JwtConfig::rs256("priv", "pub", "iss", vec!["aud".into()]);
         assert_eq!(rs.algorithm(), JwtAlgorithm::Rs256);
+        assert!(!rs.allow_symmetric_hmac);
 
         let es = JwtConfig::es256("priv", "pub", "iss", vec!["aud".into()]);
         assert_eq!(es.algorithm(), JwtAlgorithm::Es256);
@@ -382,16 +467,34 @@ mod tests {
         let alg: AsymmetricAlgorithm = serde_json::from_str(json).unwrap();
         assert_eq!(alg, AsymmetricAlgorithm::Rs256);
 
-        let json = r#""EDDSA""#;
+        let json = r#""EdDSA""#;
         let alg: AsymmetricAlgorithm = serde_json::from_str(json).unwrap();
         assert_eq!(alg, AsymmetricAlgorithm::EdDsa);
     }
 
     #[test]
+    fn config_deserializes_shared_keys() {
+        let shared = r#"{
+            "key_material": {"Hmac": {"secret": "my-secret"}},
+            "issuer": "iss",
+            "audience": ["aud"],
+            "access_token_ttl": {"secs": 900, "nanos": 0},
+            "refresh_token_ttl": {"secs": 604800, "nanos": 0},
+            "clock_skew": {"secs": 15, "nanos": 0},
+            "allow_symmetric_hmac": true
+        }"#;
+        let cfg: JwtConfig = serde_json::from_str(shared).unwrap();
+        assert_eq!(cfg.ttl, Duration::from_mins(15));
+        assert_eq!(cfg.refresh_ttl, Duration::from_hours(168));
+        assert_eq!(cfg.leeway, Duration::from_secs(15));
+        assert!(cfg.allow_symmetric_hmac);
+    }
+
+    #[test]
     fn key_material_serde_symmetric() {
-        let json = r#"{"Hs256Internal": {"secret": "my-secret"}}"#;
+        let json = r#"{"Hmac": {"secret": "my-secret"}}"#;
         let mat: JwtKeyMaterial = serde_json::from_str(json).unwrap();
-        assert_eq!(mat.algorithm(), JwtAlgorithm::Hs256Internal);
+        assert_eq!(mat.algorithm(), JwtAlgorithm::Hs256);
     }
 
     #[test]

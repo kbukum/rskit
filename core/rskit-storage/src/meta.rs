@@ -178,6 +178,31 @@ mod tests {
     use crate::TempFile;
 
     #[test]
+    fn file_meta_serde_pins_checksum_and_wire_field_names() {
+        let meta = FileMeta {
+            name: Some("clip.mp4".to_string()),
+            extension: Some("mp4".to_string()),
+            mime_type: "video/mp4".to_string(),
+            size: Some(2048),
+            created_at: None,
+            modified_at: None,
+            checksum: Some("abc123".to_string()),
+        };
+
+        let value = serde_json::to_value(&meta).unwrap();
+
+        assert_eq!(value["name"], "clip.mp4");
+        assert_eq!(value["extension"], "mp4");
+        assert_eq!(value["mime_type"], "video/mp4");
+        assert_eq!(value["size"], 2048);
+        assert_eq!(value["checksum"], "abc123");
+
+        let round_trip: FileMeta = serde_json::from_value(value).unwrap();
+        assert_eq!(round_trip.checksum.as_deref(), Some("abc123"));
+        assert_eq!(round_trip.mime_type, "video/mp4");
+    }
+
+    #[test]
     fn file_kind_classifies_common_mime_families() {
         assert_eq!(FileKind::from_mime("video/mp4"), FileKind::Video);
         assert_eq!(FileKind::from_mime("audio/mpeg"), FileKind::Audio);

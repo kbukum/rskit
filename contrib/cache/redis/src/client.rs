@@ -75,14 +75,15 @@ impl RedisClient {
 
 #[async_trait::async_trait]
 impl CacheStore for RedisClient {
-    async fn get(&self, key: &str) -> AppResult<Option<String>> {
+    async fn get(&self, key: &str) -> AppResult<Option<Vec<u8>>> {
         let key = self.prefixed_key(key);
         self.with_op_timeout("get", async move { self.conn().get(key).await })
             .await
     }
 
-    async fn set(&self, key: &str, val: &str, ttl: Option<Duration>) -> AppResult<()> {
+    async fn set(&self, key: &str, val: &[u8], ttl: Option<Duration>) -> AppResult<()> {
         let key = self.prefixed_key(key);
+        let val = val.to_vec();
         match ttl {
             Some(ttl) => {
                 if ttl.is_zero() {

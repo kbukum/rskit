@@ -1,13 +1,13 @@
-use std::{
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::{sync::Arc, time::Duration};
 
 use base64::Engine;
 use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode, decode_header, jwk::JwkSet};
 use reqwest::Url;
 use serde_json::Value;
-use tokio::sync::RwLock;
+use tokio::{
+    sync::{Mutex, RwLock},
+    time::Instant,
+};
 
 use super::types::RawOidcClaims;
 use super::{
@@ -21,6 +21,7 @@ const JWKS_REFRESH_COOLDOWN: Duration = Duration::from_secs(30);
 struct OidcCache {
     metadata: Option<OidcProviderMetadata>,
     jwks: Option<Arc<JwkSet>>,
+    jwks_fetched_at: Option<Instant>,
     last_forced_jwks_refresh: Option<Instant>,
 }
 
@@ -30,6 +31,8 @@ pub struct OidcClient<H = ReqwestOidcHttpClient> {
     config: OidcConfig,
     http_client: H,
     cache: Arc<RwLock<OidcCache>>,
+    /// Serializes JWKS fetches so an expired cache cannot stampede the provider endpoint.
+    jwks_fetch_lock: Mutex<()>,
 }
 
 impl OidcClient<ReqwestOidcHttpClient> {
@@ -56,6 +59,7 @@ where
             config,
             http_client,
             cache: Arc::new(RwLock::new(OidcCache::default())),
+            jwks_fetch_lock: Mutex::new(()),
         })
     }
 
@@ -105,9 +109,12 @@ where
     }
 
     async fn jwks(&self, force_refresh: bool) -> Result<Arc<JwkSet>, OidcError> {
-        if !force_refresh && let Some(jwks) = self.cache.read().await.jwks.clone() {
+        if !force_refresh && let Some(jwks) = self.fresh_cached_jwks().await {
             return Ok(jwks);
         }
+
+        // Single-flight: concurrent callers queue here instead of each fetching the JWKS endpoint.
+        let _fetch_guard = self.jwks_fetch_lock.lock().await;
 
         if force_refresh {
             let mut cache = self.cache.write().await;
@@ -119,25 +126,62 @@ where
                 return Ok(jwks);
             }
             cache.last_forced_jwks_refresh = Some(Instant::now());
+        } else if let Some(jwks) = self.fresh_cached_jwks().await {
+            // Another caller refreshed the cache while this one waited for the fetch lock.
+            return Ok(jwks);
         }
 
         let metadata = self.discover().await?;
-        let json = self.http_client.get_json(&metadata.jwks_uri, None).await?;
+        match self.fetch_and_store_jwks(&metadata.jwks_uri).await {
+            Ok(jwks) => Ok(jwks),
+            // A transient refresh failure must not fail every validation: serve the last-known-good
+            // JWKS while it remains within the configured staleness bound.
+            Err(error) => self.stale_cached_jwks().await.ok_or(error),
+        }
+    }
+
+    /// Fetch the JWKS document and replace the cached copy.
+    async fn fetch_and_store_jwks(&self, jwks_uri: &str) -> Result<Arc<JwkSet>, OidcError> {
+        let json = self.http_client.get_json(jwks_uri, None).await?;
         let jwks = serde_json::from_value::<JwkSet>(json)
             .map_err(|error| OidcError::Discovery(format!("invalid JWKS document: {error}")))?;
         let jwks = Arc::new(jwks);
-        self.cache.write().await.jwks = Some(Arc::clone(&jwks));
+        {
+            let mut cache = self.cache.write().await;
+            cache.jwks = Some(Arc::clone(&jwks));
+            cache.jwks_fetched_at = Some(Instant::now());
+        }
         Ok(jwks)
+    }
+
+    /// Return the cached JWKS when it is still within [`OidcConfig::jwks_cache_duration`].
+    async fn fresh_cached_jwks(&self) -> Option<Arc<JwkSet>> {
+        let cache = self.cache.read().await;
+        let jwks = cache.jwks.clone()?;
+        cache
+            .jwks_fetched_at
+            .is_some_and(|fetched_at| fetched_at.elapsed() < self.config.jwks_cache_duration)
+            .then_some(jwks)
+    }
+
+    /// Return the cached JWKS when a refresh failed but the copy is still within
+    /// [`OidcConfig::jwks_max_staleness`].
+    async fn stale_cached_jwks(&self) -> Option<Arc<JwkSet>> {
+        let cache = self.cache.read().await;
+        let jwks = cache.jwks.clone()?;
+        cache
+            .jwks_fetched_at
+            .is_some_and(|fetched_at| fetched_at.elapsed() < self.config.jwks_max_staleness)
+            .then_some(jwks)
     }
 
     /// Build a secure authorization request using exact-match redirect URI, state, nonce, and PKCE.
     ///
+    /// Requested scopes come from [`OidcConfig::scopes`].
+    ///
     /// # Errors
     /// Returns an error when discovery fails.
-    pub async fn build_authorization_request(
-        &self,
-        scopes: &[&str],
-    ) -> Result<OidcAuthorizationRequest, OidcError> {
+    pub async fn build_authorization_request(&self) -> Result<OidcAuthorizationRequest, OidcError> {
         let metadata = self.discover().await?;
         let state = random_urlsafe(24);
         let nonce = random_urlsafe(24);
@@ -151,7 +195,7 @@ where
             query.append_pair("response_type", "code");
             query.append_pair("client_id", &self.config.client_id);
             query.append_pair("redirect_uri", &self.config.redirect_uri);
-            query.append_pair("scope", &scopes.join(" "));
+            query.append_pair("scope", &self.config.scopes.join(" "));
             query.append_pair("state", &state);
             query.append_pair("nonce", &nonce);
             if let Some(pkce) = &pkce {
@@ -198,6 +242,8 @@ where
             redirect_uri: self.config.redirect_uri.clone(),
             state: returned_state.to_string(),
             code_verifier: verifier,
+            client_id: self.config.client_id.clone(),
+            client_secret: self.config.client_secret.clone(),
         })
     }
 
@@ -361,6 +407,7 @@ mod tests {
     use jsonwebtoken::{EncodingKey, Header, encode};
 
     use super::*;
+    use rskit_util::SecretString;
 
     const ISSUER: &str = "https://issuer.example";
     const CLIENT_ID: &str = "client-123";
@@ -401,6 +448,8 @@ mod tests {
             if let Some(counter) = self.request_counts.get(url) {
                 counter.fetch_add(1, Ordering::Relaxed);
             }
+            // Yield so concurrent callers interleave the way a real network fetch would.
+            tokio::task::yield_now().await;
             self.responses.get(url).cloned().ok_or_else(|| {
                 OidcError::ProviderUnreachable(format!("no response configured for {url}"))
             })
@@ -408,6 +457,15 @@ mod tests {
     }
 
     fn mock_client() -> OidcClient<MockHttpClient> {
+        mock_client_with_config(OidcConfig::new(
+            ISSUER,
+            CLIENT_ID,
+            REDIRECT_URI,
+            OidcClientType::Public,
+        ))
+    }
+
+    fn mock_client_with_config(config: OidcConfig) -> OidcClient<MockHttpClient> {
         let responses = HashMap::from([
             (
                 format!("{ISSUER}/.well-known/openid-configuration"),
@@ -438,7 +496,7 @@ mod tests {
         ]);
 
         OidcClient::with_http_client(
-            OidcConfig::new(ISSUER, CLIENT_ID, REDIRECT_URI, OidcClientType::Public),
+            config,
             MockHttpClient {
                 responses: Arc::new(responses),
                 request_counts: Arc::new(HashMap::from([
@@ -524,15 +582,55 @@ mod tests {
     #[tokio::test]
     async fn authorization_request_includes_pkce_state_and_nonce() {
         let client = mock_client();
-        let request = client
-            .build_authorization_request(&["openid", "profile", "email"])
-            .await
-            .unwrap();
+        let request = client.build_authorization_request().await.unwrap();
 
         assert!(request.url.contains("response_type=code"));
         assert!(request.url.contains("code_challenge="));
+        assert!(request.url.contains("scope=openid"));
         assert!(!request.state.is_empty());
         assert!(!request.nonce.is_empty());
+    }
+
+    #[tokio::test]
+    async fn token_exchange_carries_configured_client_secret() {
+        let config = OidcConfig::new(
+            ISSUER,
+            CLIENT_ID,
+            REDIRECT_URI,
+            OidcClientType::Confidential,
+        )
+        .with_client_secret("top-secret");
+        let client = OidcClient::with_http_client(
+            config,
+            MockHttpClient {
+                responses: Arc::new(HashMap::from([(
+                    format!("{ISSUER}/.well-known/openid-configuration"),
+                    serde_json::json!({
+                        "issuer": ISSUER,
+                        "authorization_endpoint": format!("{ISSUER}/authorize"),
+                        "token_endpoint": format!("{ISSUER}/token"),
+                        "jwks_uri": format!("{ISSUER}/jwks"),
+                        "response_types_supported": ["code"],
+                        "code_challenge_methods_supported": ["S256"],
+                        "id_token_signing_alg_values_supported": ["RS256"]
+                    }),
+                )])),
+                request_counts: Arc::new(HashMap::new()),
+            },
+        )
+        .unwrap();
+
+        let pending = client.build_authorization_request().await.unwrap();
+        let exchange = client
+            .build_token_exchange_request(&pending, "code-123", &pending.state, None)
+            .await
+            .unwrap();
+
+        assert_eq!(exchange.client_id, CLIENT_ID);
+        assert_eq!(
+            exchange.client_secret.as_ref().map(SecretString::expose),
+            Some("top-secret")
+        );
     }
 
     #[tokio::test]
@@ -589,10 +687,7 @@ mod tests {
     #[tokio::test]
     async fn state_mismatch_is_rejected() {
         let client = mock_client();
-        let request = client
-            .build_authorization_request(&["openid"])
-            .await
-            .unwrap();
+        let request = client.build_authorization_request().await.unwrap();
         let result = client
             .build_token_exchange_request(&request, "code-123", "wrong-state", None)
             .await;
@@ -617,10 +712,7 @@ mod tests {
     #[tokio::test]
     async fn token_exchange_uses_pending_pkce_when_state_matches() {
         let client = mock_client();
-        let pending = client
-            .build_authorization_request(&["openid"])
-            .await
-            .unwrap();
+        let pending = client.build_authorization_request().await.unwrap();
         let verifier = pending.pkce.as_ref().unwrap().verifier.clone();
 
         let exchange = client
@@ -817,5 +909,168 @@ mod tests {
             OidcError::InvalidToken("no matching JWK found for token header".into())
         );
         assert_eq!(counter.load(Ordering::Relaxed), 2);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn jwks_cache_serves_within_ttl_and_refetches_after_expiry() {
+        let ttl = Duration::from_mins(5);
+        let client = mock_client_with_config(
+            OidcConfig::new(ISSUER, CLIENT_ID, REDIRECT_URI, OidcClientType::Public)
+                .with_jwks_cache_duration(ttl),
+        );
+        let jwks_url = format!("{ISSUER}/jwks");
+        let counter = client
+            .http_client
+            .request_counts
+            .get(&jwks_url)
+            .expect("jwks counter must exist");
+
+        client.jwks(false).await.unwrap();
+        assert_eq!(counter.load(Ordering::Relaxed), 1);
+
+        // Still inside the TTL: the cached key set is reused.
+        tokio::time::advance(Duration::from_mins(4)).await;
+        client.jwks(false).await.unwrap();
+        assert_eq!(counter.load(Ordering::Relaxed), 1);
+
+        // Past the TTL: the key set is refetched exactly once.
+        tokio::time::advance(Duration::from_mins(2)).await;
+        client.jwks(false).await.unwrap();
+        assert_eq!(counter.load(Ordering::Relaxed), 2);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn expired_jwks_cache_refetches_once_under_concurrency() {
+        let ttl = Duration::from_mins(5);
+        let client = Arc::new(mock_client_with_config(
+            OidcConfig::new(ISSUER, CLIENT_ID, REDIRECT_URI, OidcClientType::Public)
+                .with_jwks_cache_duration(ttl),
+        ));
+        let jwks_url = format!("{ISSUER}/jwks");
+
+        client.jwks(false).await.unwrap();
+        tokio::time::advance(Duration::from_mins(6)).await;
+
+        let mut handles = Vec::new();
+        for _ in 0..8 {
+            let client = Arc::clone(&client);
+            handles.push(tokio::spawn(async move { client.jwks(false).await }));
+        }
+        for handle in handles {
+            handle.await.unwrap().unwrap();
+        }
+
+        let counter = client
+            .http_client
+            .request_counts
+            .get(&jwks_url)
+            .expect("jwks counter must exist");
+        assert_eq!(counter.load(Ordering::Relaxed), 2);
+    }
+
+    #[derive(Debug, Clone)]
+    struct TogglingHttpClient {
+        discovery: Value,
+        jwks: Value,
+        fail_jwks: Arc<std::sync::atomic::AtomicBool>,
+    }
+
+    #[async_trait]
+    impl OidcHttpClient for TogglingHttpClient {
+        async fn get_json(
+            &self,
+            url: &str,
+            _bearer_token: Option<&str>,
+        ) -> Result<Value, OidcError> {
+            if url.ends_with("openid-configuration") {
+                return Ok(self.discovery.clone());
+            }
+            if url.ends_with("/jwks") {
+                if self.fail_jwks.load(Ordering::Relaxed) {
+                    return Err(OidcError::ProviderUnreachable("jwks endpoint down".into()));
+                }
+                return Ok(self.jwks.clone());
+            }
+            Err(OidcError::ProviderUnreachable(format!(
+                "no response configured for {url}"
+            )))
+        }
+    }
+
+    fn toggling_client(
+        config: OidcConfig,
+    ) -> (
+        OidcClient<TogglingHttpClient>,
+        Arc<std::sync::atomic::AtomicBool>,
+    ) {
+        let fail_jwks = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let http_client = TogglingHttpClient {
+            discovery: serde_json::json!({
+                "issuer": ISSUER,
+                "authorization_endpoint": format!("{ISSUER}/authorize"),
+                "token_endpoint": format!("{ISSUER}/token"),
+                "jwks_uri": format!("{ISSUER}/jwks"),
+                "userinfo_endpoint": format!("{ISSUER}/userinfo"),
+                "response_types_supported": ["code"],
+                "code_challenge_methods_supported": ["S256"],
+                "id_token_signing_alg_values_supported": ["RS256"]
+            }),
+            jwks: serde_json::from_str(JWKS_JSON).unwrap(),
+            fail_jwks: Arc::clone(&fail_jwks),
+        };
+        let client = OidcClient::with_http_client(config, http_client).unwrap();
+        (client, fail_jwks)
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn jwks_refresh_failure_falls_back_to_last_known_good_within_bound() {
+        // TTL of zero forces every validation to refresh; a generous staleness bound keeps the
+        // last-known-good key set usable while the provider is unreachable.
+        let (client, fail_jwks) = toggling_client(
+            OidcConfig::new(ISSUER, CLIENT_ID, REDIRECT_URI, OidcClientType::Public)
+                .with_jwks_cache_duration(Duration::ZERO)
+                .with_jwks_max_staleness(Duration::from_hours(1)),
+        );
+        let nonce = random_nonce();
+        let token = issue_token(&nonce);
+
+        // Prime the cache with a successful fetch.
+        client
+            .validate_id_token(&token, Some(&nonce))
+            .await
+            .unwrap();
+
+        // Provider goes down: validation still succeeds using the cached JWKS.
+        fail_jwks.store(true, Ordering::Relaxed);
+        let claims = client
+            .validate_id_token(&token, Some(&nonce))
+            .await
+            .expect("stale JWKS within bound must keep validation working");
+        assert_eq!(claims.sub, "user-123");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn jwks_refresh_failure_errors_once_staleness_exceeds_bound() {
+        let (client, fail_jwks) = toggling_client(
+            OidcConfig::new(ISSUER, CLIENT_ID, REDIRECT_URI, OidcClientType::Public)
+                .with_jwks_cache_duration(Duration::from_mins(5))
+                .with_jwks_max_staleness(Duration::from_mins(10)),
+        );
+        let nonce = random_nonce();
+        let token = issue_token(&nonce);
+
+        client
+            .validate_id_token(&token, Some(&nonce))
+            .await
+            .unwrap();
+
+        // Age the cache past both the TTL and the staleness bound, then fail the refresh.
+        fail_jwks.store(true, Ordering::Relaxed);
+        tokio::time::advance(Duration::from_mins(11)).await;
+        let result = client.validate_id_token(&token, Some(&nonce)).await;
+        assert!(
+            matches!(result, Err(OidcError::ProviderUnreachable(_))),
+            "stale JWKS beyond bound must fail rather than trust untrustworthy keys"
+        );
     }
 }

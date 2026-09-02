@@ -93,7 +93,7 @@ async fn jwt_no_dots_rejected() {
 #[tokio::test]
 async fn jwt_issuer_validation() {
     let svc_gen = JwtService::<StandardClaims>::new(standard_config("shared")).unwrap();
-    let svc_val = JwtService::<StandardClaims>::new(JwtConfig::hs256_internal(
+    let svc_val = JwtService::<StandardClaims>::new(JwtConfig::hmac(
         "shared--padded-to-32-bytes------",
         "https://other-issuer.test",
         vec![AUDIENCE.into()],
@@ -107,7 +107,7 @@ async fn jwt_issuer_validation() {
 #[tokio::test]
 async fn jwt_audience_validation() {
     let svc_gen = JwtService::<StandardClaims>::new(standard_config("shared")).unwrap();
-    let svc_val = JwtService::<StandardClaims>::new(JwtConfig::hs256_internal(
+    let svc_val = JwtService::<StandardClaims>::new(JwtConfig::hmac(
         "shared--padded-to-32-bytes------",
         ISSUER,
         vec!["other-audience".into()],
@@ -183,18 +183,13 @@ async fn jwt_requires_iat_and_nbf_claims() {
 #[tokio::test]
 async fn jwt_requires_security_critical_registered_claims() {
     let secret = "required-claims-secret-32-bytes!!";
-    let svc = JwtService::<serde_json::Value>::new(JwtConfig::hs256_internal(
+    let svc = JwtService::<serde_json::Value>::new(JwtConfig::hmac(
         secret,
         ISSUER,
         vec![AUDIENCE.into()],
     ))
     .unwrap();
-    let codec = JwtCodec::new(JwtConfig::hs256_internal(
-        secret,
-        ISSUER,
-        vec![AUDIENCE.into()],
-    ))
-    .unwrap();
+    let codec = JwtCodec::new(JwtConfig::hmac(secret, ISSUER, vec![AUDIENCE.into()])).unwrap();
     let now = now_epoch();
     let base = serde_json::json!({
         "sub": "user-1",

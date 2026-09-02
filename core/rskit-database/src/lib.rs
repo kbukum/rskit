@@ -29,7 +29,8 @@ pub use database::{
     DatabaseClient, DatabaseQuery, DatabaseResult, DatabaseTransaction, InMemoryDatabase,
 };
 pub use query::{
-    PaginatedResult, Pagination, QueryConfig, QueryParams, SortOrder, parse_query_string,
+    FilterCondition, FilterOperator, PaginatedResult, Pagination, QueryConfig, QueryParams,
+    SortOrder, parse_query_string,
 };
 pub use registry::{DatabaseFactory, DatabaseRegistry, register_memory};
 pub use repository::{FindOpts, Repository};

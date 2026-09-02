@@ -1,6 +1,7 @@
 use std::fmt;
 
 use base64::Engine;
+use rskit_util::SecretString;
 use serde::Deserialize;
 use sha2::Digest;
 
@@ -66,6 +67,13 @@ pub struct OidcTokenExchangeRequest {
     pub state: String,
     /// Optional PKCE verifier. Required for public clients.
     pub code_verifier: Option<String>,
+    /// Client ID used to authenticate the token exchange.
+    pub client_id: String,
+    /// Client secret for confidential clients, if configured.
+    ///
+    /// Send it in the token request body — never in a query string, where it would be recorded in
+    /// proxy and server access logs.
+    pub client_secret: Option<SecretString>,
 }
 
 impl fmt::Debug for OidcTokenExchangeRequest {
@@ -80,6 +88,8 @@ impl fmt::Debug for OidcTokenExchangeRequest {
                 "code_verifier",
                 &self.code_verifier.as_ref().map(|_| "<redacted>"),
             )
+            .field("client_id", &self.client_id)
+            .field("client_secret", &self.client_secret)
             .finish()
     }
 }
@@ -193,7 +203,7 @@ impl Audiences {
 
 #[cfg(test)]
 mod tests {
-    use super::{OidcAuthorizationRequest, OidcTokenExchangeRequest, PkcePair};
+    use super::{OidcAuthorizationRequest, OidcTokenExchangeRequest, PkcePair, SecretString};
 
     #[test]
     fn oidc_debug_masks_callback_secrets() {
@@ -214,6 +224,8 @@ mod tests {
             redirect_uri: "https://app/callback".into(),
             state: "state-secret".into(),
             code_verifier: Some(pkce.verifier.clone()),
+            client_id: "client-id".into(),
+            client_secret: Some(SecretString::new("client-secret-value")),
         };
 
         let formatted = format!("{authorization:?} {exchange:?} {pkce:?}");
@@ -224,6 +236,7 @@ mod tests {
             "verifier-secret",
             "challenge-secret",
             "code-secret",
+            "client-secret-value",
         ] {
             assert!(!formatted.contains(secret), "{formatted}");
         }

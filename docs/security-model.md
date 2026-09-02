@@ -17,11 +17,12 @@ This document covers the current Rust-side security posture for `rskit-auth`, `r
 
 - Default signing algorithm: `RS256`
 - Preferred algorithms: `RS256`, `ES256`, `EdDSA`
-- `HS256` is supported only through `JwtConfig::hs256_internal(...)` for explicit internal use
+- `HS256` is supported only through `JwtConfig::hmac(...)`, which explicitly opts into symmetric signing for internal use
 - Verification is config-driven, never token-header-driven
 - Required claims: `sub`, `iss`, `aud`, `exp`, `nbf`, `iat`
 - Clock skew defaults to 30 seconds and is capped at 60 seconds
 - `alg: none` and algorithm-confusion attempts are rejected
+- Access and refresh tokens are explicitly typed in the JWT header (`JWT` and `refresh+jwt`), so neither can be replayed as the other even when they share key material
 
 ### OIDC
 

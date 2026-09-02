@@ -8,8 +8,6 @@
 //! - [`PaginatedResult`] — generic wrapper pairing data with pagination.
 //! - [`parse_query_string`] — parses a URL query string into [`QueryParams`].
 
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
 
 use crate::{FindOpts, tenant::validate_identifier_path};
@@ -87,6 +85,106 @@ impl std::fmt::Display for SortOrder {
 }
 
 // ---------------------------------------------------------------------------
+// Filter operators
+// ---------------------------------------------------------------------------
+
+/// PostgREST/Supabase-style filter operator vocabulary shared across kits.
+///
+/// Encoded in a query string as a `field=op.value` prefix (for example
+/// `age=gte.18` or `tag=in.a,b,c`). A bare `field=value` pair is treated as
+/// [`FilterOperator::Eq`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+#[non_exhaustive]
+pub enum FilterOperator {
+    /// Equality (`=`); the default when no operator prefix is present.
+    Eq,
+    /// Inequality (`<>`).
+    Neq,
+    /// Greater than (`>`).
+    Gt,
+    /// Greater than or equal (`>=`).
+    Gte,
+    /// Less than (`<`).
+    Lt,
+    /// Less than or equal (`<=`).
+    Lte,
+    /// Membership in a comma-separated list (`IN`).
+    In,
+    /// Case-sensitive pattern match (`LIKE`).
+    Like,
+    /// Case-insensitive pattern match (`ILIKE`).
+    Ilike,
+    /// Null check (`IS NULL` / `IS NOT NULL` depending on value).
+    Null,
+}
+
+impl FilterOperator {
+    /// Wire token for this operator (for example `"gte"`).
+    #[must_use]
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Eq => "eq",
+            Self::Neq => "neq",
+            Self::Gt => "gt",
+            Self::Gte => "gte",
+            Self::Lt => "lt",
+            Self::Lte => "lte",
+            Self::In => "in",
+            Self::Like => "like",
+            Self::Ilike => "ilike",
+            Self::Null => "null",
+        }
+    }
+
+    /// Parse a wire token into an operator, returning `None` for unknown tokens.
+    #[must_use]
+    pub fn parse(token: &str) -> Option<Self> {
+        match token {
+            "eq" => Some(Self::Eq),
+            "neq" => Some(Self::Neq),
+            "gt" => Some(Self::Gt),
+            "gte" => Some(Self::Gte),
+            "lt" => Some(Self::Lt),
+            "lte" => Some(Self::Lte),
+            "in" => Some(Self::In),
+            "like" => Some(Self::Like),
+            "ilike" => Some(Self::Ilike),
+            "null" => Some(Self::Null),
+            _ => None,
+        }
+    }
+}
+
+/// A single parsed filter condition: a column, an operator, and a value.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct FilterCondition {
+    /// Column the filter applies to.
+    pub field: String,
+    /// Operator to apply.
+    pub operator: FilterOperator,
+    /// Right-hand value (comma-separated for [`FilterOperator::In`]).
+    pub value: String,
+}
+
+impl FilterCondition {
+    /// Build a filter condition from a column, operator, and right-hand value.
+    #[must_use]
+    pub fn new(
+        field: impl Into<String>,
+        operator: FilterOperator,
+        value: impl Into<String>,
+    ) -> Self {
+        Self {
+            field: field.into(),
+            operator,
+            value: value.into(),
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Parsed query parameters
 // ---------------------------------------------------------------------------
 
@@ -101,8 +199,8 @@ pub struct QueryParams {
     pub sort_by: Option<String>,
     /// Sort direction.
     pub sort_order: SortOrder,
-    /// Column-value filter pairs.
-    pub filters: HashMap<String, String>,
+    /// Parsed filter conditions (operator-aware).
+    pub filters: Vec<FilterCondition>,
 }
 
 impl QueryParams {
@@ -116,6 +214,17 @@ impl QueryParams {
         (self.page - 1) * self.page_size
     }
 
+    /// Iterate equality conditions as `(field, value)` pairs.
+    ///
+    /// The [`FindOpts`] repository abstraction expresses equality only, so
+    /// richer operators are surfaced through [`QueryParams::filters`] instead.
+    pub fn eq_filters(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.filters
+            .iter()
+            .filter(|condition| condition.operator == FilterOperator::Eq)
+            .map(|condition| (condition.field.as_str(), condition.value.as_str()))
+    }
+
     /// Convert to [`FindOpts`] for use with the repository layer.
     pub fn to_find_opts(&self) -> FindOpts {
         let mut opts = FindOpts::default()
@@ -126,8 +235,8 @@ impl QueryParams {
             opts = opts.order_by(&format!("{col} {}", self.sort_order));
         }
 
-        for (col, val) in &self.filters {
-            opts = opts.filter(col, val.clone());
+        for (col, val) in self.eq_filters() {
+            opts = opts.filter(col, val.to_owned());
         }
 
         opts
@@ -211,21 +320,17 @@ pub fn parse_query_string(query: &str, config: &QueryConfig) -> QueryParams {
     let config = config.sanitized();
     let pairs = parse_pairs(query);
 
-    let page = pairs
-        .get("page")
+    let page = scalar_param(&pairs, &["page"])
         .and_then(|v| v.parse::<i64>().ok())
         .unwrap_or(1)
         .max(1);
 
-    let raw_page_size = pairs
-        .get("page_size")
-        .or_else(|| pairs.get("pageSize"))
-        .or_else(|| pairs.get("per_page"))
+    let raw_page_size = scalar_param(&pairs, &["page_size", "pageSize", "per_page"])
         .and_then(|v| v.parse::<i64>().ok())
         .unwrap_or(config.default_page_size);
     let page_size = raw_page_size.clamp(1, config.max_page_size);
 
-    let sort_by = pairs.get("sort").and_then(|v| {
+    let sort_by = scalar_param(&pairs, &["sort"]).and_then(|v| {
         let v = v.trim();
         if v.is_empty() {
             return None;
@@ -237,18 +342,23 @@ pub fn parse_query_string(query: &str, config: &QueryConfig) -> QueryParams {
         }
     });
 
-    let sort_order = pairs
-        .get("order")
+    let sort_order = scalar_param(&pairs, &["order"])
         .map(|v| match v.to_ascii_lowercase().as_str() {
             "desc" => SortOrder::Desc,
             _ => SortOrder::Asc,
         })
         .unwrap_or_default();
 
-    let filters: HashMap<String, String> = pairs
-        .into_iter()
+    // Filters preserve every duplicate pair so range queries such as
+    // `age=gte.18&age=lt.65` retain both conditions rather than collapsing to one.
+    let filters: Vec<FilterCondition> = pairs
+        .iter()
         .filter(|(k, _)| !RESERVED_PARAMS.contains(&k.as_str()))
         .filter(|(k, _)| is_allowed_identifier(k, &config.allowed_filters))
+        .map(|(field, raw)| {
+            let (operator, value) = parse_filter_value(raw);
+            FilterCondition::new(field.clone(), operator, value)
+        })
         .collect();
 
     QueryParams {
@@ -260,13 +370,29 @@ pub fn parse_query_string(query: &str, config: &QueryConfig) -> QueryParams {
     }
 }
 
+/// Split a filter value into an operator and value.
+///
+/// Values prefixed with a known operator token (`op.value`) adopt that
+/// operator; every other value defaults to [`FilterOperator::Eq`].
+fn parse_filter_value(raw: &str) -> (FilterOperator, String) {
+    if let Some((token, rest)) = raw.split_once('.')
+        && let Some(operator) = FilterOperator::parse(token)
+    {
+        return (operator, rest.to_owned());
+    }
+    (FilterOperator::Eq, raw.to_owned())
+}
+
 fn is_allowed_identifier(value: &str, allow_list: &[String]) -> bool {
     validate_identifier_path(value).is_ok()
         && (allow_list.is_empty() || allow_list.iter().any(|allowed| allowed == value))
 }
 
 /// Minimal query-string parser: splits on `&`, then on `=`.
-fn parse_pairs(query: &str) -> HashMap<String, String> {
+///
+/// Returns pairs in encounter order and preserves duplicate keys so repeated
+/// filter fields (for example `age=gte.18&age=lt.65`) are not collapsed.
+fn parse_pairs(query: &str) -> Vec<(String, String)> {
     query
         .split('&')
         .filter(|s| !s.is_empty())
@@ -283,9 +409,23 @@ fn parse_pairs(query: &str) -> HashMap<String, String> {
         .collect()
 }
 
+/// Return the first value whose key matches one of `names`, in query order.
+///
+/// Reserved scalar parameters take their first occurrence; later duplicates are ignored.
+fn scalar_param<'a>(pairs: &'a [(String, String)], names: &[&str]) -> Option<&'a String> {
+    pairs
+        .iter()
+        .find(|(k, _)| names.contains(&k.as_str()))
+        .map(|(_, v)| v)
+}
+
 #[cfg(test)]
 mod coverage_tests {
     use super::*;
+
+    fn condition<'a>(params: &'a QueryParams, field: &str) -> Option<&'a FilterCondition> {
+        params.filters.iter().find(|c| c.field == field)
+    }
 
     #[test]
     fn query_params_ignore_blank_sort_and_blank_pair_keys() {
@@ -297,10 +437,10 @@ mod coverage_tests {
         assert_eq!(params.sort_by, None);
         assert_eq!(params.sort_order, SortOrder::Desc);
         assert_eq!(
-            params.filters.get("status").map(String::as_str),
+            condition(&params, "status").map(|c| c.value.as_str()),
             Some("open")
         );
-        assert!(!params.filters.contains_key(""));
+        assert!(condition(&params, "").is_none());
     }
 }
 
@@ -314,6 +454,10 @@ mod tests {
 
     fn default_config() -> QueryConfig {
         QueryConfig::default()
+    }
+
+    fn condition<'a>(params: &'a QueryParams, field: &str) -> Option<&'a FilterCondition> {
+        params.filters.iter().find(|c| c.field == field)
     }
 
     // -- basic parsing -------------------------------------------------------
@@ -444,8 +588,90 @@ mod tests {
     #[test]
     fn parse_filters() {
         let params = parse_query_string("status=active&type=premium", &default_config());
-        assert_eq!(params.filters.get("status").unwrap(), "active");
-        assert_eq!(params.filters.get("type").unwrap(), "premium");
+        assert_eq!(
+            condition(&params, "status").map(|c| c.value.as_str()),
+            Some("active")
+        );
+        assert_eq!(
+            condition(&params, "type").map(|c| c.value.as_str()),
+            Some("premium")
+        );
+        assert_eq!(
+            condition(&params, "status").map(|c| c.operator),
+            Some(FilterOperator::Eq)
+        );
+    }
+
+    #[test]
+    fn parse_preserves_repeated_filter_fields_for_range_queries() {
+        // A bounded-range query repeats the same field with different operators; both
+        // conditions must survive parsing rather than collapsing to a single entry.
+        let params = parse_query_string("age=gte.18&age=lt.65", &default_config());
+
+        let age: Vec<_> = params
+            .filters
+            .iter()
+            .filter(|c| c.field == "age")
+            .map(|c| (c.operator, c.value.clone()))
+            .collect();
+        assert_eq!(
+            age,
+            vec![
+                (FilterOperator::Gte, "18".to_owned()),
+                (FilterOperator::Lt, "65".to_owned()),
+            ]
+        );
+    }
+
+    #[test]
+    fn parse_filter_operators_cover_full_vocabulary() {
+        let query =
+            "a=eq.1&b=neq.2&c=gt.3&d=gte.4&e=lt.5&f=lte.6&g=in.7,8&h=like.x&i=ilike.y&j=null.true";
+        let params = parse_query_string(query, &default_config());
+
+        let expect = |field: &str| condition(&params, field).map(|c| (c.operator, c.value.clone()));
+        assert_eq!(expect("a"), Some((FilterOperator::Eq, "1".to_owned())));
+        assert_eq!(expect("b"), Some((FilterOperator::Neq, "2".to_owned())));
+        assert_eq!(expect("c"), Some((FilterOperator::Gt, "3".to_owned())));
+        assert_eq!(expect("d"), Some((FilterOperator::Gte, "4".to_owned())));
+        assert_eq!(expect("e"), Some((FilterOperator::Lt, "5".to_owned())));
+        assert_eq!(expect("f"), Some((FilterOperator::Lte, "6".to_owned())));
+        assert_eq!(expect("g"), Some((FilterOperator::In, "7,8".to_owned())));
+        assert_eq!(expect("h"), Some((FilterOperator::Like, "x".to_owned())));
+        assert_eq!(expect("i"), Some((FilterOperator::Ilike, "y".to_owned())));
+        assert_eq!(expect("j"), Some((FilterOperator::Null, "true".to_owned())));
+    }
+
+    #[test]
+    fn bare_value_defaults_to_eq_and_unknown_prefix_is_literal() {
+        let params = parse_query_string("host=example.com&plain=active", &default_config());
+        assert_eq!(
+            condition(&params, "host").map(|c| (c.operator, c.value.clone())),
+            Some((FilterOperator::Eq, "example.com".to_owned()))
+        );
+        assert_eq!(
+            condition(&params, "plain").map(|c| (c.operator, c.value.clone())),
+            Some((FilterOperator::Eq, "active".to_owned()))
+        );
+    }
+
+    #[test]
+    fn filter_operator_token_round_trips() {
+        for op in [
+            FilterOperator::Eq,
+            FilterOperator::Neq,
+            FilterOperator::Gt,
+            FilterOperator::Gte,
+            FilterOperator::Lt,
+            FilterOperator::Lte,
+            FilterOperator::In,
+            FilterOperator::Like,
+            FilterOperator::Ilike,
+            FilterOperator::Null,
+        ] {
+            assert_eq!(FilterOperator::parse(op.as_str()), Some(op));
+        }
+        assert_eq!(FilterOperator::parse("nope"), None);
     }
 
     #[test]
@@ -455,16 +681,19 @@ mod tests {
             ..default_config()
         };
         let params = parse_query_string("status=active&type=premium", &config);
-        assert_eq!(params.filters.get("status").unwrap(), "active");
-        assert!(!params.filters.contains_key("type"));
+        assert_eq!(
+            condition(&params, "status").map(|c| c.value.as_str()),
+            Some("active")
+        );
+        assert!(condition(&params, "type").is_none());
     }
 
     #[test]
     fn unsafe_filter_identifier_rejected_without_allow_list() {
         let params = parse_query_string("status;DELETE=active&safe_filter=yes", &default_config());
-        assert!(!params.filters.contains_key("status;DELETE"));
+        assert!(condition(&params, "status;DELETE").is_none());
         assert_eq!(
-            params.filters.get("safe_filter").map(String::as_str),
+            condition(&params, "safe_filter").map(|c| c.value.as_str()),
             Some("yes")
         );
     }
@@ -475,11 +704,14 @@ mod tests {
             "page=1&page_size=10&sort=name&order=asc&status=active",
             &default_config(),
         );
-        assert!(!params.filters.contains_key("page"));
-        assert!(!params.filters.contains_key("page_size"));
-        assert!(!params.filters.contains_key("sort"));
-        assert!(!params.filters.contains_key("order"));
-        assert_eq!(params.filters.get("status").unwrap(), "active");
+        assert!(condition(&params, "page").is_none());
+        assert!(condition(&params, "page_size").is_none());
+        assert!(condition(&params, "sort").is_none());
+        assert!(condition(&params, "order").is_none());
+        assert_eq!(
+            condition(&params, "status").map(|c| c.value.as_str()),
+            Some("active")
+        );
     }
 
     // -- limit / offset helpers ----------------------------------------------

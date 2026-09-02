@@ -35,6 +35,8 @@ No broad `Any` / `Box<dyn Any>` / unchecked escape hatches in public surfaces. A
 
 Current idioms and standards, not old habits (also enforced in pass `01`). Flag patterns superseded by edition 2024 / msrv 1.97 idioms.
 
+Best practices outrank parity. When a construct is non-idiomatic for Rust and appears to exist only to mirror gokit — a stringly-typed shape, an un-Rusty enum/option ergonomic, a transliterated API — flag it as a should-fix and name the idiomatic Rust alternative. Parity binds wire/contract compatibility and intuition transfer, not internal types; internal consistency across rskit outranks cross-kit sameness.
+
 ## AI / model features (only if the change touches them)
 
 Model output and retrieved context are **untrusted**; outputs are structured/validated; tool calls are least-privilege with a **human gate on destructive actions**; prompts/models are versioned and changes gated on evals.

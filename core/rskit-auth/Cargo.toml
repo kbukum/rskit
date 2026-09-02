@@ -53,7 +53,7 @@ rskit-security = { workspace = true }
 rskit-util = { workspace = true }
 
 [dev-dependencies]
-tokio         = { workspace = true, features = ["full", "macros", "rt-multi-thread"] }
+tokio         = { workspace = true, features = ["full", "macros", "rt-multi-thread", "test-util"] }
 serde_json    = { workspace = true }
 chrono        = { workspace = true }
 parking_lot   = { workspace = true }

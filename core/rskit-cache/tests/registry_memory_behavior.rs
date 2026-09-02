@@ -22,9 +22,12 @@ async fn explicit_memory_registration_builds_store() {
     register_memory(&mut registry).unwrap();
 
     let cache = registry.build(&CacheConfig::default()).await.unwrap();
-    cache.set("hello", "world", None).await.unwrap();
+    cache.set("hello", b"world", None).await.unwrap();
 
-    assert_eq!(cache.get("hello").await.unwrap().as_deref(), Some("world"));
+    assert_eq!(
+        cache.get("hello").await.unwrap().as_deref(),
+        Some(b"world".as_slice())
+    );
 }
 
 #[tokio::test]
@@ -38,7 +41,7 @@ async fn unregistered_store_returns_error() {
 async fn memory_cache_ttl_zero_is_invalid() {
     let cache = MemoryCache::default();
     let err = cache
-        .set("boundary", "value", Some(Duration::ZERO))
+        .set("boundary", b"value", Some(Duration::ZERO))
         .await
         .unwrap_err();
 
@@ -51,7 +54,7 @@ async fn memory_cache_ttl_boundary_expires_after_duration() {
     let clock = Arc::clone(&now);
     let cache = MemoryCache::new_with_clock(None, None, move || *clock.lock());
     cache
-        .set("short", "value", Some(Duration::from_millis(1)))
+        .set("short", b"value", Some(Duration::from_millis(1)))
         .await
         .unwrap();
     *now.lock() += Duration::from_millis(5);
@@ -62,11 +65,17 @@ async fn memory_cache_ttl_boundary_expires_after_duration() {
 #[tokio::test]
 async fn memory_cache_zero_capacity_is_unbounded() {
     let cache = MemoryCache::new(None, Some(0));
-    cache.set("first", "value", None).await.unwrap();
-    cache.set("second", "value", None).await.unwrap();
+    cache.set("first", b"value", None).await.unwrap();
+    cache.set("second", b"value", None).await.unwrap();
 
-    assert_eq!(cache.get("first").await.unwrap().as_deref(), Some("value"));
-    assert_eq!(cache.get("second").await.unwrap().as_deref(), Some("value"));
+    assert_eq!(
+        cache.get("first").await.unwrap().as_deref(),
+        Some(b"value".as_slice())
+    );
+    assert_eq!(
+        cache.get("second").await.unwrap().as_deref(),
+        Some(b"value".as_slice())
+    );
 }
 
 #[tokio::test]
@@ -95,7 +104,7 @@ async fn typed_store_round_trips_json_via_cache_trait() {
 #[test]
 fn config_defaults_to_memory_store() {
     let cfg = CacheConfig::default();
-    assert_eq!(cfg.store, "memory");
+    assert_eq!(cfg.provider, "memory");
     assert!(cfg.key_prefix.is_none());
     assert!(cfg.memory.max_entries.is_none());
 }
@@ -107,7 +116,7 @@ fn deserialise_cache_config_with_memory_options() {
     )
     .unwrap();
 
-    assert_eq!(cfg.store, "memory");
+    assert_eq!(cfg.provider, "memory");
     assert_eq!(cfg.key_prefix.as_deref(), Some("app"));
     assert_eq!(cfg.memory.max_entries, Some(32));
 }

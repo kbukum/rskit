@@ -42,13 +42,13 @@ let hasher = PasswordHasher::default();
 let hash = hasher.hash("s3cret!").unwrap();
 assert!(hasher.verify("s3cret!", &hash).unwrap());
 
-let jwt = JwtService::<Claims>::new(JwtConfig::hs256_internal(
+let jwt = JwtService::<Claims>::new(JwtConfig::hmac(
     "internal-secret-key-material-0001",
     "https://issuer.example",
     vec!["service-a".into()],
 ))
 .unwrap();
-let codec = JwtCodec::new(JwtConfig::hs256_internal(
+let codec = JwtCodec::new(JwtConfig::hmac(
     "internal-secret-key-material-0001",
     "https://issuer.example",
     vec!["service-a".into()],
@@ -60,7 +60,7 @@ let codec = JwtCodec::new(JwtConfig::hs256_internal(
 ## JWT / OIDC policy
 
 - Public-key algorithms are preferred: `RS256`, `ES256`, `EdDSA`
-- `HS256` remains available only through the explicit `JwtConfig::hs256_internal(...)` constructor
+- `HS256` remains available only through the explicit `JwtConfig::hmac(...)` constructor
 - Verifiers require `sub`, `iss`, `aud`, `exp`, `nbf`, and `iat`; issuer and audience configuration must not be blank
 - OIDC enforces authorization-code flow, exact redirect URIs, state, nonce, and PKCE for public clients
 - Request middleware extracts credentials from headers only, rejects missing credentials by default, and requires explicit `accept_missing()` for optional authentication
