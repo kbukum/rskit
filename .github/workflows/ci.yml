@@ -42,6 +42,7 @@ jobs:
       pull-requests: read
     outputs:
       rust-code: ${{ steps.filter.outputs.rust-code }}
+      rust-src: ${{ steps.filter.outputs.rust-src }}
       affected: ${{ steps.domains.outputs.affected || 'all' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
@@ -69,6 +70,13 @@ jobs:
               - 'rustfmt.toml'
               - '.github/workflows/ci.yml'
               - '.github/workflows/release.yml'
+            # Actual crate sources — coverage is meaningless for workflow/infra
+            # -only changes, and PR-scoped `toven coverage --merge-base` selects
+            # zero modules for them (which the pinned binary treats as an error).
+            rust-src:
+              - '**/*.rs'
+              - '**/Cargo.toml'
+              - '**/Cargo.lock'
       - name: Detect affected domains
         id: domains
         if: github.event_name == 'pull_request'
@@ -288,7 +296,7 @@ jobs:
   # ---------------------------------------------------------------------------
   coverage:
     name: Coverage
-    if: needs.changes.outputs.rust-code == 'true'
+    if: needs.changes.outputs.rust-src == 'true'
     needs: changes
     runs-on: ubuntu-latest
     steps:
