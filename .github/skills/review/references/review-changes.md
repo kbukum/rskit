@@ -12,7 +12,8 @@ Standing, re-runnable review of a **change set** in this repository — a branch
 
 ## Pass 0 — Scope and context
 
-- Get the actual diff: `git diff <base>...HEAD --stat`, then per file. Review only what changed plus its affected area; do not audit the whole repo (that is [`review-project.md`](./review-project.md)).
+- Get the actual diff: `git diff <base>...HEAD --stat`, then per file. Review what changed **plus its blast radius** — the rest of each touched file, the code the change calls and is called by, and closely-related files in the same crate. Do not audit the whole repo (that is [`review-project.md`](./review-project.md)), but do not tunnel-vision on the diff lines either.
+- **Pre-existing problems in the blast radius are in scope.** A defect, dead code, duplicated concern, or design smell you read while reviewing is reported like any other finding — the change set is not a shield for the code around it. Because rskit is pre-stable with **no backward compatibility owed**, prefer a root-cause **redesign** over patching the symptom (decide Redesign / Align / Enhance / Drop; "leave it patched" is not an option). Flag when a fix reaches beyond the touched files and keep it coherent; never silently refactor unrelated code.
 - rskit is a foundation toolkit: a change to a core crate's public surface affects the facade, other core crates, `contrib/` adapters, and downstream repos (gokit parity, Toven). List the affected area before reviewing.
 - Note whether the change belongs in `core/`, `contrib/`, or `examples/`, and whether it belongs in *this* crate at all.
 

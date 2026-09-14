@@ -8,7 +8,7 @@ Catch debt and drift that compiles cleanly but should not land. None of this is 
 
 ## Checks
 
-- **Root-cause over patches.** Pre-stable: no compatibility shims. Prefer a clean redesign over a symptom patch; flag shims as should-fix with a redesign suggestion.
+- **Root-cause over patches.** Pre-stable: no compatibility shims. Prefer a clean redesign over a symptom patch; flag shims as should-fix with a redesign suggestion. Pre-existing defects and design smells in the change's blast radius (touched files and their close callers/callees) are in scope — report them, don't wave them through because "the diff didn't add them."
 - **Dead / useless code.** No-caller code, speculative generality (one impl, no near-term second), commented-out blocks, leftover scaffolding. Remove.
 - **Maintainability.** Obvious to the next reader without the author? Do names match rskit vocabulary? No hidden coupling across crates? Prefer focused, well-named modules/files over piling logic into one large file.
 - **Outdated patterns.** Edition 2024 / msrv 1.97 is the floor — flag patterns superseded by current idioms (manual impls where `derive` suffices, needless clones clippy-pedantic would catch).

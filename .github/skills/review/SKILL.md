@@ -18,6 +18,10 @@ The authoritative baseline lives in [`.github/copilot-instructions.md`](../../co
 
 **Always dispatch a review to a fresh reviewer with no shared session context** — never inline in the session that wrote the code. A reviewer that "remembers" writing the change rationalizes it; an independent agent re-derives every judgment from the code and the principles. Hand it only the scope (diff or crate/domain) and this skill.
 
+## Scope: the blast radius, not just the diff
+
+A change is a probe into its neighborhood, not an island. Review the changed lines **and** their blast radius — the rest of each touched file, the code the change calls and is called by, and closely-related files in the same crate. Pre-existing defects, dead code, duplicated concerns, and design smells in that blast radius are **in scope** and reported like any other finding; the change set is not a shield for the code around it. Because rskit is pre-stable with **no backward compatibility owed**, prefer a root-cause redesign over patching the symptom — decide Redesign / Align / Enhance / Drop, never "leave it patched." Don't expand into unrelated code silently; when a fix reaches past the touched files, say so and keep it coherent. (A whole-tree audit is [`references/review-project.md`](references/review-project.md).)
+
 ## Pick a driver
 
 - **Change set** → [`references/review-changes.md`](references/review-changes.md). A diff (branch, commit range, or `HEAD~1`). Use after every change set, especially fast AI-assisted work.
