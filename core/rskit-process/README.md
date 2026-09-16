@@ -1,7 +1,6 @@
 # rskit-process
 
-Process and subprocess execution with explicit I/O modes, timeout handling,
-and process-tree termination.
+Process and subprocess execution with explicit I/O modes, timeout handling, and process-tree termination.
 
 ## Mode selection
 
@@ -13,8 +12,7 @@ and process-tree termination.
 
 PTY-backed terminal fidelity and live parent-stdin forwarding are intentionally not exposed until those modes are implemented with documented platform guarantees.
 
-Line observers split deterministically on `\n`, `\r`, and `\r\n`.
-Invalid UTF-8 is passed to line observers lossily; use raw-byte observers for binary output.
+Line observers split deterministically on `\n`, `\r`, and `\r\n`. Invalid UTF-8 is passed to line observers lossily; use raw-byte observers for binary output.
 
 ## Capturing output
 

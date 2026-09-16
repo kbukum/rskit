@@ -8,8 +8,7 @@ Async HTTP client for rskit with redacting auth, headers, injected resilience po
 - Support for Bearer, Basic, and API key authentication with redacted secret storage
 - Configurable timeouts, headers, and redirect behavior
 - Explicit TLS trust, identity, and minimum-version configuration via `rskit-security`
-- Optional `rskit-resilience::Policy` integration for retry, timeout, circuit breaker,
-  and rate limiting
+- Optional `rskit-resilience::Policy` integration for retry, timeout, circuit breaker, and rate limiting
 - URL building with base URL support and outbound destination validation
 - Bounded response body reads to avoid unbounded memory growth
 - JSON request/response serialization via `serde`

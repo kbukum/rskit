@@ -69,6 +69,5 @@ assert!(counter.count("some prompt text")? > 0);
 
 ## When to use
 
-Use `rskit-llm` for canonical chat completions and stream events.
-Use `rskit-inference` for serving-runtime protocols such as Triton, vLLM, and TGI.
+Use `rskit-llm` for canonical chat completions and stream events. Use `rskit-inference` for serving-runtime protocols such as Triton, vLLM, and TGI.
 

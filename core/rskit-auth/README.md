@@ -6,18 +6,15 @@ JWT signing/verification, OIDC validation, password hashing, API-key helpers, an
 
 ## Features
 
-- `JwtCodec` / `JwtHeader` —
-  rskit-owned JWT encode/decode/header primitives without exposing the underlying JWT library
-- `JwtService` — sign and verify tokens with explicit `HS256` (internal-only), `RS256`, `ES256`,
-  or `EdDSA`
+- `JwtCodec` / `JwtHeader` — rskit-owned JWT encode/decode/header primitives without exposing the underlying JWT library
+- `JwtService` — sign and verify tokens with explicit `HS256` (internal-only), `RS256`, `ES256`, or `EdDSA`
 - `OidcClient` — discovery, PKCE, JWKS-backed ID-token validation, and userinfo lookups
 - `PasswordHasher` — Argon2id hashing and verification
 - `ResetTokenGenerator` — short-lived random opaque tokens
 - `apikey` — prefix lookup + peppered HMAC-SHA-256 digest storage with constant-time compare
 - `TokenValidator` / `TokenGenerator` traits for pluggable backends
 - `BearerAuthLayer` and `apikey::ApiKeyLayer` — Tower middleware with fail-closed defaults
-- `AuthOutcome<C>` / `AuthClaims<C>` — typed request extensions for authenticated
-  and explicitly missing credentials
+- `AuthOutcome<C>` / `AuthClaims<C>` — typed request extensions for authenticated and explicitly missing credentials
 
 ## Usage
 

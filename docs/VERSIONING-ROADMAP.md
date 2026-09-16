@@ -8,8 +8,7 @@ This document records rskit's release-and-versioning model and the decision poin
 
 ## Background: the two industry models
 
-Large multi-crate Rust workspaces converge on one of two versioning models. Both are legitimate;
-the choice is a trade-off, not a correctness question.
+Large multi-crate Rust workspaces converge on one of two versioning models. Both are legitimate; the choice is a trade-off, not a correctness question.
 
 | Model | What it means | Representative projects |
 |---|---|---|

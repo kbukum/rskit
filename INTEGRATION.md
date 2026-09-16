@@ -6,8 +6,7 @@ This document shows how rskit modules compose together to solve common microserv
 
 **Problem**: Start an HTTP or gRPC server and automatically register it with a discovery service (Consul, etcd, etc.) for automatic deregistration on shutdown.
 
-**Solution**: Use `DiscoveryServer<T>` from `rskit-discovery::server` to wrap your `HttpServer`
-or `GrpcServer` and handle automatic registration/deregistration via the component lifecycle.
+**Solution**: Use `DiscoveryServer<T>` from `rskit-discovery::server` to wrap your `HttpServer` or `GrpcServer` and handle automatic registration/deregistration via the component lifecycle.
 
 **Code example**:
 
@@ -280,8 +279,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 **Problem**: Publish domain events with automatic envelope construction and routing without manually handling serialization and envelope metadata.
 
-**Solution**: Use `rskit-messaging::EventPublisher` to wrap a Kafka producer.
-The facade handles event envelope creation (ID, timestamp, source) automatically.
+**Solution**: Use `rskit-messaging::EventPublisher` to wrap a Kafka producer. The facade handles event envelope creation (ID, timestamp, source) automatically.
 
 **Code example**:
 

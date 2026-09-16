@@ -47,8 +47,7 @@ Be respectful, constructive, and patient. We follow the [Contributor Covenant v2
 ## Prerequisites
 
 - Install Rust via [rustup](https://rustup.rs/). The repo is pinned to a specific toolchain via `rust-toolchain.toml` — rustup will automatically download and use the correct version.
-- Install Python 3.11+ for repository automation, then run `make setup` to install
-  or verify local Cargo tooling.
+- Install Python 3.11+ for repository automation, then run `make setup` to install or verify local Cargo tooling.
 - **Linux:** Install `mold` linker for faster builds: `sudo apt install mold`
 - **Linux:** `clang` is also required as the linker driver when using the documented `mold` setup.
 - **macOS:** No additional linker setup needed (uses platform default)
@@ -57,8 +56,7 @@ Be respectful, constructive, and patient. We follow the [Contributor Covenant v2
 
 ## Development Setup
 
-**Minimum Rust version:** 1.97 (declared by workspace `rust-version`).
-The repository pins a newer development toolchain in `rust-toolchain.toml`.
+**Minimum Rust version:** 1.97 (declared by workspace `rust-version`). The repository pins a newer development toolchain in `rust-toolchain.toml`.
 
 ```sh
 # Install/verify the pinned toolchain, Python runtime, and local Cargo tools
@@ -133,8 +131,7 @@ PROFILE=ci make test-nextest  # with CI profile (retries, no fail-fast)
 ```
 
 - Every public function and trait impl should have at least one test.
-- Time-dependent tests **must** use `tokio::time::pause()` / `tokio::time::advance()` —
-  never `std::thread::sleep`.
+- Time-dependent tests **must** use `tokio::time::pause()` / `tokio::time::advance()` — never `std::thread::sleep`.
 - Env-var tests must hold a `static parking_lot::Mutex<()>` guard to prevent cross-test pollution (see `rskit-config/src/loader.rs` for the pattern).
 - Tests that require a live service (e.g., gRPC integration tests) go in the crate-local `tests/` directory under `core/rskit-<name>/tests/` for foundation crates or `contrib/<domain>/<name>/tests/` for adapters, and are gated with `#[ignore]` plus a doc comment explaining what service is needed.
 
@@ -186,16 +183,13 @@ chore(ci): pin cargo-deny to 0.16
 
 ## Adding a New Crate
 
-1. Create foundation crates under `core/rskit-<name>/` with `cargo new --lib`,
-   or adapter crates under `contrib/<domain>/<name>/`.
+1. Create foundation crates under `core/rskit-<name>/` with `cargo new --lib`, or adapter crates under `contrib/<domain>/<name>/`.
 2. Add foundation crates to `core/Cargo.toml` or adapter crates to the matching `contrib/<domain>/*` workspace pattern in `contrib/Cargo.toml`.
 3. Give the crate its own `version` (seeded from the current alpha, e.g. `version = "0.1.0-alpha.1"`), inherit the remaining workspace metadata (`edition.workspace = true`, etc.), and add any shared dependencies through the owning workspace manifest.
 4. Add `#![warn(missing_docs)]` to `src/lib.rs`.
 5. Wire it into the `rskit` facade crate.
-6. Add or update package documentation in `docs/PACKAGES.md`
-   and facade feature documentation when applicable.
-7. Open a tracking issue describing the API surface before implementing,
-   so the design can be discussed early.
+6. Add or update package documentation in `docs/PACKAGES.md` and facade feature documentation when applicable.
+7. Open a tracking issue describing the API surface before implementing, so the design can be discussed early.
 
 Version bumps and release preparation are maintainer-only work. Contributors should add `CHANGELOG.md` entries under `[Unreleased]`; maintainers follow [`docs/VERSIONING.md`](docs/VERSIONING.md) and [`docs/RELEASING.md`](docs/RELEASING.md) when cutting a release.
 

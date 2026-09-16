@@ -10,8 +10,7 @@ Production-grade resilience primitives with Tower layer integration.
 - Three-state circuit breaker (`Closed` / `Open` / `HalfOpen`) backed by `parking_lot`
 - Semaphore-based bulkhead for concurrency limiting
 - `governor`-backed rate limiter
-- Tower layers: `RetryLayer`, `CircuitBreakerLayer`, `BulkheadLayer`, `RateLimitLayer`,
-  `TimeoutLayer`
+- Tower layers: `RetryLayer`, `CircuitBreakerLayer`, `BulkheadLayer`, `RateLimitLayer`, `TimeoutLayer`
 
 ## Usage
 

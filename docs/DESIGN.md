@@ -1,7 +1,6 @@
 # rskit Design Decisions
 
-Why rskit looks the way it does —
-and how it differs from its sibling [gokit](https://github.com/kbukum/gokit) (Go).
+Why rskit looks the way it does — and how it differs from its sibling [gokit](https://github.com/kbukum/gokit) (Go).
 
 ## Core decisions
 
@@ -20,8 +19,7 @@ and how it differs from its sibling [gokit](https://github.com/kbukum/gokit) (Go
 
 ## How rskit differs from gokit
 
-rskit mirrors gokit's package structure and lifecycle philosophy.
-Key differences come from idiomatic Rust:
+rskit mirrors gokit's package structure and lifecycle philosophy. Key differences come from idiomatic Rust:
 
 | gokit (Go) | rskit (Rust) | Why |
 |---|---|---|
@@ -34,13 +32,11 @@ Key differences come from idiomatic Rust:
 | Goroutine-per-worker pool | `JoinSet` pool | Idiomatic Tokio |
 | Implicit DI via `bootstrap` | `rskit-di` container, opt-in | Lightweight `Arc`-based |
 
-See [`adr/`](adr/) for full Architecture Decision Records,
-and [`adr/0001-layered-crate-architecture.md`](adr/0001-layered-crate-architecture.md) for the layering rationale.
+See [`adr/`](adr/) for full Architecture Decision Records, and [`adr/0001-layered-crate-architecture.md`](adr/0001-layered-crate-architecture.md) for the layering rationale.
 
 ## Dependency graphs
 
-rskit is a split workspace family (`core/` and `contrib/`) with no unifying root manifest,
-so these graphs are generated at two complementary levels rather than as one cross-workspace dump.
+rskit is a split workspace family (`core/` and `contrib/`) with no unifying root manifest, so these graphs are generated at two complementary levels rather than as one cross-workspace dump.
 
 ### Domain layers
 
@@ -60,5 +56,4 @@ The crate-level detail for the adapter layer: each contrib crate (cache, storage
 make depgraphs
 ```
 
-This regenerates `graph-domains.svg` and `graph-contrib.svg` in `docs/depgraphs/`.
-`make setup` installs `cargo-depgraph`, but Graphviz `dot` is only installed when system tools are enabled (`scripts/setup.sh --system`, or `INSTALL_SYSTEM_TOOLS=1`); otherwise install Graphviz manually. Regenerate whenever domains or crate dependencies change.
+This regenerates `graph-domains.svg` and `graph-contrib.svg` in `docs/depgraphs/`. `make setup` installs `cargo-depgraph`, but Graphviz `dot` is only installed when system tools are enabled (`scripts/setup.sh --system`, or `INSTALL_SYSTEM_TOOLS=1`); otherwise install Graphviz manually. Regenerate whenever domains or crate dependencies change.

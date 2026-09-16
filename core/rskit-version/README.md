@@ -43,8 +43,7 @@ The `build.rs` script runs at compile time to capture:
 | `build_time` | UTC timestamp at build time (captured as Unix epoch, formatted to RFC 3339) |
 | `rust_version` | `rustc --version` |
 
-`SOURCE_DATE_EPOCH` overrides the build timestamp for reproducible builds; when it is set to a
-value that is not a non-negative integer the build fails rather than silently using the wall clock.
+`SOURCE_DATE_EPOCH` overrides the build timestamp for reproducible builds; when it is set to a value that is not a non-negative integer the build fails rather than silently using the wall clock.
 
 ## Key Types & Functions
 

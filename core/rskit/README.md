@@ -10,8 +10,7 @@ The default dependency re-exports the domain-free foundation modules: `util`, `e
 
 ## Feature Flags
 
-Optional modules are enabled with Cargo features.
-Adapter features also enable their owning core abstraction when needed.
+Optional modules are enabled with Cargo features. Adapter features also enable their owning core abstraction when needed.
 
 | Feature group | Features |
 |---------------|----------|
@@ -23,8 +22,7 @@ Adapter features also enable their owning core abstraction when needed.
 | Tooling | `cli`, `git`, `dataset`, `bench` |
 | Aggregate | `full` enables every optional feature |
 
-`rskit-testutil` is intentionally not re-exported.
-Add it directly as a `dev-dependency` when tests need shared fixtures or harness helpers.
+`rskit-testutil` is intentionally not re-exported. Add it directly as a `dev-dependency` when tests need shared fixtures or harness helpers.
 
 ## Usage
 
