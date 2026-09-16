@@ -11,8 +11,7 @@ ADRs document **significant** architectural choices: tradeoffs considered, why w
 
 ## Format
 
-Each ADR is a Markdown file named `NNNN-short-kebab-title.md` where NNNN is the next zero-padded sequence number.
-Use [`0000-template.md`](0000-template.md) as the starting point.
+Each ADR is a Markdown file named `NNNN-short-kebab-title.md` where NNNN is the next zero-padded sequence number. Use [`0000-template.md`](0000-template.md) as the starting point.
 
 ## Index
 

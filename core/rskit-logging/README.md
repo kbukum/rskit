@@ -59,10 +59,7 @@ fn main() -> LoggingResult<()> {
 
 ## Configuration
 
-rskit-logging owns the logging configuration vocabulary (`LoggingConfig` / `LogFormat` / `LogOutput`).
-These are plain `serde` types, so configuration crates such as `rskit-config` re-export
-and compose them without pulling in the subscriber stack.
-All logging options come from `LoggingConfig`:
+rskit-logging owns the logging configuration vocabulary (`LoggingConfig` / `LogFormat` / `LogOutput`). These are plain `serde` types, so configuration crates such as `rskit-config` re-export and compose them without pulling in the subscriber stack. All logging options come from `LoggingConfig`:
 
 ```yaml
 logging:
@@ -134,9 +131,7 @@ fn main() -> rskit_logging::LoggingResult<()> {
 
 ## Masking
 
-Masking is **enabled by default** in `MaskingConfig`.
-The `DefaultMasker` operates at the output layer via `MaskingMakeWriter`,
-redacting sensitive data from complete log lines before they reach any sink.
+Masking is **enabled by default** in `MaskingConfig`. The `DefaultMasker` operates at the output layer via `MaskingMakeWriter`, redacting sensitive data from complete log lines before they reach any sink.
 
 ### Setup
 
@@ -237,8 +232,7 @@ The `SamplingLayer` implements `tracing_subscriber::Layer` and uses `event_enabl
 
 ## Module Levels
 
-Override the global log level for specific modules using `tracing_subscriber::EnvFilter` directives.
-Useful for silencing noisy dependencies or enabling debug output for a single crate.
+Override the global log level for specific modules using `tracing_subscriber::EnvFilter` directives. Useful for silencing noisy dependencies or enabling debug output for a single crate.
 
 ```rust
 use std::collections::HashMap;
@@ -256,8 +250,7 @@ let _guard = init_logging_with_options(&cfg, None, Some(&module_levels), None)?;
 // Generates filter: "info,hyper=error,rdkafka=off,sqlx=warn"
 ```
 
-The `build_env_filter()` function merges the base level with per-module overrides into a single `EnvFilter`.
-When `RUST_LOG` is set, it takes precedence over config.
+The `build_env_filter()` function merges the base level with per-module overrides into a single `EnvFilter`. When `RUST_LOG` is set, it takes precedence over config.
 
 ```rust
 use rskit_logging::module_levels::build_env_filter;
@@ -268,8 +261,7 @@ let filter = build_env_filter("info", &module_levels);
 
 ## OTLP Export
 
-The OpenTelemetry Logs bridge sends tracing events to an OTLP collector.
-It uses `opentelemetry-appender-tracing` to convert every `tracing::Event` into an OTel log record.
+The OpenTelemetry Logs bridge sends tracing events to an OTLP collector. It uses `opentelemetry-appender-tracing` to convert every `tracing::Event` into an OTel log record.
 
 > **Feature gate:** OTLP requires the `otlp` cargo feature.
 

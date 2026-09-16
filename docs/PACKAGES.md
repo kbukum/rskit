@@ -11,8 +11,7 @@ The repository has four workspace manifests and intentionally no root `Cargo.tom
 | Examples | Demo applications validated by CI, not published | [`examples/Cargo.toml`](../examples/Cargo.toml) |
 | Fuzz | Fuzz targets and harness configuration, not published | [`fuzz/Cargo.toml`](../fuzz/Cargo.toml) |
 
-Publishable crates use independent pre-1.0 versions with caret-pinned internal dependencies.
-See [Versioning](VERSIONING.md) for compatibility policy and [Releasing](RELEASING.md) for the mechanical release runbook.
+Publishable crates use independent pre-1.0 versions with caret-pinned internal dependencies. See [Versioning](VERSIONING.md) for compatibility policy and [Releasing](RELEASING.md) for the mechanical release runbook.
 
 ## How to choose crates
 

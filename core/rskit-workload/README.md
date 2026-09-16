@@ -9,8 +9,7 @@ Owns the workload orchestration contract only — the concept and vocabulary of 
 ## Features
 
 - `Manager` trait: deploy / stop / remove / restart / status / wait / logs / list / health check
-- Optional capability traits: `ExecCapable`, `StatsCapable`, `LogStreamer`, `EventWatcher`,
-  `SystemInfoCapable`, `DiskUsageCapable`, `ImageInspector`, `ImageEventWatcher`
+- Optional capability traits: `ExecCapable`, `StatsCapable`, `LogStreamer`, `EventWatcher`, `SystemInfoCapable`, `DiskUsageCapable`, `ImageInspector`, `ImageEventWatcher`
 - `WorkloadRegistry` — explicit, injected backend selection by provider name
 - `WorkloadComponent` — `rskit-component` lifecycle (start / stop / health)
 - `WorkloadState` / `RestartPolicy` enums and CPU/memory quantity helpers

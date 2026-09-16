@@ -34,8 +34,7 @@ let text = encode(&codec, &parsed).unwrap();
 
 ## Value-tree merge
 
-[`value::merge`] deep-merges two value trees (objects merge recursively, last-wins scalars, arrays replaced).
-[`value::merge_with`] lets the caller choose, per key, whether arrays replace or concatenate — so layered-document systems (config includes, overlays) express their own policy without the merge knowing what any key means.
+[`value::merge`] deep-merges two value trees (objects merge recursively, last-wins scalars, arrays replaced). [`value::merge_with`] lets the caller choose, per key, whether arrays replace or concatenate — so layered-document systems (config includes, overlays) express their own policy without the merge knowing what any key means.
 
 ```rust
 use rskit_codec::value::{merge_with, ArrayStrategy};
@@ -52,6 +51,5 @@ Other formats drop in as additional `Codec` implementations without changing the
 
 ## Length-delimited framing
 
-[`framing`] carries one codec-encoded value per bounded length-delimited frame over any blocking `Read`/`Write` transport (a pipe, a socket, a subprocess's stdio).
-Each frame is a 4-byte big-endian length prefix plus payload; reads are bounded so a corrupt prefix can never trigger an unbounded allocation. [`framing::write_value`] / [`framing::read_value`] move typed values through an injected codec; [`framing::write_frame`] / [`framing::read_frame`] move raw bytes.
+[`framing`] carries one codec-encoded value per bounded length-delimited frame over any blocking `Read`/`Write` transport (a pipe, a socket, a subprocess's stdio). Each frame is a 4-byte big-endian length prefix plus payload; reads are bounded so a corrupt prefix can never trigger an unbounded allocation. [`framing::write_value`] / [`framing::read_value`] move typed values through an injected codec; [`framing::write_frame`] / [`framing::read_frame`] move raw bytes.
 

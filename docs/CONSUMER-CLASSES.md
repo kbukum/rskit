@@ -1,7 +1,6 @@
 # Consumer Classes
 
-rskit is a general-purpose foundation, not a service framework.
-Its core crates are designed to serve several kinds of consumer without forcing a long-running network service on any of them.
+rskit is a general-purpose foundation, not a service framework. Its core crates are designed to serve several kinds of consumer without forcing a long-running network service on any of them.
 
 This note defines those consumer classes and the guarantees the foundation layer (`core/rskit-*`) makes to each, so new crates are designed consumer-neutral from day one.
 

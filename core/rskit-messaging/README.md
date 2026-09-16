@@ -20,12 +20,9 @@ Core `rskit-messaging` contains no Kafka/NATS/RabbitMQ SDK dependencies. Adapter
 
 Adapter configs embed `BrokerConfig` and keep only adapter-specific knobs outside it:
 
-- Kafka: brokers, compression, offset reset, batching, `SecurityProtocol`, SASL fields,
-  and `allow_insecure_dev`.
-- NATS: server URLs, auth token or username/password, reconnect settings, subject prefix,
-  subscription buffer, and `allow_insecure_dev`.
-- RabbitMQ: AMQP URI, exchange/queue routing, declaration, acknowledgements, prefetch,
-  connection timeout, and `allow_insecure_dev`.
+- Kafka: brokers, compression, offset reset, batching, `SecurityProtocol`, SASL fields, and `allow_insecure_dev`.
+- NATS: server URLs, auth token or username/password, reconnect settings, subject prefix, subscription buffer, and `allow_insecure_dev`.
+- RabbitMQ: AMQP URI, exchange/queue routing, declaration, acknowledgements, prefetch, connection timeout, and `allow_insecure_dev`.
 
 Secure defaults are enforced. Kafka defaults to TLS (`ssl`); NATS defaults to `tls://`; RabbitMQ defaults to `amqps://`. Plaintext protocols require an explicit insecure-development opt-in. Credentials are configured in typed fields, not URL userinfo or hardcoded examples.
 
@@ -58,9 +55,7 @@ Kafka/NATS/RabbitMQ applications add only the adapter crate they need, build the
 
 ## Validation
 
-Validated locally with focused crate checks for registry/config/adapter behavior where available.
-Full workspace validation should be reported by CI or a dedicated validation pass;
-this README intentionally avoids claiming final workspace counts.
+Validated locally with focused crate checks for registry/config/adapter behavior where available. Full workspace validation should be reported by CI or a dedicated validation pass; this README intentionally avoids claiming final workspace counts.
 
 ## See Also
 

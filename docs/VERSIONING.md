@@ -9,8 +9,7 @@ rskit is published from two Cargo workspaces:
 - `core/Cargo.toml` contains the foundation crates and the `rskit-suite` facade package, whose Rust crate name remains `rskit`.
 - `contrib/Cargo.toml` contains adapter crates.
 
-`examples/Cargo.toml` is validated by CI and release gates,
-but examples are not published to crates.io.
+`examples/Cargo.toml` is validated by CI and release gates, but examples are not published to crates.io.
 
 There is intentionally no root `Cargo.toml`.
 

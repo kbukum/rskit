@@ -49,20 +49,9 @@ If anything fails partway through, **do not** delete or move a tag or republish 
 
 - You are listed in `MAINTAINERS.md` and have push access to `kbukum/rskit`.
 - Your local clone is on `main` with no uncommitted changes.
-- Run `make setup` first; for local release pre-flight checks, also run `scripts/setup.sh --release`
-  and ensure `git`, `gh`, `cargo`, `cargo-nextest`, `cargo-deny`, `cargo-audit`, `cargo-llvm-cov`,
-  `cargo-cyclonedx`, and `cosign` are on your `$PATH`.
-- [Toven](https://github.com/kbukum/toven) drives the release through three separable phases —
-  **bump**, **tag**, and **publish**. It computes and stages the version bump, verifies the
-  maintainer's umbrella tag, publishes to crates.io, generates the SBOM, and runs the readiness
-  gate. It is **stage-only** for the bump and never creates the release commit or the tag — under
-  `entrypoint = "maintainer"` / `push_branch = false` you create the release commit and cut the
-  signed umbrella tag by hand. Install the pinned binary
-  (`curl … scripts/install.sh | sh` from the toven repo, or the `kbukum/toven` action in CI) so
-  `toven` is on your `$PATH`; the `make release-*` targets delegate to it. cargo
-  (deny/audit/cyclonedx/publish) must still be installed because Toven shells out to it.
-- A repository Actions secret named `CARGO_REGISTRY_TOKEN` is configured for crates.io publishing.
-  The release workflow skips crates.io publishing when this secret is absent.
+- Run `make setup` first; for local release pre-flight checks, also run `scripts/setup.sh --release` and ensure `git`, `gh`, `cargo`, `cargo-nextest`, `cargo-deny`, `cargo-audit`, `cargo-llvm-cov`, `cargo-cyclonedx`, and `cosign` are on your `$PATH`.
+- [Toven](https://github.com/kbukum/toven) drives the release through three separable phases — **bump**, **tag**, and **publish**. It computes and stages the version bump, verifies the maintainer's umbrella tag, publishes to crates.io, generates the SBOM, and runs the readiness gate. It is **stage-only** for the bump and never creates the release commit or the tag — under `entrypoint = "maintainer"` / `push_branch = false` you create the release commit and cut the signed umbrella tag by hand. Install the pinned binary (`curl … scripts/install.sh | sh` from the toven repo, or the `kbukum/toven` action in CI) so `toven` is on your `$PATH`; the `make release-*` targets delegate to it. cargo (deny/audit/cyclonedx/publish) must still be installed because Toven shells out to it.
+- A repository Actions secret named `CARGO_REGISTRY_TOKEN` is configured for crates.io publishing. The release workflow skips crates.io publishing when this secret is absent.
 
 This repository has split Cargo workspaces:
 
@@ -103,8 +92,7 @@ Use the [SEMVER policy](./policy/SEMVER.md) to pick the next version. While in `
 1. Open `CHANGELOG.md`.
 2. Replace `## [Unreleased]` with `## [vX.Y.Z] - YYYY-MM-DD`.
 3. Add a fresh empty `## [Unreleased]` section above it.
-4. If the newly created `[vX.Y.Z]` release section is empty, refuse to release —
-   there is nothing to ship.
+4. If the newly created `[vX.Y.Z]` release section is empty, refuse to release — there is nothing to ship.
 5. Update the link reference at the bottom of the file (if present).
 
 As a maintainer rule, do not cut the release if `[Unreleased]` is the only populated section, or if `[vX.Y.Z]` for the version you're cutting doesn't exist in the file.
@@ -212,8 +200,7 @@ RUN_ID=$(gh run list --workflow Release --limit 1 --json databaseId --jq '.[0].d
 gh run view "$RUN_ID" --log-failed
 ```
 
-If publishing fails after some crates were uploaded, do not delete or force-push the tag.
-Fix forward with a new version because crates.io versions are immutable.
+If publishing fails after some crates were uploaded, do not delete or force-push the tag. Fix forward with a new version because crates.io versions are immutable.
 
 ### Recovery from a partial or failed release
 

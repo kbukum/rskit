@@ -2,11 +2,9 @@
 
 # rskit-skill
 
-SDK-free skill manifests, progressive-disclosure loaders, registries, providers,
-and verifier contracts for rskit agentic applications.
+SDK-free skill manifests, progressive-disclosure loaders, registries, providers, and verifier contracts for rskit agentic applications.
 
-The manifest file is `kit.skill.yaml`. `scripts/` and `references/` are inert assets:
-the loader records path and SHA-256 and never executes them.
+The manifest file is `kit.skill.yaml`. `scripts/` and `references/` are inert assets: the loader records path and SHA-256 and never executes them.
 
 ## Architecture
 

@@ -1,7 +1,6 @@
 # rskit-tool
 
-Tool definitions, callable adapters, JSON Schema I/O, structured results, registries,
-and executable permission envelopes.
+Tool definitions, callable adapters, JSON Schema I/O, structured results, registries, and executable permission envelopes.
 
 ## Middleware ownership
 
@@ -9,8 +8,7 @@ and executable permission envelopes.
 
 ## Envelope
 
-Every `Definition` includes an `Envelope`. Defaults deny network, filesystem, and subprocess access;
-`safety` defaults to `read-only`; `data_classification` defaults to `public`.
+Every `Definition` includes an `Envelope`. Defaults deny network, filesystem, and subprocess access; `safety` defaults to `read-only`; `data_classification` defaults to `public`.
 
 ## Architecture
 
