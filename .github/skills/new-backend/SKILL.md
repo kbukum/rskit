@@ -1,11 +1,6 @@
 ---
 name: new-backend
-description: >-
-    Add a pluggable backend/adapter (storage, cache, messaging, inference, llm, media,
-    vectorstore) to rskit the canonical way — a contrib crate under contrib/<domain>/<name>
-    implementing the core trait, selected via config through an explicit typed registration, no
-    import-time side effects, with the in-memory/local default kept in core. Use when integrating
-    a provider like S3, Kafka, Redis, Qdrant, or an LLM/inference provider.
+description: "rskit: Add an opt-in, config-selected backend implementing the owning module's typed contract."
 ---
 
 # Adding a backend adapter to rskit

@@ -2,7 +2,7 @@
 
 Each item here is a hard principle from [`.github/copilot-instructions.md`](../../../copilot-instructions.md), not a preference. This is where fast AI-assisted coding drifts most — especially around resilience, concurrency, and composition.
 
-> **Run in a separate, clean-context agent** — never inline in the session that wrote the code. An independent reviewer re-derives every judgment from the code and the principles instead of trusting prior reasoning. A plan/spec may be passed in as a scope checklist only; it never excuses a baseline violation.
+Use the [review skill](../SKILL.md) for scope, execution, and finding format. This checklist does not require a separate agent.
 
 **Scope note.** *Changes mode:* grep the touched crates and reason about each runtime path. *Project mode:* the panic/concurrency/composition invariants below hold across the whole library surface — sweep all of `core/` and `contrib/`.
 

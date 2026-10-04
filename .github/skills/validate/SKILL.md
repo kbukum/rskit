@@ -1,10 +1,6 @@
 ---
 name: validate
-description: >-
-    Build, test, lint, format-check, doc, and vuln/license-scan rskit changes through make and
-    cargo — scoped to the crates that actually changed. Use whenever you need to validate an
-    rskit change, run tests for a crate, reproduce CI locally, or check the affected area of an
-    edit before committing.
+description: "rskit: Run the repository's build, test, lint, and documentation gates scoped to the change."
 ---
 
 # Validating rskit changes with make/cargo

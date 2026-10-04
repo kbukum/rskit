@@ -1,10 +1,6 @@
 ---
 name: sibling-parity
-description: >-
-    Keep rskit aligned with its sibling kit gokit (Go) — judge cross-kit parity
-    by capability, mirror the strongest existing implementation for a given scope, track parity
-    through gokit tracking issues, and keep each kit generic (never consumer-specific). Use when
-    touching anything with a cross-kit parity row or aligning a capability across kits.
+description: "rskit: Track and align sibling-kit capabilities without forcing identical internal APIs."
 ---
 
 # Keeping rskit aligned with its sibling kit
