@@ -2,7 +2,7 @@
 
 A dedicated pass because a fast AI-written path that "just works" usually skips boundary validation, and rskit is shared infrastructure — a gap here propagates to every consumer. For a deeper sweep on security-sensitive changes, pair this with a dedicated security review; this pass is the standing baseline.
 
-> **Run in a separate, clean-context agent** — never inline in the session that wrote the code. An independent reviewer re-derives every judgment from the code and the principles instead of trusting prior reasoning. A plan/spec may be passed in as a scope checklist only; it never excuses a baseline violation.
+Use the [review skill](../SKILL.md) for scope, execution, and finding format. This checklist does not require a separate agent.
 
 **Scope note.** *Changes mode:* trace each new input path from its trust boundary to its use. *Project mode:* audit the toolkit's external-facing surfaces (HTTP, process, storage/database adapters, auth, crypto) for the invariants below; see also [`docs/security-model.md`](../../../../docs/security-model.md).
 

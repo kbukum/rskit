@@ -1,10 +1,6 @@
 ---
 name: new-crate
-description: >-
-    Scaffold a new crate in the rskit multi-workspace monorepo the canonical way — decide
-    core vs contrib, wire the workspace Cargo.toml, inherit workspace metadata, add
-    #![warn(missing_docs)], and wire the facade. Use when adding a new capability, foundation
-    crate, or adapter to rskit, or when unsure whether new code belongs in core or contrib.
+description: "rskit: Add a Rust crate in the correct layer with workspace wiring, lints, docs, and shared tests."
 ---
 
 # Adding a crate to rskit

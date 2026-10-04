@@ -1,10 +1,6 @@
 ---
 name: release
-description: >-
-    Cut a release of the rskit multi-workspace monorepo — decide the semver bump, update the
-    CHANGELOG, let Toven derive independent per-crate version bumps, run the full pre-release gates
-    and supply-chain sweep, and publish to crates.io in dependency order. Use when preparing or
-    publishing an rskit release or checking release readiness.
+description: "rskit: Prepare or publish a release through the repository's version, validation, and supply-chain gates."
 ---
 
 # Releasing rskit
@@ -27,7 +23,7 @@ make release-readiness      # Toven fail-closed preflight (clean tree, changelog
 make release-coverage       # per-package coverage gate (default line coverage >=90%)
 ```
 
-Also run the `review` project audit in a fresh agent before a release. Treat green gates as necessary but not sufficient.
+Also run the `review` project audit directly (use an independent agent only when requested) before a release. Treat green gates as necessary but not sufficient.
 
 ## Step 2 — Decide the version
 

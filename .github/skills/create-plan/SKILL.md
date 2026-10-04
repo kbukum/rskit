@@ -1,73 +1,30 @@
 ---
 name: create-plan
-description: >-
-    Turn a non-trivial change into a written, reviewable plan under the repo's gitignored tmp/
-    folder — a README overview plus, when the work is multi-step, numbered step markdown files
-    that can be applied iteratively. Every plan is bound to rskit's engineering baseline. Use
-    when scoping a feature, refactor, parity port, or release, or when asked to plan or break
-    down work.
+description: "rskit: Write or revise a high-level implementation plan with dependencies and acceptance criteria."
 ---
 
-# Planning rskit work as applyable step files
+# Plan a change
 
-A plan is a written contract for a change set: what to do, in what order, and how you will know each part is done. In this repo a plan is **not prose to admire** — it is a folder of markdown that the `apply-plan` / `apply-step` skills execute iteratively.
+Planning writes task documents only: no source edits, branch changes, staging, commits, or PRs. Apply the [baseline](../../copilot-instructions.md); a plan cannot weaken it.
 
-## Where plans live: `tmp/<plan-name>/`
+## Scope and storage
 
-Always create plans under `tmp/` at the repo root. `tmp/` is **gitignored** — plans are local working scratch, never committed and never shipped. Name the folder by the change itself in kebab-case (`tmp/typestate-app-lifecycle/`, `tmp/storage-s3-multipart/`) — the same high-level naming rule as branches: no `batch-N`, plan numbers, or internal/session detail in the folder name.
+Investigate the current owning modules and contracts before deciding. Record the goal, non-goals, constraints, decisions, and measurable acceptance. Prefer owner-level outcomes over prescriptive filenames or code recipes; investigate exact implementation at apply time. Name known removal targets when needed to prove complete replacement.
 
-```bash
-mkdir -p tmp/<plan-name>
-```
+Reuse the existing task folder. New plans live in gitignored `tmp/plans/<task>/`, named for the change. Update `tmp/plans/README.md` and the task README; update `tmp/README.md` if it indexes plans. Never link stable docs to temporary task notes.
 
-## Structure
+## Executable shape
 
-Match this shape (the same layout every plan folder under `tmp/` uses):
+- `README.md`: goal, scope, ordered step index, dependencies, and links to binding rules.
+- `NN-topic.md`: one reviewable step/PR with `**Status:** pending`, `**Depends on:**`, scope, owner-level work order, removals, and `- [ ]` acceptance checks. Numbering orders documents, not branch names. Use work orders within a step to bound sessions; do not split one step across multiple PRs.
+- `handoff.md`: under 500 words; branch/Git restrictions, current capabilities, decisions, remaining work, next action, evidence freshness/paths, owned resources, and continuation prompt.
 
-- **`README.md`** (always) — the overview: goal, how to read the folder, an ordered index of the step files with their dependency order, and the cross-cutting rules that apply to every step.
-- **`NN-topic.md`** step files (when the work is multi-step) — zero-padded and ordered by dependency layer (`01-core.md`, `02-...`), each a self-contained unit of work. A genuinely small single-shot change can be one `README.md` with an inline step list instead of separate files — split into step files as soon as the work is iterative or spans crates.
+A small single-step plan may keep the work order in its README. Add separate context, decisions, current-state, references, or open-question documents only when their content is needed; avoid empty boilerplate and repeated policy.
 
-Numbering orders the plan; it is **internal to the plan folder only**. When a step becomes a branch/PR, name that branch/PR by the change (see the `create-branch` skill) — never `step-3` or `batch-N`.
+## Acceptance and continuation
 
-### Each step file contains
+Order dependencies before consumers. Require test-first behavior/failure coverage, canonical ownership, correct layering, complete dependent call-site/removal updates, and the relevant [validation](../validate/SKILL.md) and [review](../review/SKILL.md) checks. Use the repository's real gate names and integration evidence; do not claim a configured threshold from an old example. Keep required release/Changeset and UI acceptance where applicable. Link rules once rather than copying the baseline into every step.
 
-```markdown
-# <Step title — the change, not "step N">
+A step becomes `done` only when its acceptance is verified. The handoff should let the next session read the current step and needed dependency contracts, not every previous step. Keep capability summaries rather than transcripts; flag evidence predating edits. Finish one bounded work order, checkpoint, and stop.
 
-**Layer:** L<n> · **Depends on:** <steps> · **Blocks:** <steps> · **Status:** pending
-
-## Scope
-What this step changes and, explicitly, what it does not.
-
-## Steps
-1. Numbered, concrete actions at real file paths.
-2. ...
-
-## Files touched
-- `core/rskit-x/**`, new `contrib/<domain>/y/**`, ...
-
-## Acceptance criteria
-- [ ] Behavior written test-first; green under race/shuffle/parallel on affected crates.
-- [ ] <step-specific, verifiable outcomes>
-```
-
-`Status: pending` and the `- [ ]` boxes are the progress signal `apply-plan` reads to find the first unfinished step. `apply-step` flips them to `done`/`- [x]` when a step lands.
-
-## Bind every plan to the baseline
-
-A plan may **not** invent a lighter standard than rskit's. Its cross-cutting rules restate — and link to — the engineering baseline in [`../../copilot-instructions.md`](../../copilot-instructions.md) and defer detailed judgment to the `review` skill's eight passes. In every plan's README, make these load-bearing (not decorative):
-
-- **Test-first (TDD).** Each behavior gets a failing test first, then minimal code, then refactor while green — failure paths included. Never batch production code and bolt tests on later.
-- **Best-practices bar.** Prefer the *simplest* design that fully solves each step — flexible and extensible (small typed seams / builders, no rigid or speculative abstraction), scalable (bounded resources, no accidental O(n²) or unbounded buffering), on current idiomatic Rust best practices, not folklore. Complexity must earn its place.
-- **Structure & placement.** Correct crate (`core/rskit-<name>` vs `contrib/<domain>/<name>`); acyclic layering (lower crates never depend on higher); every crate carries `#![warn(missing_docs)]` and is wired into the workspace + facade.
-- **Canonical reuse.** Reuse or enhance the owning core crate / std before writing new code; never duplicate a shared concern. Consult [`docs/CONCERN-OWNERS.md`](../../../docs/CONCERN-OWNERS.md) for the canonical owner (formats → `rskit-codec`, helpers → `rskit-util`, paths → `rskit-fs`, …).
-- **Typed & minimal APIs.** No broad `Any`/`Box<dyn Any>` on public surfaces (documented opaque exceptions only); typed `AppError`/`AppResult` that preserve cause; timeouts + cancellation on remote calls.
-- **Root-cause, no shims.** Pre-stable: redesign cleanly and remove the old path; no compat shims or half-migrations.
-- **Readable files.** Split by concern into focused files — never pile into one file. The aggregator is declare-only: `lib.rs`/`mod.rs` declare submodules and re-export, no logic. Scope any structure reorg **together with the change that touches it, per domain** — when a step reshapes signatures or otherwise edits a file that has grown over-long (past roughly **300–400 lines of real code** — code only, excluding test code, comments, and blanks) **and** mixes concerns, that same step promotes it to a folder (declare-only `mod.rs` + concern-named submodules). When a single module/crate has accumulated **more than ~10 non-test files** that fall into **2–3+ separable concern groups**, lift each cohesive group into its own concern-named submodule folder (nested `mod.rs`). Reorg is criteria-driven (concern-mixed over-long file, or a module/crate with many separable-group siblings), never a standalone deferred sweep and never arbitrary.
-- **Composition.** Injected registries/config; no import-time side effects, no mutable global registries; inject logger/tracer/policies.
-
-Order steps so each starts only when its dependencies are green, and so each maps to a **standalone, reviewable change** — a reviewer seeing one step's diff should need no knowledge of the plan's sequencing.
-
-## Handoff
-
-Creating the plan is a docs-only act under `tmp/` — no source edits, no branch, no commit. Apply it later with the `apply-plan` skill (whole plan) or `apply-step` (one step).
+Apply later with [apply-plan](../apply-plan/SKILL.md) or [apply-step](../apply-step/SKILL.md).

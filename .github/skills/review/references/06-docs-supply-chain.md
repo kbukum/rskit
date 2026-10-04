@@ -2,7 +2,7 @@
 
 The last gate: public surfaces are documented, and the supply chain stays scanned, pinned, and clean. rskit ships to downstream consumers, so dependency and release handling are first-class.
 
-> **Run in a separate, clean-context agent** — never inline in the session that wrote the code. An independent reviewer re-derives every judgment from the code and the principles instead of trusting prior reasoning. A plan/spec may be passed in as a scope checklist only; it never excuses a baseline violation.
+Use the [review skill](../SKILL.md) for scope, execution, and finding format. This checklist does not require a separate agent.
 
 **Scope note.** *Changes mode:* check the docs touched by (or owed by) the diff, plus any dependency or CI-action it introduces. *Project mode:* audit the whole CI/supply-chain setup (`cargo-deny` config, action pins, `Cargo.lock`, SBOM tooling) and confirm every crate carries crate-level docs.
 

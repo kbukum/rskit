@@ -1,70 +1,43 @@
 ---
 name: review
-description: >-
-    Run rskit's standing engineering-baseline review over a change set (a branch, commit range,
-    or HEAD~1) or over a whole crate/domain/tree. Sequences eight focused passes — structure &
-    placement, canonical reuse, principles, security & privacy, quality, tests/TDD, docs & supply
-    chain, comments & rustdoc. Use before merging a change, when auditing a crate, or before a
-    release. Always run it in a fresh, clean-context reviewer.
+description: "rskit: Review a diff, package, or tree for architecture, correctness, security, tests, and documentation."
 ---
 
-# Reviewing rskit against its engineering baseline
+# Review
 
-rskit is shared foundation infrastructure that its sibling kit (gokit) and downstream consumers (Toven and services that depend on rskit) mirror or build on: a defect in a core crate propagates to the `rskit` facade, the other core crates, every `contrib/` adapter, and every downstream consumer. The standard is correspondingly high — security, concurrency, and composition each get their own pass. This skill encodes rskit's permanent review baseline as eight focused passes plus three orchestrators.
+Apply the [baseline](../../copilot-instructions.md). Review code and evidence, not the author's rationale; plans define scope, not exceptions to requirements.
 
-The authoritative baseline lives in [`.github/copilot-instructions.md`](../../copilot-instructions.md) (and `docs/DESIGN.md`). A plan, spec, issue, or roadmap (e.g. an ADR under `docs/adr/`) may be passed in **as a scope checklist only** — it defines intended scope, never excuses a baseline violation. If the code diverges from the plan, report the divergence; the baseline wins.
+## Scope and execution
 
-## Run in a separate, clean-context agent
+Review directly by default. Launch an independent reviewer only when the user requests it; use one bounded reviewer unless distinct additional scopes are explicitly requested. Pass the scope, constraints, and relevant files, not the authoring transcript. Reevaluate returned findings against source before acting.
 
-**Always dispatch a review to a fresh reviewer with no shared session context** — never inline in the session that wrote the code. A reviewer that "remembers" writing the change rationalizes it; an independent agent re-derives every judgment from the code and the principles. Hand it only the scope (diff or crate/domain) and this skill.
+For changes, include staged/unstaged/untracked work when requested, plus close callers, callees, and affected contracts. Report pre-existing defects in that impact area; do not silently widen into an unrelated audit. For project review, state the package/domain boundary.
 
-## Scope: the blast radius, not just the diff
+Reviews are read-only unless fixes are authorized. For each real defect choose **Redesign / Align / Enhance / Drop** with a one-line reason. Preserve user staging and unrelated work; do not commit, amend, push, resolve remote threads, or post replies implicitly.
 
-A change is a probe into its neighborhood, not an island. Review the changed lines **and** their blast radius — the rest of each touched file, the code the change calls and is called by, and closely-related files in the same crate. Pre-existing defects, dead code, duplicated concerns, and design smells in that blast radius are **in scope** and reported like any other finding; the change set is not a shield for the code around it. Because rskit is pre-stable with **no backward compatibility owed**, prefer a root-cause redesign over patching the symptom — decide Redesign / Align / Enhance / Drop, never "leave it patched." Don't expand into unrelated code silently; when a fix reaches past the touched files, say so and keep it coherent. (A whole-tree audit is [`references/review-project.md`](references/review-project.md).)
+## Load checks by trigger
 
-## Pick a driver
+Check placement and canonical reuse first for code changes. A blocker there stops acceptance; report any unperformed checks rather than claiming a complete review. Apply every relevant lens below, in order; load only its file, not the entire reference directory. For prose-only work, use documentation/claim checks rather than runtime test suites.
 
-- **Change set** → [`references/review-changes.md`](references/review-changes.md). A diff (branch, commit range, or `HEAD~1`). Use after every change set, especially fast AI-assisted work.
-- **Whole tree / crate** → [`references/review-project.md`](references/review-project.md). A standing audit independent of any diff. Use periodically, before a release, or when onboarding.
-- **Review → fix in one pass** → [`references/review-details.md`](references/review-details.md). Splits the review into parallel subagent passes by Rust concern, then plans and applies fixes.
+| Trigger | Checklist |
+|---|---|
+| Code placement, imports, exports, or package wiring | [Pass 00 — Structure and placement](references/00-structure-placement.md) |
+| Shared behavior or a proposed helper/adapter | [Pass 01 — Canonical-owner reuse](references/01-canonical-reuse.md) |
+| Runtime APIs, errors, concurrency, or composition | [Pass 02 — Principle conformance](references/02-principles.md) |
+| Trust boundaries, auth, crypto, privacy, or external input | [Pass 03 — Security & privacy](references/03-security-privacy.md) |
+| Behavior, readability, maintainability, or dead code | [Pass 04 — Quality: simplicity, maintainability, current patterns](references/04-quality.md) |
+| Behavior changes, tests, fixtures, or coverage | [Pass 05 — TDD and tests](references/05-tests-tdd.md) |
+| Documentation, dependencies, CI, or release | [Pass 06 — Documentation and supply chain](references/06-docs-supply-chain.md) |
+| Comments and public API documentation | [Pass 07 — Comments and rustdoc](references/07-comments-rustdoc.md) |
 
-## The eight focused passes (run in order)
+## Modes
 
-Stop and reject as soon as a change fails pass `00` or `01` — misplaced or duplicated code makes every later pass unreliable. Each file also carries a "Project mode" note for tree-wide sweeps and can be run standalone when you need only one pass.
+- [Changes](references/review-changes.md): diff and affected contracts.
+- [Project](references/review-project.md): bounded tree audit.
+- [Review and fix](references/review-details.md): select only when fixes are requested; confirm the proposed fix scope before editing.
 
-1. [`references/00-structure-placement.md`](references/00-structure-placement.md) — crate placement (`core`/`contrib`/`examples`), acyclic layering, facade discipline, new-crate wiring.
-2. [`references/01-canonical-reuse.md`](references/01-canonical-reuse.md) — did the code reimplement a concern an existing core crate (or std) already owns? *(blocker class)*
-3. [`references/02-principles.md`](references/02-principles.md) — typed/minimal APIs, errors & resilience, concurrency, composition, current idioms, AI/model features.
-4. [`references/03-security-privacy.md`](references/03-security-privacy.md) — trust-boundary validation, injection safety, token handling, crypto, data minimization.
-5. [`references/04-quality.md`](references/04-quality.md) — root-cause over patches, dead code, maintainability, style gates.
-6. [`references/05-tests-tdd.md`](references/05-tests-tdd.md) — TDD, determinism under race/shuffle/parallel, `tokio::time` and env-var discipline, fixtures.
-7. [`references/06-docs-supply-chain.md`](references/06-docs-supply-chain.md) — `///` docs, Conventional Commits, `Cargo.lock`, `cargo-deny`, SHA-pinned actions, SBOM/provenance.
-8. [`references/07-comments-rustdoc.md`](references/07-comments-rustdoc.md) — comments and `///` docs describe the code as it is, not plans/history/process.
+## Evidence and output
 
-## Severity and finding format
+Use [validate](../validate/SKILL.md) for scoped gates; reuse fresh evidence and retain required full acceptance gates. Green tooling is necessary, not proof of lifecycle/security correctness.
 
-```
-severity (blocker / should-fix / nit) — file:line — what's wrong — which principle — suggested fix
-```
-
-- **blocker** — hard-principle violation (upward/cyclic dependency, concern reimplemented, panic on a runtime path, `unwrap`/`expect`/swallowed error on a fallible runtime path, unbounded channel / task with no cancellation, global mutable registry / import-time side effect, trust boundary not validated, `unsafe` without `// SAFETY:`, behavioral change with no test). Fix before merge.
-- **should-fix** — real defect or debt that isn't a baseline violation (compat shim, `std::thread::sleep` in a test, env-var test without the guard, inline config instead of a fixture, reinvented std facility, one large file that should be split by concern).
-- **nit** — minor/style, take-it-or-leave-it.
-
-## Validation is via make/cargo (see the `validate` skill)
-
-**Scope every command to the changed crate(s)** — the full-workspace gates are slow across 70+ publishable crates and belong to a project audit or CI sign-off, not a per-change review:
-
-```bash
-make fmt-check                       # fast, whole-tree formatting check
-make lint C=<crate>                  # clippy, scoped to the crate
-make test C=<crate> T=<pattern>      # scoped tests
-make test-affected                   # only crates the diff touches
-make check-topology                  # cheap placement/acyclicity guard
-make check-public-api                # only if a public surface changed
-make lint W=core                     # W=core|contrib|examples — one workspace
-make check                           # full canonical gate — audit/CI sign-off
-make deny                            # cargo-deny + workspace-dep-sync + topology + public-api
-```
-
-Treat a green run as **necessary but not sufficient**: it does not catch unbounded concurrency, missing timeouts/cancellation, global-registry composition issues, duplicated owners, or boundary-validation gaps. Those are on the reviewer.
+Report `severity | file:line | defect and impact | evidence | proposed action`. **Blocker** means broken behavior/contract or a hard-rule violation; **should-fix** means a substantiated maintainability defect; **nit** is optional style, never a gate. List incomplete/skipped checks and uncertainty. Do not invent findings or treat grep hits as proof.
