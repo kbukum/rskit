@@ -3,42 +3,13 @@ name: apply-step
 description: "rskit: Implement one plan step test-first, validate its acceptance criteria, and record progress."
 ---
 
-# Applying one plan step, in context
+# Apply one step
 
-`apply-step` implements exactly one step of a plan folder (from the `create-plan` skill). It is the unit of work that `apply-plan` calls per step, and it can also be run directly on a single step file.
+Given a step file such as `tmp/<plan>/02-topic.md`, implement the whole step through acceptance. Do not stop at internal phases or create routine handoffs.
 
-## Input
+1. **Read.** Open the plan README, selected step, and relevant dependency contracts. Check current source and Git state; preserve existing edits/index. If resuming, verify earlier evidence still matches. Confirm prerequisites are complete.
+2. **Implement.** Follow the [project standards](../../copilot-instructions.md). Work test-first, including failure paths. Fix the owning code, update affected callers/docs, and remove superseded paths. Use the simplest complete design; reassess unfinished code rather than preserving defects.
+3. **Verify.** Run the relevant [validation](../validate/SKILL.md) and [review](../review/SKILL.md) checks. Include required generated outputs, release notes, and real integration/UI proof. Fix in-scope failures and rerun affected checks.
+4. **Finish.** Mark the step `done` only when every acceptance check passes. Record the result and evidence in the step. Leave changes uncommitted unless the user authorizes Git actions.
 
-A path to one step file, e.g. `tmp/storage-s3-multipart/02-registry.md`.
-
-## 1. Load required context
-
-Read the existing handoff first, then the plan README and current step. Check its dependency status and read only the earlier decisions/contracts it needs. Do not preload every earlier step or re-litigate completed decisions. If a required contract is missing or stale, inspect its owning source before editing.
-
-Confirm the current step's *Depends on* steps are `done` before starting. If a dependency is unfinished, stop and say so.
-
-## 2. Implement the step against the baseline
-
-Apply the current step's actions **test-first**, honoring rskit's engineering baseline — the plan does not override it, and the authority is [`../../copilot-instructions.md`](../../copilot-instructions.md):
-
-- **TDD.** For each behavior: failing test → minimal code → refactor while green, failure paths included. Never write the production code first and add tests after.
-- **Best-practices bar.** Deliver the *simplest* design that fully solves the step — simple, not shortsighted: keep it flexible and extensible (small typed seams / builders over rigid or speculative abstraction) and scalable (bounded resources, no accidental O(n²) or unbounded buffering). Use current, idiomatic Rust — the right implementation for today's std/spec/security guidance, not folklore. Complexity must earn its place; if a simpler correct design exists, take it and delete the rest.
-- **Placement & layering.** Right crate (`core/rskit-<name>` vs `contrib/<domain>/<name>`); acyclic dependencies (lower crates never depend on higher); new crates carry `#![warn(missing_docs)]` and are wired into the workspace + facade.
-- **Canonical reuse.** Before writing a new type/helper, open [`docs/CONCERN-OWNERS.md`](../../../docs/CONCERN-OWNERS.md), find the concern's owner, and reuse or extend it — never duplicate a shared concern (errors, config, logging, path safety, retries, HTTP, registries). Put new logic in concern-named modules; never in `lib.rs`/`mod.rs`.
-- **Typed & minimal.** No broad `Any` on public surfaces (documented opaque exceptions only); typed `AppError`/`AppResult` preserving cause; timeout + cancellation on remote calls.
-- **Root-cause, no shims.** Redesign cleanly; remove the old path completely (pre-stable, no back-compat).
-- **Readable files & injected composition.** Split by concern into focused files; when you touch a file that has grown over-long (past roughly **300–400 lines of real code** — code only, excluding test code, comments, and blanks) **and** mixes distinct concerns, promote it to a folder (declare-only `mod.rs` + concern-named submodules, `#[cfg(test)] test_support` for shared fixtures) **in this step** — do not defer the reorg. When a single module/crate has accumulated **more than ~10 non-test files** that fall into **2–3+ separable concern groups**, lift each cohesive group into its own concern-named submodule folder (nested `mod.rs`). Structure work travels with the change; reorg is criteria-driven — only split where it genuinely improves discoverability, and leave cohesive single-concern files alone at any size. Inject registries/config; no import-time side effects or mutable global registries.
-
-Keep the edit scoped to *this* step's `Files touched`; if you discover the step is mis-scoped, report it rather than silently expanding.
-
-## 3. Validate, review, and mark done
-
-- **Validate** the affected crates with the `validate` skill (make/cargo, scoped), green under race/shuffle/parallel. A step does not land red. Run `make structure` (declare-only aggregator guard) and keep new aggregators clean.
-- **Review** the step's diff with the relevant `review` passes (structure/placement, canonical reuse, principles, security, quality, tests, docs, comments) in the current agent; delegate only when the user requests it.
-- Only when acceptance criteria are genuinely met, flip the step's progress signal so `apply-plan` can resume: set `**Status:** done` and check its `- [x]` boxes. Do not mark a step done on a partial or red result.
-
-Update `handoff.md` with the completed capability, remaining work, exact next action, validation freshness, Git constraints, and owned resources. Keep it under 500 words.
-
-## Repo workflow
-
-Work on a branch (`create-branch` skill), leave edits **uncommitted** for the maintainer to commit and push; open a PR only when explicitly asked. When that change becomes a branch/PR, name it by the change — never `step-2` or a plan/batch number.
+Continue authorized work without asking at each milestone. Ask only for a decision, permission, or scope change that genuinely blocks progress. Do not waive a failed gate; if work must pause, note the exact blocker and remaining work in the existing plan. Applying this step does not authorize starting the next one.

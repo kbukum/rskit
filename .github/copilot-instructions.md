@@ -15,7 +15,7 @@ Rust infrastructure kit. `core/rskit-*` holds foundations and the facade; `contr
 
 ## Work and validation
 
-Load only the matching [skill](skills/README.md) and reference sections. Preserve worktree/index changes. Commit, amend, push, or open draft PRs only when authorized. Multi-step work uses `tmp/plans/<task>/handoff.md`; resume current scope and dependency contracts, not every old step.
+Load only the matching [skill](skills/README.md) and reference sections. Preserve worktree/index changes. Commit, amend, push, or open draft PRs only when authorized. Keep plans in `tmp/<plan>/`, reusing existing folders. Apply each selected step fully; record progress in the step, not routine handoffs.
 
 Use `make test C=<crate> T=<pattern>`, `make lint C=<crate>`, and `make doc C=<crate>` as relevant. `make check` is the full gate; see [validate](skills/validate/SKILL.md) for topology, API, coverage, and dependency gates. Prose-only edits need documentation checks, not a full build.
 
