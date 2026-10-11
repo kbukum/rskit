@@ -12,6 +12,7 @@ Rust infrastructure kit. `core/rskit-*` holds foundations and the facade; `contr
 - `lib.rs` / `mod.rs` contain declarations and re-exports only. Use concern-named modules; split by responsibility, not a hard line count. Inherit workspace lints, document public items, mark `with_*` builders `#[must_use]`, and use `#[non_exhaustive]` for growing public enums. Follow the repository's unsafe policy.
 - Test-first and deterministic; reuse doubles, cover failures, and use paused Tokio time, not sleep. Serialize environment mutation. Coverage: >=80% per package, >=85% overall and for errors/auth/authz/security/resilience/encryption. Keep integration proof.
 - Markdown, rustdoc, and comment prose have no arbitrary column wrapping; preserve code examples and directives.
+- Docs and agent instructions are concise, task-first, and organized for the reader. Explain capabilities at a high level; retain detail for correct use, contracts, safety, and verification. Changelogs summarize outcomes; skills link canonical procedures instead of repeating them.
 
 ## Work and validation
 

@@ -21,7 +21,7 @@ Shared engineering baseline — apply to all work here:
 - **AI / model features:** treat model output and retrieved context as untrusted; enforce structured outputs; least-privilege tool calls with a human gate on destructive actions; version prompts / models and gate changes on evals.
 - **Supply chain:** pin CI actions by SHA; scan dependencies (vulnerabilities + licenses); sign release artifacts; attach SBOM and provenance.
 - **Keep code current:** use current idioms and standards, not old habits — verify the dependency is maintained, the stdlib doesn't already cover it, and no open CVE applies.
-- **Best practices over parity:** current, idiomatic best practices for the language and tech stack take priority over cross-kit (gokit) parity. Parity is good-to-have — it applies to wire/contract compatibility and intuition transfer, never to forcing a non-idiomatic Rust type, API shape, or pattern to match a sibling. When the idiomatic Rust approach is more efficient or clearer for development, follow it over parity. Above both, be **consistent across the rskit project** — internal consistency of naming, shapes, and patterns is one of the most important properties, and outranks matching gokit symbol-for-symbol.
+- **Consistency and idioms:** project-wide consistency and idiomatic Rust outrank symbol parity. Match shared behavior and wire contracts, not another language's internal shapes.
 
 Use the matching [skill](skills/README.md). Review affected behavior and its dependencies; delegate only when the user requests it. Scope `make`/`cargo` validation to changed crates while implementing.
 
@@ -60,7 +60,7 @@ When adding a new foundation crate: create it under `core/rskit-<name>/`, add it
 ## Code Style
 
 - `cargo fmt` (`rustfmt.toml`: edition 2024, max_width 100) + `cargo clippy` (`clippy.toml`: msrv 1.97)
-- `lib.rs`/`mod.rs` are **declare-only** (submodule declarations + re-exports; no logic or private items) — split crate logic into concern-named modules. Enforced by the `ast-grep` rule `scripts/sg-rules/declare-only-aggregator.yml` (`make structure`). Reorg is criteria-driven, never automatic — a prompt to look, not a mandate to split. Two signals: (1) a single non-test file grows past roughly **300–400 lines of real code** (code only — exclude test code including `#[cfg(test)]`/`#[test]`, comments, and blanks; a soft average) **and** mixes several distinct concerns, so a reader must scan it all; length alone is never the verdict, concern-mixing is. (2) A single module/crate accumulates **more than ~10 non-test files** (excluding `test_support`/`tests`) that fall into **2–3+ separable concern groups** which are not tightly coupled — lift each cohesive group into its own concern-named submodule folder (nested `mod.rs`), so a reader lands in the right file *and folder* from the layout alone. Keep it criteria-driven — only where the groups are genuinely separable and it improves maintainability; a cohesive single-concern file/module is fine at any size. The declare-only gate is enforced; the reorg triggers are advisory (reviewer judgment).
+- `lib.rs`/`mod.rs` contain declarations and re-exports only; `make structure` enforces this through `scripts/sg-rules/declare-only-aggregator.yml`. Use concern-named modules. Review mixed-concern files around 300–400 non-test code lines, or modules with roughly 10+ files spanning 2–3 separable groups. These are advisory signals, not size limits; split only where ownership becomes clearer.
 - `#![warn(missing_docs)]` on all crates
 - `#[must_use]` on all `with_*` builder methods
 - `#[non_exhaustive]` on public enums that may grow
@@ -68,11 +68,12 @@ When adding a new foundation crate: create it under `core/rskit-<name>/`, add it
 - No `unsafe` without `// SAFETY:` comment
 - No `unwrap()` / `expect()` in library code (tests OK)
 - `AppResult<T>` alias for error handling throughout
-- Treat a long positional argument list as a design signal: when several arguments form a cohesive group (a request context, options, run state, …), prefer a builder or parameter struct (`#[derive(Default)]`) for call-site clarity, non-breaking extension, and mis-order safety among same-typed arguments. `rustfmt` already wraps long signatures (`max_width = 100`), so this is not a line-wrap argument — the real reason is that Rust has no named, default, or optional arguments, so a struct or builder is the idiom for optional-input or many-input calls. This is guidance for better structure, not a hard limit — never force artificial grouping or bundle genuinely distinct arguments when doing so would hurt readability or maintainability.
+- Use builders or parameter structs for cohesive request/options/state inputs, especially same-typed positional arguments. Group by meaning, not line length; retain distinct arguments when grouping would obscure the API.
 - Conventional Commits: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`
 
 ## Documentation
 
+- Write concise, task-first explanations. Preserve contracts, safety, useful examples, and release history; remove repetition and implementation narration. Skills link canonical procedures.
 - Write Markdown paragraphs as natural, continuous source lines. Do not hard-wrap prose to a column limit or insert source newlines for visual presentation; Markdown renderers handle viewport-aware wrapping. Keep intentional structure such as paragraph breaks, headings, lists, blockquotes, tables, mermaid diagrams, and fenced or indented code blocks.
 - Apply the same rule to prose in `//!`/`///` rustdoc and `//` comments: do not introduce arbitrary column-based breaks. Preserve rustdoc formatting conventions for code examples, directives, lists, and tables. The `rustfmt` `max_width` limit is for code, not prose.
 - Comments and rustdoc describe the code as it is now — not history, plans, or the process that produced it.
