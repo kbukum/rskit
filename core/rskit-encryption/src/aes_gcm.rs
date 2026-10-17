@@ -1,103 +1,52 @@
 //! AES-256-GCM encryption implementation.
 
-use aes_gcm::{
-    Aes256Gcm, Nonce,
-    aead::{Aead, KeyInit, Payload},
-};
-use rskit_errors::{AppError, AppResult, ErrorCode};
-use sha2::Sha256;
-use zeroize::Zeroize;
+use rskit_errors::AppResult;
 
-use crate::envelope::{Envelope, KEY_LEN, NONCE_SIZE, PBKDF2_ITERATIONS, SALT_SIZE};
+use crate::key::MasterKey;
 use crate::traits::{Algorithm, Encryptor};
 
 /// AES-256-GCM encryptor.
 ///
-/// Uses PBKDF2-SHA256 for key derivation with a random 16-byte salt per encryption. Output format:
-/// `base64(version[1] || algorithm[1] || salt[16] || nonce[12] || ciphertext)`.
+/// Each encryption derives a fresh message key from a random 16-byte salt. Output format:
+/// `base64(version[1] || algorithm[1] || salt[16] || nonce[12] || ciphertext)`, where version 1
+/// means a PBKDF2-SHA256 passphrase and version 2 means HKDF-SHA256 key material.
 pub struct AesGcmEncryptor {
-    passphrase: Vec<u8>,
+    key: MasterKey,
 }
 
 impl AesGcmEncryptor {
-    /// Creates a new AES-256-GCM encryptor.
-    ///
-    /// The passphrase is stored and used with PBKDF2-SHA256 to derive keys per operation.
+    /// Creates a AES-256-GCM encryptor from a passphrase, stretched with PBKDF2-SHA256 per operation.
     pub fn new(key: &[u8]) -> Self {
         Self {
-            passphrase: key.to_vec(),
+            key: MasterKey::passphrase(key),
         }
     }
 
-    fn derive_key(&self, salt: &[u8]) -> [u8; KEY_LEN] {
-        let mut key = [0u8; KEY_LEN];
-        pbkdf2::pbkdf2_hmac::<Sha256>(&self.passphrase, salt, PBKDF2_ITERATIONS, &mut key);
-        key
-    }
-}
-
-impl Drop for AesGcmEncryptor {
-    fn drop(&mut self) {
-        self.passphrase.zeroize();
+    /// Creates a AES-256-GCM encryptor from uniformly random key material of at least 32 bytes,
+    /// such as a mounted key file. Message keys come from HKDF-SHA256, so operations are cheap.
+    ///
+    /// # Errors
+    ///
+    /// Returns `InvalidInput` when the key is shorter than 32 bytes.
+    pub fn from_key_material(key: &[u8]) -> AppResult<Self> {
+        Ok(Self {
+            key: MasterKey::key_material(key)?,
+        })
     }
 }
 
 impl Encryptor for AesGcmEncryptor {
     fn encrypt(&self, plaintext: &[u8]) -> AppResult<String> {
-        let salt: [u8; SALT_SIZE] = rand::random();
-
-        let mut key_bytes = self.derive_key(&salt);
-        let cipher = Aes256Gcm::new((&key_bytes[..]).into());
-        key_bytes.zeroize();
-
-        let nonce_bytes: [u8; NONCE_SIZE] = rand::random();
-        let nonce = Nonce::from_slice(&nonce_bytes);
-        let aad = crate::envelope::associated_data(Algorithm::AesGcm, &salt, &nonce_bytes);
-
-        let ciphertext = cipher
-            .encrypt(
-                nonce,
-                Payload {
-                    msg: plaintext,
-                    aad: &aad,
-                },
-            )
-            .map_err(|_| AppError::new(ErrorCode::Internal, "encryption failed"))?;
-
-        Ok(Envelope::encode(
+        self.key.seal(
             Algorithm::AesGcm,
-            &salt,
-            &nonce_bytes,
-            &ciphertext,
-        ))
+            plaintext,
+            &rand::random(),
+            &rand::random(),
+        )
     }
 
     fn decrypt(&self, ciphertext: &str) -> AppResult<Vec<u8>> {
-        let envelope = Envelope::decode(ciphertext)?;
-        if envelope.algorithm()? != Algorithm::AesGcm {
-            return Err(AppError::new(
-                ErrorCode::InvalidFormat,
-                "ciphertext algorithm does not match encryptor",
-            ));
-        }
-
-        let mut key_bytes = self.derive_key(envelope.salt());
-        let cipher = Aes256Gcm::new((&key_bytes[..]).into());
-        key_bytes.zeroize();
-
-        let nonce = Nonce::from_slice(envelope.nonce());
-
-        cipher
-            .decrypt(
-                nonce,
-                Payload {
-                    msg: envelope.ciphertext(),
-                    aad: envelope.associated_data(),
-                },
-            )
-            .map_err(|_| {
-                AppError::new(ErrorCode::InvalidFormat, "ciphertext authentication failed")
-            })
+        self.key.open(Algorithm::AesGcm, ciphertext)
     }
 
     fn algorithm(&self) -> Algorithm {
@@ -108,6 +57,7 @@ impl Encryptor for AesGcmEncryptor {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rskit_errors::ErrorCode;
 
     #[test]
     fn test_encrypt_decrypt_roundtrip() {

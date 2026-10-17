@@ -4,8 +4,9 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use rskit_errors::{AppError, AppResult, ErrorCode};
 
 use crate::Algorithm;
+use crate::key::Derivation;
 
-/// Random salt length used by PBKDF2-SHA256.
+/// Random salt length used by key derivation.
 pub(crate) const SALT_SIZE: usize = 16;
 /// AEAD nonce length for AES-GCM and ChaCha20-Poly1305.
 pub(crate) const NONCE_SIZE: usize = 12;
@@ -14,7 +15,6 @@ pub(crate) const PBKDF2_ITERATIONS: u32 = 600_000;
 /// Symmetric encryption key length for supported algorithms.
 pub(crate) const KEY_LEN: usize = 32;
 
-const VERSION: u8 = 1;
 const HEADER_SIZE: usize = 1 + 1 + SALT_SIZE + NONCE_SIZE;
 const AEAD_TAG_SIZE: usize = 16;
 
@@ -26,13 +26,14 @@ pub(crate) struct Envelope {
 impl Envelope {
     /// Encode a sealed ciphertext envelope as base64.
     pub(crate) fn encode(
+        derivation: Derivation,
         algorithm: Algorithm,
         salt: &[u8; SALT_SIZE],
         nonce: &[u8; NONCE_SIZE],
         ciphertext: &[u8],
     ) -> String {
         let mut data = Vec::with_capacity(HEADER_SIZE + ciphertext.len());
-        data.push(VERSION);
+        data.push(derivation.version());
         data.push(algorithm.id());
         data.extend_from_slice(salt);
         data.extend_from_slice(nonce);
@@ -53,7 +54,7 @@ impl Envelope {
                 "ciphertext envelope is too short",
             ));
         }
-        if data[0] != VERSION {
+        if Derivation::from_version(data[0]).is_none() {
             return Err(AppError::new(
                 ErrorCode::InvalidFormat,
                 "unsupported ciphertext envelope version",
@@ -67,6 +68,16 @@ impl Envelope {
         }
 
         Ok(Self { data })
+    }
+
+    /// Return the key derivation declared by this envelope's version.
+    pub(crate) fn derivation(&self) -> AppResult<Derivation> {
+        Derivation::from_version(self.data[0]).ok_or_else(|| {
+            AppError::new(
+                ErrorCode::InvalidFormat,
+                "unsupported ciphertext envelope version",
+            )
+        })
     }
 
     /// Return the algorithm declared by this envelope.
@@ -99,12 +110,13 @@ impl Envelope {
 
 /// Associated data for a newly generated envelope header.
 pub(crate) fn associated_data(
+    derivation: Derivation,
     algorithm: Algorithm,
     salt: &[u8; SALT_SIZE],
     nonce: &[u8; NONCE_SIZE],
 ) -> [u8; HEADER_SIZE] {
     let mut aad = [0u8; HEADER_SIZE];
-    aad[0] = VERSION;
+    aad[0] = derivation.version();
     aad[1] = algorithm.id();
     aad[2..2 + SALT_SIZE].copy_from_slice(salt);
     aad[2 + SALT_SIZE..].copy_from_slice(nonce);

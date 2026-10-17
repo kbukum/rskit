@@ -5,10 +5,12 @@
 //! and decryption of sensitive data using either AES-256-GCM (default, with hardware acceleration)
 //! or ChaCha20-Poly1305 (modern, performant without AES-NI).
 //!
-//! Keys are derived from passphrases using PBKDF2-SHA256 with 600,000 iterations
-//! and a random 16-byte salt per encryption operation.
+//! Passphrases are stretched with PBKDF2-SHA256 (600,000 iterations). Random key material of at
+//! least 32 bytes, such as a mounted key file, uses [`new_key_material_encryptor`] and HKDF-SHA256
+//! instead. Each encryption uses a random 16-byte salt.
 //!
-//! Ciphertext format: `base64(version[1] || algorithm[1] || salt[16] || nonce[12] || ciphertext)`.
+//! Ciphertext format: `base64(version[1] || algorithm[1] || salt[16] || nonce[12] || ciphertext)`,
+//! where version 1 marks a passphrase and version 2 key material. The format matches gokit.
 //!
 //! # Examples
 //!
@@ -33,6 +35,7 @@ pub mod chacha20;
 pub mod traits;
 
 mod envelope;
+mod key;
 
 pub use aes_gcm::AesGcmEncryptor;
 pub use chacha20::ChaCha20Encryptor;
@@ -40,7 +43,7 @@ pub use traits::{Algorithm, Encryptor};
 
 mod factory;
 
-pub use factory::new_encryptor;
+pub use factory::{new_encryptor, new_key_material_encryptor};
 
 #[cfg(test)]
 mod tests;

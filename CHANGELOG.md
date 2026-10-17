@@ -6,6 +6,7 @@ Notable changes, following [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 ### Added
 
+- **encryption**: `new_key_material_encryptor` and `from_key_material` derive message keys from random key material (32 bytes or more, such as mounted key files) with HKDF-SHA256 in envelope version 2, so operations take microseconds instead of tens of milliseconds. Passphrase and key-material ciphertexts never open each other, and the format matches gokit through shared test vectors.
 - **bench**: async semantic-similarity and LLM-judge metrics with bounded provider calls, validated results, and scoring provenance.
 - **llm**: a canonical token-counting contract, heuristic default, and opt-in tiktoken/HuggingFace adapters.
 - **bench**: token-usage metrics and explicit optimization direction for meaningful run comparisons.
@@ -16,6 +17,14 @@ Notable changes, following [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 - **Breaking (bench)**: `Metric::compute` and `Suite::compute` now return `AppResult`.
 - **Breaking (bench)**: `RunProvenance` adds judge provenance and becomes non-exhaustive; construct from `Default` and use open patterns.
+
+### Fixed
+
+- **bench**: semantic similarity rejects empty or dimension-inconsistent provider embeddings instead of scoring them as zero similarity.
+
+### Security
+
+- Update `rustls` to 0.23.46, `quinn-proto` to 0.11.19 and `zip` to 9 to resolve RUSTSEC-2026-0346 to 0349 and the `quinn-proto` and `zip` advisories; `rskit-fs` archive extraction adapts to the zip 9 name API.
 
 ## [v0.2.0-alpha.8] - 2026-08-16
 
