@@ -6,7 +6,8 @@ Symmetric encryption utilities with support for AES-256-GCM and ChaCha20-Poly130
 
 - **AES-256-GCM**: Default algorithm with hardware acceleration on modern CPUs
 - **ChaCha20-Poly1305**: Modern AEAD cipher, fast on CPUs without AES-NI
-- **PBKDF2-SHA256**: Key derivation with 600,000 iterations and random salt
+- **PBKDF2-SHA256**: Passphrase stretching with 600,000 iterations and random salt
+- **HKDF-SHA256**: Cheap derivation for random key material such as mounted key files
 - **Versioned envelope**: Ciphertexts carry format and algorithm identifiers
 - **Thread-safe**: All encryptors are `Send + Sync` for use across async boundaries
 - **Automatic nonce handling**: Random nonce generated for each encryption
@@ -45,10 +46,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Key Derivation
 
-Keys are derived from passphrases using **PBKDF2-SHA256** with:
-- **600,000 iterations**
-- **Random 16-byte salt** per encryption operation
-- Salt is stored in the versioned ciphertext envelope for extraction during decryption
+Every encryption derives a fresh message key from the master key and a random 16-byte salt stored in the envelope. How it derives depends on what the master key is:
+
+- **Passphrase** (`new_encryptor`, `::new`): a human-chosen secret is stretched with PBKDF2-SHA256 at 600,000 iterations. This costs tens of milliseconds per operation, by design.
+- **Key material** (`new_key_material_encryptor`, `::from_key_material`): a uniformly random key of at least 32 bytes, such as a mounted key file, is expanded with HKDF-SHA256 using the info string `kit.encryption.v2/<algorithm name>`. This takes microseconds. Shorter keys are refused with `InvalidInput`.
+
+```rust
+use rskit_encryption::{new_key_material_encryptor, Algorithm};
+
+fn seal(mounted_key: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
+    let encryptor = new_key_material_encryptor(mounted_key, Algorithm::AesGcm)?;
+    Ok(encryptor.encrypt(b"sensitive data")?)
+}
+```
 
 ## Ciphertext Format
 
@@ -56,7 +66,7 @@ Keys are derived from passphrases using **PBKDF2-SHA256** with:
 base64(version[1] || algorithm[1] || salt[16] || nonce[12] || ciphertext)
 ```
 
-The version and algorithm header is authenticated as AEAD associated data, so tampering with envelope metadata fails decryption.
+The version records the derivation: 1 for a passphrase, 2 for key material. An encryptor opens only its own version, so a passphrase never opens key-material ciphertext or the reverse. The header is authenticated as AEAD associated data, so tampering with it fails decryption. gokit's `encryption` package produces the same envelopes; both kits test the same vectors.
 
 ## Error Handling
 
@@ -69,7 +79,8 @@ All operations return `AppResult<T>` for consistent error handling across rskit:
 ## Security Considerations
 
 - Each encryption generates a unique random salt and nonce
-- PBKDF2 with 600k iterations resists brute-force and rainbow table attacks
+- PBKDF2 with 600k iterations resists brute-force and rainbow table attacks on passphrases
+- Use key material only for random keys; a human-chosen password needs the passphrase mode
 - Both algorithms provide authenticated encryption (AEAD)
 - Key material is zeroized when the encryptor is dropped
 - The same plaintext encrypted twice produces different ciphertext

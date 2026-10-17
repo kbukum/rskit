@@ -299,10 +299,16 @@ pub fn extract_zip(archive: &Path, dest: &Path, limits: ExtractLimits) -> AppRes
             .by_index(index)
             .map_err(|error| extract_zip_error(archive, "read zip member", error))?;
         if member.is_symlink() {
-            return Err(unsafe_link_error(archive, member.name()));
+            return Err(unsafe_link_error(
+                archive,
+                &String::from_utf8_lossy(member.name_raw()),
+            ));
         }
         let Some(name) = member.enclosed_name() else {
-            return Err(escape_error(archive, member.name()));
+            return Err(escape_error(
+                archive,
+                &String::from_utf8_lossy(member.name_raw()),
+            ));
         };
         let target = match safe_member_path(archive, dest, &name)? {
             MemberPath::DirectoryMarker => continue,
@@ -702,7 +708,7 @@ mod tests {
         let mut archive = zip::ZipArchive::new(std::fs::File::open(&out).unwrap()).unwrap();
         assert_eq!(archive.len(), 1);
         let mut member = archive.by_index(0).unwrap();
-        assert_eq!(member.name(), "toven.exe");
+        assert_eq!(member.name().unwrap(), "toven.exe");
         let mut contents = Vec::new();
         member.read_to_end(&mut contents).unwrap();
         assert_eq!(contents, b"hello-zip");
