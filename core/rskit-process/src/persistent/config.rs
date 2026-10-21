@@ -132,10 +132,7 @@ impl PersistentOutput {
 
 /// Byte observers for persistent process output.
 ///
-/// Callbacks run on stdout/stderr reader threads with arbitrary chunk boundaries. Keep them fast
-/// and non-blocking; offload synchronous I/O
-/// or heavier processing to another worker to avoid stalling the reader thread
-/// and backing up the child process pipe.
+/// Callbacks run on dedicated stdout/stderr reader threads with arbitrary chunk boundaries. They may apply bounded blocking backpressure; the consumer must keep draining during readiness and shutdown. Delivery errors propagate through readiness or process completion. An observed reader that outlives the shutdown grace reports a timeout; callbacks must bound their own waits because OS threads cannot be forcibly aborted.
 #[derive(Clone, Default)]
 pub struct PersistentOutputObserver {
     stdout_bytes: Option<OutputBytesCallback>,
@@ -161,18 +158,24 @@ impl PersistentOutputObserver {
 
     /// Observe each stdout byte chunk read from the persistent process.
     ///
-    /// The callback runs on the stdout reader thread and must be fast/non-blocking.
+    /// The callback runs on a dedicated reader thread and may apply bounded blocking backpressure.
     #[must_use]
-    pub fn with_stdout_bytes(mut self, callback: impl Fn(&[u8]) + Send + Sync + 'static) -> Self {
+    pub fn with_stdout_bytes(
+        mut self,
+        callback: impl Fn(&[u8]) -> crate::AppResult<()> + Send + Sync + 'static,
+    ) -> Self {
         self.stdout_bytes = Some(std::sync::Arc::new(callback));
         self
     }
 
     /// Observe each stderr byte chunk read from the persistent process.
     ///
-    /// The callback runs on the stderr reader thread and must be fast/non-blocking.
+    /// The callback runs on a dedicated reader thread and may apply bounded blocking backpressure.
     #[must_use]
-    pub fn with_stderr_bytes(mut self, callback: impl Fn(&[u8]) + Send + Sync + 'static) -> Self {
+    pub fn with_stderr_bytes(
+        mut self,
+        callback: impl Fn(&[u8]) -> crate::AppResult<()> + Send + Sync + 'static,
+    ) -> Self {
         self.stderr_bytes = Some(std::sync::Arc::new(callback));
         self
     }
@@ -246,8 +249,8 @@ mod tests {
     #[test]
     fn persistent_output_observer_stores_byte_callbacks() {
         let observer = PersistentOutputObserver::new()
-            .with_stdout_bytes(|_| {})
-            .with_stderr_bytes(|_| {});
+            .with_stdout_bytes(|_| Ok(()))
+            .with_stderr_bytes(|_| Ok(()));
         let config = PersistentConfig::default().with_output_observer(observer);
 
         let observer = config.output_observer.as_ref().expect("observer is set");
@@ -262,7 +265,7 @@ mod tests {
         assert_eq!(config.readiness_timeout, Duration::from_secs(30));
         assert_eq!(config.shutdown_grace_period, Duration::from_secs(5));
 
-        let observer = PersistentOutputObserver::new().with_stdout_bytes(|_| {});
+        let observer = PersistentOutputObserver::new().with_stdout_bytes(|_| Ok(()));
         let rendered = format!("{observer:?}");
         assert!(rendered.contains("stdout_bytes: true"));
         assert!(rendered.contains("stderr_bytes: false"));

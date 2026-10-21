@@ -12,7 +12,9 @@ Process and subprocess execution with explicit I/O modes, timeout handling, and 
 
 PTY-backed terminal fidelity and live parent-stdin forwarding are intentionally not exposed until those modes are implemented with documented platform guarantees.
 
-Line observers split deterministically on `\n`, `\r`, and `\r\n`. Invalid UTF-8 is passed to line observers lossily; use raw-byte observers for binary output.
+Line observers split deterministically on `\n`, `\r`, and `\r\n`. Invalid UTF-8 is passed to line observers lossily; use raw-byte observers for binary output. Raw-byte observers are async sinks returning `AppResult<()>`: the reader awaits each delivery, so a slow consumer pauses the child instead of losing output. Sink failures propagate through process completion. Observed output must reach EOF and finish delivery within `LifecyclePolicy::grace_period` after the child exits, including in PTY mode. Otherwise the runner reports a timeout, even if the sink is idle but a descendant still holds the pipe open. Capture-only mode instead permits bounded partial capture. Line observers run inline and must not block.
+
+Persistent byte callbacks also return `AppResult<()>` and run on dedicated OS reader threads. They may apply bounded blocking backpressure, but the consumer must keep draining during readiness and shutdown. A blocked callback delays output-based readiness and counts against its timeout. Reader errors fail readiness promptly with their original cause. Observed readers that do not finish within `PersistentConfig::shutdown_grace_period` report a timeout; their OS threads cannot be forcibly aborted, so callbacks must bound their own waits.
 
 ## Capturing output
 

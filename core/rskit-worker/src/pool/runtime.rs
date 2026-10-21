@@ -157,7 +157,9 @@ where
         self.semaphore.available_permits()
     }
 
-    /// Stop accepting work and ask the runner loop to exit.
+    /// Stop accepting work and cancel accepted tasks that have not started.
+    ///
+    /// New submissions return [`ErrorCode::ServiceUnavailable`]; unstarted task handles return [`ErrorCode::Cancelled`]. Running tasks retain their existing cancellation tokens.
     pub fn close(&self) {
         self.shutdown.cancel();
         self.queue.close();
@@ -220,17 +222,12 @@ where
     let _ = envelope.result_tx.send(Err(error));
 }
 
-/// Complete a dequeued envelope with a `ServiceUnavailable` error when the pool is shutting down before the task could be dispatched.
-/// Without this the envelope's `result_tx` would simply be dropped,
-/// leaving any awaiting `TaskHandle::result()` to surface the resulting `RecvError` as a generic channel-closed error rather than a meaningful "pool is shutting down".
+/// Cancel accepted work that shutdown prevented from starting, without masking errors from running tasks.
 fn fail_envelope_shutdown<I, O>(envelope: Envelope<I, O>, pool_name: &str)
 where
     O: Clone + Send + 'static,
 {
-    let error = AppError::new(
-        ErrorCode::ServiceUnavailable,
-        format!("pool '{pool_name}' is shutting down"),
-    );
+    let error = AppError::cancelled(format!("queued task in pool '{pool_name}'"));
     let _ = envelope.events_bcast.send(Event::error(
         envelope.id,
         format!("{pool_name}/shutdown"),
@@ -313,13 +310,7 @@ async fn runner_loop<I, O>(
         }
     }
 
-    // Fail any envelopes still queued at shutdown with the same
-    // `ServiceUnavailable` shutdown error as a dequeued task, before draining the
-    // in-flight tasks. Queued work never started, so it is failed immediately;
-    // `Pool::close` closes the queue alongside the shutdown signal, so this drain
-    // terminates promptly. Without it the queued envelopes' result channels are
-    // simply dropped, surfacing a generic "task dropped" internal error to the
-    // caller instead of a clean shutdown signal.
+    // The queue is closed, so cancel its remaining accepted work before draining running tasks.
     while let Some(envelope) = receiver.recv().await {
         fail_envelope_shutdown(envelope, &pool_name);
     }
@@ -435,7 +426,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn queued_tasks_fail_with_service_unavailable_on_shutdown() {
+    async fn queued_tasks_are_cancelled_on_shutdown() {
         use std::sync::Arc;
 
         use tokio::sync::Notify;
@@ -482,19 +473,20 @@ mod tests {
             pool.submit(4).await.unwrap(),
         ];
 
-        // Stop accepting and signal shutdown; queued work must fail cleanly.
+        // Accepted but unstarted work is cancelled; new submissions remain unavailable.
         pool.close();
 
         for handle in queued {
             let error = handle.result().await.expect_err("queued task must fail");
             assert_eq!(
                 error.code(),
-                ErrorCode::ServiceUnavailable,
-                "queued tasks must surface a clean shutdown error, not a generic drop"
+                ErrorCode::Cancelled,
+                "shutdown must cancel accepted work rather than report an infrastructure failure"
             );
         }
 
         // Let the blocked task finish so the runner can exit cleanly.
         release.notify_one();
+        pool.shutdown().await.unwrap();
     }
 }

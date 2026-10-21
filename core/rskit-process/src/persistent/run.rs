@@ -133,7 +133,7 @@ fn start_persistent_impl(
 
     match &persistent_config.readiness {
         Started => {
-            let _ = ready_tx.send(());
+            let _ = ready_tx.send(Ok(()));
         }
         CommandReadiness(command) => {
             if let Err(error) = run_readiness_command(
@@ -143,30 +143,33 @@ fn start_persistent_impl(
                 persistent_config.shutdown_grace_period,
                 cancel.clone(),
             ) {
-                let mut process =
+                let error = ready_rx.try_iter().find_map(Result::err).unwrap_or(error);
+                let process =
                     persistent_process(spawned, process_config.lifecycle, persistent_config);
-                // Reuse the normal lifecycle cleanup
-                // so partially-started processes are terminated the same way as explicit shutdown.
-                let _ = process.shutdown_inner();
-                return Err(error);
+                return Err(process.cleanup_startup(error));
             }
-            let _ = ready_tx.send(());
+            let _ = ready_tx.send(Ok(()));
         }
         OutputContains(_) => {}
     }
     drop(ready_tx);
 
-    if let Err(error) = wait_for_readiness(
+    let readiness = match wait_for_readiness(
         &ready_rx,
         persistent_config.readiness_timeout,
         &cancel,
         &spawned.cancelled,
     ) {
-        let readiness_error = readiness_wait_error(&mut spawned.child, error, &spawned.cancelled)?;
-        let mut process = persistent_process(spawned, process_config.lifecycle, persistent_config);
-        // Reuse the normal lifecycle cleanup so readiness failures do not leak the child.
-        let _ = process.shutdown_inner();
-        return Err(readiness_error);
+        Ok(result) => result,
+        Err(error) => Err(
+            match readiness_wait_error(&mut spawned.child, error, &spawned.cancelled) {
+                Ok(error) | Err(error) => error,
+            },
+        ),
+    };
+    if let Err(error) = readiness {
+        let process = persistent_process(spawned, process_config.lifecycle, persistent_config);
+        return Err(process.cleanup_startup(error));
     }
 
     let stdout_startup = take_capture(&spawned.stdout);
@@ -266,5 +269,5 @@ fn persistent_process(
     signal: LifecyclePolicy,
     config: &PersistentConfig,
 ) -> PersistentProcess {
-    new_process(spawned, signal, config.shutdown_grace_period)
+    new_process(spawned, signal, config)
 }

@@ -8,32 +8,32 @@ use tokio::{
 use crate::capture::{BoundedOutput, SharedOutput, take_shared};
 use crate::{AppError, AppResult, command::DEFAULT_MAX_OUTPUT_BYTES};
 
-use super::observer::{OutputBytesCallback, OutputLineCallback};
+use super::observer::{OutputBytesSink, OutputLineCallback};
 
 pub(in crate::runner) fn spawn_reader<R>(
     reader: Option<R>,
     capture: SharedOutput,
     max_output_bytes: Option<usize>,
     line_callback: Option<OutputLineCallback>,
-    bytes_callback: Option<OutputBytesCallback>,
+    bytes_sink: Option<OutputBytesSink>,
     retain_output: bool,
 ) -> Option<JoinHandle<AppResult<()>>>
 where
     R: AsyncRead + Unpin + Send + 'static,
 {
-    reader.map(|reader| match (line_callback, bytes_callback) {
+    reader.map(|reader| match (line_callback, bytes_sink) {
         (None, None) => tokio::spawn(read_output(
             reader,
             capture,
             max_output_bytes,
             retain_output,
         )),
-        (line_callback, bytes_callback) => tokio::spawn(read_observed_output(
+        (line_callback, bytes_sink) => tokio::spawn(read_observed_output(
             reader,
             capture,
             max_output_bytes,
             line_callback,
-            bytes_callback,
+            bytes_sink,
             retain_output,
         )),
     })
@@ -41,27 +41,35 @@ where
 
 /// Await a reader/stdin task, bounding the wait by `grace`.
 ///
-/// On the normal path the child has already exited, so the pipe reaches EOF
-/// and the task finishes well within `grace`. A task still running after `grace` —
-/// a reader blocked because a surviving descendant inherited and holds the pipe open —
-/// is aborted (dropping our read end) rather than awaited forever.
-/// The bytes it captured before being abandoned remain available through the shared buffer,
-/// so the caller still recovers partial output.
+/// A task still running after `grace` is aborted and joined rather than detached. When byte delivery is required, expiry is a timeout error: a slow sink or an inherited pipe must not silently lose output. Capture-only callers can recover partial bytes from the shared buffer.
 pub(in crate::runner) async fn join_within(
     task: Option<JoinHandle<AppResult<()>>>,
     grace: Duration,
+    require_delivery: bool,
 ) -> AppResult<()> {
-    let Some(task) = task else {
+    let Some(mut task) = task else {
         return Ok(());
     };
-    let abort = task.abort_handle();
-    match tokio::time::timeout(grace, task).await {
+    match tokio::time::timeout(grace, &mut task).await {
         Ok(Ok(result)) => result,
-        Ok(Err(join_error)) if join_error.is_cancelled() => Ok(()),
+        Ok(Err(join_error)) if join_error.is_cancelled() && !require_delivery => Ok(()),
         Ok(Err(join_error)) => Err(AppError::internal(join_error)),
-        Err(_elapsed) => {
-            abort.abort();
-            Ok(())
+        Err(elapsed) => {
+            task.abort();
+            match task.await {
+                Ok(result) => result?,
+                Err(error) if error.is_cancelled() => {}
+                Err(error) => return Err(AppError::internal(error)),
+            }
+            if require_delivery {
+                Err(AppError::new(
+                    crate::ErrorCode::Timeout,
+                    "process output delivery did not complete within the post-exit grace period",
+                )
+                .with_cause(elapsed))
+            } else {
+                Ok(())
+            }
         }
     }
 }
@@ -100,7 +108,7 @@ async fn read_observed_output<R>(
     capture: SharedOutput,
     max_output_bytes: Option<usize>,
     line_callback: Option<OutputLineCallback>,
-    bytes_callback: Option<OutputBytesCallback>,
+    bytes_sink: Option<OutputBytesSink>,
     retain_output: bool,
 ) -> AppResult<()>
 where
@@ -125,8 +133,8 @@ where
             break;
         }
 
-        if let Some(callback) = &bytes_callback {
-            callback(&buffer[..read]);
+        if let Some(sink) = &bytes_sink {
+            sink(buffer[..read].to_vec()).await?;
         }
 
         if retain_output {
@@ -194,28 +202,31 @@ mod tests {
         reader: R,
         max_output_bytes: Option<usize>,
         line_callback: Option<OutputLineCallback>,
-        bytes_callback: Option<OutputBytesCallback>,
+        bytes_sink: Option<OutputBytesSink>,
         retain_output: bool,
     ) -> AppResult<BoundedOutput>
     where
         R: AsyncRead + Unpin + Send + 'static,
     {
+        let require_delivery = bytes_sink.is_some();
         let capture = shared_output();
         let task = spawn_reader(
             Some(reader),
             capture.clone(),
             max_output_bytes,
             line_callback,
-            bytes_callback,
+            bytes_sink,
             retain_output,
         );
-        join_within(task, Duration::from_secs(5)).await?;
+        join_within(task, Duration::from_secs(5), require_delivery).await?;
         Ok(captured(&capture))
     }
 
     #[tokio::test]
     async fn join_within_returns_when_no_task_is_present() {
-        join_within(None, Duration::from_millis(10)).await.unwrap();
+        join_within(None, Duration::from_millis(10), false)
+            .await
+            .unwrap();
     }
 
     #[tokio::test]
@@ -254,10 +265,11 @@ mod tests {
             let lines = Arc::clone(&lines);
             Arc::new(move |line| lines.lock().push(line.to_string()))
         };
-        let bytes_callback: OutputBytesCallback = {
+        let bytes_sink: OutputBytesSink = {
             let byte_count = Arc::clone(&byte_count);
-            Arc::new(move |chunk| {
+            Arc::new(move |chunk: Vec<u8>| {
                 byte_count.fetch_add(chunk.len(), Ordering::SeqCst);
+                Box::pin(async { Ok(()) })
             })
         };
 
@@ -265,7 +277,7 @@ mod tests {
             std::io::Cursor::new(b"one\r\ntwo\nthree"),
             Some(64),
             Some(line_callback),
-            Some(bytes_callback),
+            Some(bytes_sink),
             true,
         )
         .await
@@ -305,7 +317,11 @@ mod tests {
             std::io::Cursor::new(b"abcdef"),
             Some(0),
             None,
-            Some(Arc::new(|_| {})),
+            Some(Arc::new(
+                |_: Vec<u8>| -> crate::runner::observer::OutputBytesDelivery {
+                    Box::pin(async { Ok(()) })
+                },
+            )),
             true,
         )
         .await
@@ -313,6 +329,90 @@ mod tests {
 
         assert!(captured.bytes.is_empty());
         assert!(captured.truncated);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn observed_reader_awaits_a_slow_bytes_sink_instead_of_dropping() {
+        let (mut writer, reader) = tokio::io::duplex(16);
+        let (sink_tx, mut sink_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(1);
+        let sink: OutputBytesSink = Arc::new(move |chunk: Vec<u8>| {
+            let sink_tx = sink_tx.clone();
+            Box::pin(async move {
+                sink_tx.send(chunk).await.unwrap();
+                Ok(())
+            })
+        });
+        let task = spawn_reader(Some(reader), shared_output(), None, None, Some(sink), false);
+        let payload: Vec<u8> = (0..=255_u8).cycle().take(4096).collect();
+        let writing = tokio::spawn({
+            let payload = payload.clone();
+            async move {
+                writer.write_all(&payload).await.unwrap();
+                writer.shutdown().await.unwrap();
+            }
+        });
+
+        // Nothing drains the sink yet, so the reader stops reading and the writer stalls.
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        assert!(
+            !writing.is_finished(),
+            "a full sink must backpressure the writer"
+        );
+
+        let mut received = Vec::new();
+        while let Some(chunk) = sink_rx.recv().await {
+            received.extend_from_slice(&chunk);
+            if received.len() == payload.len() {
+                break;
+            }
+        }
+        writing.await.unwrap();
+        join_within(task, Duration::from_secs(5), true)
+            .await
+            .unwrap();
+        assert_eq!(received, payload, "every byte arrives, in order");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn stalled_byte_delivery_is_an_error_instead_of_success() {
+        let sink: OutputBytesSink =
+            Arc::new(|_| Box::pin(async { std::future::pending::<AppResult<()>>().await }));
+        let task = spawn_reader(
+            Some(std::io::Cursor::new(b"last diagnostic")),
+            shared_output(),
+            None,
+            None,
+            Some(sink),
+            false,
+        );
+        let error = join_within(task, Duration::from_millis(10), true)
+            .await
+            .expect_err("incomplete delivery must not report success");
+        assert_eq!(error.code(), crate::ErrorCode::Timeout);
+    }
+
+    #[tokio::test]
+    async fn byte_sink_errors_keep_their_code_and_cause() {
+        let sink: OutputBytesSink = Arc::new(|_| {
+            Box::pin(async {
+                Err(
+                    AppError::new(crate::ErrorCode::Conflict, "destination failed")
+                        .with_cause(std::io::Error::other("disk unavailable")),
+                )
+            })
+        });
+        let error = read_to_end(
+            std::io::Cursor::new(b"diagnostic"),
+            None,
+            None,
+            Some(sink),
+            false,
+        )
+        .await
+        .expect_err("sink failure");
+        assert_eq!(error.code(), crate::ErrorCode::Conflict);
+        assert!(error.to_string().contains("destination failed"));
+        assert!(std::error::Error::source(&error).is_some());
     }
 
     #[tokio::test]
@@ -323,7 +423,11 @@ mod tests {
 
         let capture = shared_output();
         let task = spawn_reader(Some(reader), capture, Some(8), None, None, true);
-        assert!(join_within(task, Duration::from_secs(5)).await.is_ok());
+        assert!(
+            join_within(task, Duration::from_secs(5), false)
+                .await
+                .is_ok()
+        );
     }
 
     #[tokio::test]
@@ -332,7 +436,7 @@ mod tests {
             panic!("reader panic");
         });
 
-        let error = join_within(Some(task), Duration::from_secs(5))
+        let error = join_within(Some(task), Duration::from_secs(5), false)
             .await
             .unwrap_err();
 

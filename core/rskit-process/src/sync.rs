@@ -232,9 +232,9 @@ impl BlockingChildScope {
     /// Join every worker thread within the grace period, surfacing worker errors.
     /// A worker that outlives the grace period is detached.
     fn drain(&mut self) -> AppResult<()> {
-        join_within(self.stdin.take(), self.grace)?;
-        join_within(self.stdout.take(), self.grace)?;
-        join_within(self.stderr.take(), self.grace)
+        join_within(self.stdin.take(), self.grace, false)?;
+        join_within(self.stdout.take(), self.grace, false)?;
+        join_within(self.stderr.take(), self.grace, false)
     }
 
     fn disarm(&mut self) {
@@ -274,9 +274,9 @@ impl Drop for BlockingChildScope {
             }
             let _ = child.wait();
         }
-        let _ = join_within(self.stdout.take(), self.grace);
-        let _ = join_within(self.stderr.take(), self.grace);
-        let _ = join_within(self.stdin.take(), self.grace);
+        let _ = join_within(self.stdout.take(), self.grace, false);
+        let _ = join_within(self.stderr.take(), self.grace, false);
+        let _ = join_within(self.stdin.take(), self.grace, false);
         if let Some(registration) = self.registration.take() {
             registration.unregister();
         }
@@ -481,14 +481,14 @@ mod tests {
 
     #[test]
     fn join_within_reports_none_and_worker_errors() {
-        join_within(None, Duration::from_millis(10)).unwrap();
+        join_within(None, Duration::from_millis(10), false).unwrap();
 
         let ok = thread::spawn(|| Ok(()));
-        join_within(Some(ok), Duration::from_millis(500)).unwrap();
+        join_within(Some(ok), Duration::from_millis(500), false).unwrap();
 
         let failed = thread::spawn(|| Err(AppError::new(ErrorCode::Internal, "reader failed")));
         assert_eq!(
-            join_within(Some(failed), Duration::from_millis(500))
+            join_within(Some(failed), Duration::from_millis(500), false)
                 .unwrap_err()
                 .code(),
             ErrorCode::Internal

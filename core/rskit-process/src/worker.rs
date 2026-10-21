@@ -19,7 +19,7 @@ const POLL_INTERVAL: Duration = Duration::from_millis(5);
 /// Join `handle` within `grace`, surfacing worker errors and mapping panics.
 ///
 /// Returns `Ok(())` when there is no handle or the worker finishes within `grace`.
-/// A worker still running after `grace` is detached (its handle is dropped) rather than joined forever.
+/// A worker still running after `grace` is detached (its handle is dropped) rather than joined forever. Required byte delivery reports a timeout instead of claiming completion; capture-only workers preserve their bounded partial-capture behavior.
 ///
 /// The wait polls [`JoinHandle::is_finished`] instead of spawning a watchdog thread that blocks on `join()`:
 /// a detached straggler must not leave a second thread parked in `join()` behind it,
@@ -30,6 +30,7 @@ const POLL_INTERVAL: Duration = Duration::from_millis(5);
 pub(crate) fn join_within(
     handle: Option<thread::JoinHandle<AppResult<()>>>,
     grace: Duration,
+    require_delivery: bool,
 ) -> AppResult<()> {
     let Some(handle) = handle else {
         return Ok(());
@@ -40,7 +41,18 @@ pub(crate) fn join_within(
         if remaining.is_zero() {
             // Detach the straggler: dropping the handle leaves the worker running,
             // and its bounded capture buffer caps memory until it exits once the pipe finally closes.
-            return Ok(());
+            return if require_delivery {
+                Err(AppError::new(
+                    ErrorCode::Timeout,
+                    "process output delivery did not complete within the post-exit grace period",
+                )
+                .with_cause(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "process output worker is still running",
+                )))
+            } else {
+                Ok(())
+            };
         }
         thread::sleep(remaining.min(POLL_INTERVAL));
     }
@@ -61,14 +73,15 @@ mod tests {
 
     #[test]
     fn join_within_handles_absent_finished_failed_and_panicked_workers() {
-        join_within(None, Duration::from_millis(10)).unwrap();
+        join_within(None, Duration::from_millis(10), false).unwrap();
+        join_within(None, Duration::from_millis(10), true).unwrap();
 
         let ok = thread::spawn(|| Ok(()));
-        join_within(Some(ok), Duration::from_secs(1)).unwrap();
+        join_within(Some(ok), Duration::from_secs(1), false).unwrap();
 
         let failed = thread::spawn(|| Err(AppError::new(ErrorCode::Internal, "worker failed")));
         assert_eq!(
-            join_within(Some(failed), Duration::from_secs(1))
+            join_within(Some(failed), Duration::from_secs(1), false)
                 .unwrap_err()
                 .code(),
             ErrorCode::Internal
@@ -76,7 +89,7 @@ mod tests {
 
         let panicked = thread::spawn(|| -> AppResult<()> { panic!("worker panic") });
         assert_eq!(
-            join_within(Some(panicked), Duration::from_secs(1))
+            join_within(Some(panicked), Duration::from_secs(1), false)
                 .unwrap_err()
                 .code(),
             ErrorCode::Internal
@@ -92,7 +105,7 @@ mod tests {
         });
         // The worker is still blocked,
         // so the bounded join returns without error rather than hanging.
-        join_within(Some(slow), Duration::from_millis(20)).unwrap();
+        join_within(Some(slow), Duration::from_millis(20), false).unwrap();
         let _ = unblock_tx.send(());
     }
 }

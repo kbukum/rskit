@@ -16,6 +16,7 @@ use crate::{
 
 use super::{
     cancel::CancelThread,
+    config::PersistentConfig,
     io::{Capture, ReaderThread, StdinThread, take_capture},
 };
 
@@ -46,6 +47,8 @@ pub struct PersistentProcess {
     registration: Option<RegistrationGuard>,
     _supervisor: Option<ProcessSupervisor>,
     shutdown_grace_period: Duration,
+    stdout_delivery_required: bool,
+    stderr_delivery_required: bool,
     stopped: bool,
 }
 
@@ -58,6 +61,13 @@ impl PersistentProcess {
     /// Gracefully stop the persistent process.
     pub fn shutdown(mut self) -> AppResult<ShutdownOutcome> {
         self.shutdown_inner()
+    }
+
+    pub(in crate::persistent) fn cleanup_startup(mut self, error: AppError) -> AppError {
+        match self.shutdown_inner() {
+            Ok(_) => error,
+            Err(cleanup_error) => error.with_detail("cleanup_error", cleanup_error.to_string()),
+        }
     }
 
     fn wait_inner(&mut self) -> AppResult<ProcessResult> {
@@ -158,9 +168,20 @@ impl PersistentProcess {
         cancelled: bool,
     ) -> AppResult<ProcessResult> {
         let grace = self.shutdown_grace_period;
-        join_within(self.stdin_thread.take(), grace)?;
-        join_within(self.stdout_thread.take(), grace)?;
-        join_within(self.stderr_thread.take(), grace)?;
+        let stdin = join_within(self.stdin_thread.take(), grace, false);
+        let stdout = join_within(
+            self.stdout_thread.take(),
+            grace,
+            self.stdout_delivery_required,
+        );
+        let stderr = join_within(
+            self.stderr_thread.take(),
+            grace,
+            self.stderr_delivery_required,
+        );
+        stdin?;
+        stdout?;
+        stderr?;
         let stdout = take_capture(&self.stdout);
         let mut stderr = take_capture(&self.stderr);
         let mut stderr_truncated = stderr.truncated;
@@ -287,7 +308,7 @@ pub(in crate::persistent) struct SpawnedProcess {
 pub(in crate::persistent) fn new_process(
     spawned: SpawnedProcess,
     signal: LifecyclePolicy,
-    shutdown_grace_period: Duration,
+    config: &PersistentConfig,
 ) -> PersistentProcess {
     PersistentProcess {
         child: Some(spawned.child),
@@ -302,7 +323,15 @@ pub(in crate::persistent) fn new_process(
         signal,
         registration: Some(spawned.registration),
         _supervisor: spawned.supervisor,
-        shutdown_grace_period,
+        shutdown_grace_period: config.shutdown_grace_period,
+        stdout_delivery_required: config
+            .output_observer
+            .as_ref()
+            .is_some_and(|observer| observer.stdout_bytes_callback().is_some()),
+        stderr_delivery_required: config
+            .output_observer
+            .as_ref()
+            .is_some_and(|observer| observer.stderr_bytes_callback().is_some()),
         stopped: false,
     }
 }

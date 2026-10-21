@@ -249,13 +249,74 @@ async fn observer_runs_when_capture_output_is_disabled() {
 }
 
 #[tokio::test]
+async fn a_slow_bytes_sink_receives_all_output_without_loss() {
+    const TOTAL: usize = 2 * 1024 * 1024;
+    let (sink_tx, mut sink_rx) = tokio::sync::mpsc::channel::<Vec<u8>>(1);
+    let consumer = tokio::spawn(async move {
+        let mut received = 0;
+        while let Some(chunk) = sink_rx.recv().await {
+            received += chunk.len();
+            tokio::task::yield_now().await;
+        }
+        received
+    });
+    let command = ProcessSpec::new("/bin/sh").args(["-c", "head -c 2097152 /dev/zero"]);
+    let config = ProcessConfig::default().with_io(ProcessIo::observed(
+        ObservedIo::new(
+            OutputObserver::new().with_stdout_bytes(move |bytes: Vec<u8>| {
+                let sink_tx = sink_tx.clone();
+                async move {
+                    sink_tx.send(bytes).await.unwrap();
+                    Ok(())
+                }
+            }),
+        )
+        .with_output(OutputPolicy::observe_only()),
+    ));
+
+    let result = run_with_cancel(&command, &config, CancellationToken::new())
+        .await
+        .unwrap();
+    drop(config);
+
+    assert!(result.success());
+    assert_eq!(consumer.await.unwrap(), TOTAL);
+}
+
+#[tokio::test]
+async fn incomplete_observed_delivery_returns_a_timeout_after_child_exit() {
+    let observer = OutputObserver::new().with_stdout_bytes(|_| async {
+        std::future::pending::<rskit_process::AppResult<()>>().await
+    });
+    let config = ProcessConfig::default()
+        .with_lifecycle_policy(
+            rskit_process::LifecyclePolicy::default().with_grace_period(Duration::from_millis(50)),
+        )
+        .with_io(ProcessIo::observed(
+            ObservedIo::new(observer).with_output(OutputPolicy::observe_only()),
+        ));
+    let error = run_with_cancel(
+        &ProcessSpec::new("/usr/bin/printf").arg("final diagnostic"),
+        &config,
+        CancellationToken::new(),
+    )
+    .await
+    .expect_err("incomplete observed output");
+    assert_eq!(error.code(), rskit_process::ErrorCode::Timeout);
+    assert!(error.to_string().contains("output delivery"));
+}
+
+#[tokio::test]
 async fn observer_forwards_raw_bytes_when_capture_output_is_disabled() {
     let observed = Arc::new(Mutex::new(Vec::new()));
     let command = ProcessSpec::new("/usr/bin/printf").args(["%b", "\\377raw"]);
     let config = ProcessConfig::default().with_io(ProcessIo::observed(
         ObservedIo::new(OutputObserver::new().with_stdout_bytes({
             let observed = Arc::clone(&observed);
-            move |bytes| observed.lock().extend_from_slice(bytes)
+            move |bytes: Vec<u8>| {
+                observed.lock().extend_from_slice(&bytes);
+                async { Ok(()) }
+            }
         }))
         .with_output(OutputPolicy::observe_only()),
     ));
@@ -680,4 +741,32 @@ fn blocking_drain_does_not_hang_when_a_descendant_holds_the_pipe() {
     );
     assert_eq!(result.stdout, "hello");
     assert_eq!(result.exit_code, Some(0));
+}
+
+#[tokio::test]
+async fn an_open_observed_pipe_reports_incomplete_output_even_after_delivery() {
+    let observed = Arc::new(Mutex::new(Vec::new()));
+    let delivered = Arc::clone(&observed);
+    let observer = OutputObserver::new().with_stdout_bytes(move |bytes| {
+        delivered.lock().extend_from_slice(&bytes);
+        async { Ok(()) }
+    });
+    let config = ProcessConfig::default()
+        .with_io(ProcessIo::observed(ObservedIo::new(observer)))
+        .with_lifecycle_policy(
+            rskit_process::LifecyclePolicy::default().with_grace_period(Duration::from_millis(200)),
+        );
+    let error = tokio::time::timeout(
+        Duration::from_secs(5),
+        run_with_cancel(
+            &ProcessSpec::new("/bin/sh").args(["-c", "sleep 30 & printf hello; exit 0"]),
+            &config,
+            CancellationToken::new(),
+        ),
+    )
+    .await
+    .expect("observed drain must remain bounded")
+    .expect_err("an open pipe cannot prove complete observed output");
+    assert_eq!(error.code(), ErrorCode::Timeout);
+    assert_eq!(&*observed.lock(), b"hello");
 }

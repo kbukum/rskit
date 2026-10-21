@@ -214,11 +214,17 @@ async fn observed_run_invokes_line_and_byte_callbacks_without_retaining_output()
         })
         .with_stdout_bytes({
             let bytes = Arc::clone(&stdout_bytes);
-            move |chunk| bytes.lock().extend_from_slice(chunk)
+            move |chunk: Vec<u8>| {
+                bytes.lock().extend_from_slice(&chunk);
+                async { Ok(()) }
+            }
         })
         .with_stderr_bytes({
             let bytes = Arc::clone(&stderr_bytes);
-            move |chunk| bytes.lock().extend_from_slice(chunk)
+            move |chunk: Vec<u8>| {
+                bytes.lock().extend_from_slice(&chunk);
+                async { Ok(()) }
+            }
         });
     let config = ProcessConfig::default()
         .with_io(ProcessIo::observed(

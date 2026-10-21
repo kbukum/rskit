@@ -89,11 +89,34 @@ async fn window_size_is_advertised_to_the_child() {
 }
 
 #[tokio::test]
+async fn incomplete_pty_delivery_returns_a_timeout_after_child_exit() {
+    let observer = OutputObserver::new().with_stdout_bytes(|_| async {
+        std::future::pending::<rskit_process::AppResult<()>>().await
+    });
+    let config = pty_config(PtyIo::new(observer).with_output(OutputPolicy::observe_only()))
+        .with_lifecycle_policy(
+            LifecyclePolicy::default().with_grace_period(Duration::from_millis(50)),
+        );
+    let error = run_with_cancel(
+        &ProcessSpec::new("/usr/bin/printf").arg("final diagnostic"),
+        &config,
+        CancellationToken::new(),
+    )
+    .await
+    .expect_err("incomplete PTY output");
+    assert_eq!(error.code(), ErrorCode::Timeout);
+    assert!(error.to_string().contains("output delivery"));
+}
+
+#[tokio::test]
 async fn merged_output_is_observed_live() {
     let chunks = Arc::new(Mutex::new(Vec::<u8>::new()));
     let observer = {
         let chunks = Arc::clone(&chunks);
-        OutputObserver::new().with_stdout_bytes(move |bytes| chunks.lock().extend_from_slice(bytes))
+        OutputObserver::new().with_stdout_bytes(move |bytes: Vec<u8>| {
+            chunks.lock().extend_from_slice(&bytes);
+            async { Ok(()) }
+        })
     };
     let io = PtyIo::new(observer).with_output(OutputPolicy::observe_only());
 

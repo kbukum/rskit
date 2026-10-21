@@ -1,18 +1,32 @@
-use std::sync::Arc;
+use std::{future::Future, pin::Pin, sync::Arc};
+
+use crate::AppResult;
 
 /// Callback invoked for line-oriented process output.
+///
+/// Line callbacks run inline on the async reader and must not block.
 pub type OutputLineCallback = Arc<dyn Fn(&str) + Send + Sync + 'static>;
 
-/// Callback invoked for raw process output bytes.
-pub type OutputBytesCallback = Arc<dyn Fn(&[u8]) + Send + Sync + 'static>;
+/// Callback invoked for raw process output bytes on a dedicated reader thread.
+///
+/// Persistent processes read on OS threads, so this callback may apply bounded blocking backpressure. Delivery errors propagate through process completion.
+pub type OutputBytesCallback = Arc<dyn Fn(&[u8]) -> AppResult<()> + Send + Sync + 'static>;
 
-/// Optional callbacks for line-oriented process output.
+/// Future returned by an [`OutputBytesSink`] for one chunk.
+pub type OutputBytesDelivery = Pin<Box<dyn Future<Output = AppResult<()>> + Send + 'static>>;
+
+/// Async consumer of raw process output bytes.
+///
+/// The reader awaits each delivery before reading more, so a slow consumer applies backpressure: the child blocks on a full pipe instead of output being dropped or buffered without bound. Delivery errors propagate through process completion; incomplete delivery after the post-exit grace period returns a timeout error.
+pub type OutputBytesSink = Arc<dyn Fn(Vec<u8>) -> OutputBytesDelivery + Send + Sync + 'static>;
+
+/// Optional observers for process output.
 #[derive(Clone, Default)]
 pub struct OutputObserver {
     pub(in crate::runner) stdout_line: Option<OutputLineCallback>,
     pub(in crate::runner) stderr_line: Option<OutputLineCallback>,
-    pub(in crate::runner) stdout_bytes: Option<OutputBytesCallback>,
-    pub(in crate::runner) stderr_bytes: Option<OutputBytesCallback>,
+    pub(in crate::runner) stdout_bytes: Option<OutputBytesSink>,
+    pub(in crate::runner) stderr_bytes: Option<OutputBytesSink>,
 }
 
 impl std::fmt::Debug for OutputObserver {
@@ -48,19 +62,35 @@ impl OutputObserver {
         self
     }
 
-    /// Observe raw stdout bytes.
+    /// Deliver raw stdout bytes to an async sink; the reader awaits each delivery, so a slow sink backpressures the child instead of losing output.
     #[must_use]
-    pub fn with_stdout_bytes(mut self, callback: impl Fn(&[u8]) + Send + Sync + 'static) -> Self {
-        self.stdout_bytes = Some(Arc::new(callback));
+    pub fn with_stdout_bytes<F, Fut>(mut self, sink: F) -> Self
+    where
+        F: Fn(Vec<u8>) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = AppResult<()>> + Send + 'static,
+    {
+        self.stdout_bytes = Some(bytes_sink(sink));
         self
     }
 
-    /// Observe raw stderr bytes.
+    /// Deliver raw stderr bytes to an async sink; the reader awaits each delivery, so a slow sink backpressures the child instead of losing output.
     #[must_use]
-    pub fn with_stderr_bytes(mut self, callback: impl Fn(&[u8]) + Send + Sync + 'static) -> Self {
-        self.stderr_bytes = Some(Arc::new(callback));
+    pub fn with_stderr_bytes<F, Fut>(mut self, sink: F) -> Self
+    where
+        F: Fn(Vec<u8>) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = AppResult<()>> + Send + 'static,
+    {
+        self.stderr_bytes = Some(bytes_sink(sink));
         self
     }
+}
+
+fn bytes_sink<F, Fut>(sink: F) -> OutputBytesSink
+where
+    F: Fn(Vec<u8>) -> Fut + Send + Sync + 'static,
+    Fut: Future<Output = AppResult<()>> + Send + 'static,
+{
+    Arc::new(move |chunk| Box::pin(sink(chunk)))
 }
 
 #[cfg(test)]
@@ -72,8 +102,8 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn output_observer_builders_store_callbacks_and_debug_flags() {
+    #[tokio::test]
+    async fn output_observer_builders_store_callbacks_and_debug_flags() {
         let stdout_lines = Arc::new(AtomicUsize::new(0));
         let stderr_lines = Arc::new(AtomicUsize::new(0));
         let stdout_bytes = Arc::new(AtomicUsize::new(0));
@@ -94,21 +124,27 @@ mod tests {
             })
             .with_stdout_bytes({
                 let bytes = Arc::clone(&stdout_bytes);
-                move |chunk| {
+                move |chunk: Vec<u8>| {
                     bytes.fetch_add(chunk.len(), Ordering::SeqCst);
+                    async { Ok(()) }
                 }
             })
             .with_stderr_bytes({
                 let bytes = Arc::clone(&stderr_bytes);
-                move |chunk| {
+                move |chunk: Vec<u8>| {
                     bytes.fetch_add(chunk.len(), Ordering::SeqCst);
+                    async { Ok(()) }
                 }
             });
 
         (observer.stdout_line.as_ref().unwrap())("out");
         (observer.stderr_line.as_ref().unwrap())("err");
-        (observer.stdout_bytes.as_ref().unwrap())(b"stdout");
-        (observer.stderr_bytes.as_ref().unwrap())(b"stderr");
+        (observer.stdout_bytes.as_ref().unwrap())(b"stdout".to_vec())
+            .await
+            .unwrap();
+        (observer.stderr_bytes.as_ref().unwrap())(b"stderr".to_vec())
+            .await
+            .unwrap();
 
         assert_eq!(stdout_lines.load(Ordering::SeqCst), 1);
         assert_eq!(stderr_lines.load(Ordering::SeqCst), 1);

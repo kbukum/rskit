@@ -12,6 +12,7 @@ use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use tracing::debug;
 
+use crate::process_group::group_alive;
 use crate::pty::{PtyIo, PtyMaster, PtyPair, install_controlling_tty, open_pty};
 use crate::{
     AppError, AppResult, EnvPolicy, ErrorCode, InputPolicy, ProcessConfig, ProcessResult,
@@ -74,10 +75,12 @@ pub(in crate::runner) async fn run_pty_mode(
     let child = spawn_with_etxtbsy_retry(&mut cmd)
         .await
         .map_err(|error| spawn_error("failed to spawn process", error))?;
-    let registration =
-        supervisor.register_pid_with_group(child.id().unwrap_or_default(), config.lifecycle);
+    let leader_pid = child.id().unwrap_or_default();
+    let registration = supervisor.register_pid_with_group(leader_pid, config.lifecycle);
     // The child now holds its own dup'd stdio; the parent must not keep the slave open
-    // or the master read would never observe EOF.
+    // or the master read would never observe EOF. The command owns the slave stdio
+    // handles until dropped, so release it together with the original slave.
+    drop(cmd);
     drop(slave);
 
     // Own the child and the spawned I/O tasks in a scope guard so any early
@@ -114,23 +117,23 @@ pub(in crate::runner) async fn run_pty_mode(
 
     let completion = wait_for_completion(scope.child_mut(), spec, config, cancel).await?;
 
-    // The child has exited; drain the workers within the grace period.
-    // A reader still blocked because a surviving descendant holds the PTY open is aborted rather than awaited forever,
-    // and the partial bytes it captured are still recovered from the shared buffer.
+    // Bound post-exit draining, reporting incomplete observed delivery instead of silently losing its final chunks.
     let grace = config.lifecycle.grace_period;
-    join_within(stdin_task, grace).await?;
-    join_within(reader_task, grace).await?;
+    let stdin_result = join_within(stdin_task, grace, false).await;
+    let reader_result = join_within(reader_task, grace, io.observer.stdout_bytes.is_some()).await;
     let captured_output = captured(&reader_capture);
 
     // The run completed: the tasks are joined. If the child exited it is reaped,
     // so hand ownership back on disarm. If it deliberately survived its grace
     // period (`kill_after_grace = false`), relinquish the still-live child to its
     // owned target so a later shutdown or supervisor drop reaps it.
-    if completion.survived {
+    if completion.survived || (config.lifecycle.targets_group() && group_alive(leader_pid)) {
         scope.relinquish().await;
     } else {
         scope.disarm();
     }
+    stdin_result?;
+    reader_result?;
 
     // A PTY has no separate stderr stream;
     // the only "stderr" is any synthetic termination diagnostic from the lifecycle layer.
