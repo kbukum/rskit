@@ -11,4 +11,7 @@ pub use shutdown::ShutdownSubscription;
 pub use types::{ProcessSupervisor, SupervisedAsyncChild, SupervisedBlockingChild};
 
 pub(crate) use target::OwnedChild;
-pub(crate) use termination::{AsyncReap, SyncReap, terminate_and_reap, terminate_and_wait_async};
+pub(crate) use termination::{
+    AsyncReap, SyncReap, end_lingering_group_async, end_lingering_group_blocking,
+    terminate_and_reap, terminate_and_wait_async,
+};

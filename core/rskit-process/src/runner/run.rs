@@ -11,11 +11,12 @@ use crate::{
     capture::{append_line_bounded, shared_output},
     command::spawn_error,
     process_group::group_alive,
+    supervisor::end_lingering_group_async,
 };
 
 use super::lifecycle::wait_for_completion;
 use super::observer::OutputObserver;
-use super::output::{captured, join_within, spawn_reader};
+use super::output::{captured, join_within, readers_finish_within, spawn_reader};
 use super::pipe_io::{PipeIo, inherited_config, pipe_stdin_stdio, spawn_stdin_writer, stdin_stdio};
 #[cfg(unix)]
 use super::pty::run_pty_mode;
@@ -249,8 +250,18 @@ async fn run_process(
 
     let completion = wait_for_completion(scope.child_mut(), spec, config, cancel).await?;
 
-    // Bound post-exit draining, reporting incomplete observed delivery instead of silently losing its final chunks.
+    // A descendant that outlived the leader can keep the output pipes open forever.
+    // When the policy owns the subtree, end it so the readers reach end-of-file and deliver everything.
     let grace = config.lifecycle.grace_period;
+    if !completion.survived
+        && config.lifecycle.targets_group()
+        && group_alive(leader_pid)
+        && !readers_finish_within(&[stdout_task.as_ref(), stderr_task.as_ref()], grace).await
+    {
+        end_lingering_group_async(leader_pid, config.lifecycle, grace).await;
+    }
+
+    // Bound post-exit draining, reporting incomplete observed delivery instead of silently losing its final chunks.
     let stdin_result = join_within(stdin_task, grace, false).await;
     let stdout_result = join_within(stdout_task, grace, stdout_delivery).await;
     let stderr_result = join_within(stderr_task, grace, stderr_delivery).await;

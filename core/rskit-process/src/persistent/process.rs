@@ -7,11 +7,11 @@ use std::{
 
 use crate::capture::append_line_bounded;
 use crate::process_group::{group_alive, kill_target};
-use crate::worker::join_within;
+use crate::worker::{finish_within, join_within};
 use crate::{
     AppError, AppResult, ErrorCode, LifecyclePolicy, ProcessResult, ProcessSupervisor,
     RegistrationGuard,
-    supervisor::{OwnedChild, SyncReap, terminate_and_reap},
+    supervisor::{OwnedChild, SyncReap, end_lingering_group_blocking, terminate_and_reap},
 };
 
 use super::{
@@ -102,6 +102,7 @@ impl PersistentProcess {
         if let Some(status) = self.child_mut()?.try_wait().map_err(AppError::internal)? {
             self.stopped = true;
             self.stop_cancel_thread()?;
+            self.end_group_holding_output();
             // A group target whose subtree outlived the reaped leader is retained
             // (relinquished) so a shared supervisor can still reap the survivors,
             // rather than unregistered and leaked.
@@ -136,7 +137,10 @@ impl PersistentProcess {
         cancelled: bool,
     ) -> AppResult<ProcessResult> {
         let (code, note) = match reap {
-            SyncReap::Reaped { status, .. } => (status.code(), None),
+            SyncReap::Reaped { status, .. } => {
+                self.end_group_holding_output();
+                (status.code(), None)
+            }
             SyncReap::Survived => (
                 None,
                 Some(
@@ -205,6 +209,21 @@ impl PersistentProcess {
             thread.stop()
         } else {
             Ok(())
+        }
+    }
+
+    /// After the leader exited, end an owned process group whose members still hold the output pipes, so the readers reach end-of-file and deliver everything.
+    fn end_group_holding_output(&self) {
+        if !self.group_survives() {
+            return;
+        }
+        let grace = self.shutdown_grace_period;
+        let readers = [self.stdout_thread.as_ref(), self.stderr_thread.as_ref()];
+        if finish_within(&readers, grace) {
+            return;
+        }
+        if let Some(child) = self.child.as_ref() {
+            end_lingering_group_blocking(child.id(), self.signal, grace);
         }
     }
 

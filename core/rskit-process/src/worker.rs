@@ -16,6 +16,26 @@ use crate::{AppError, AppResult, ErrorCode};
 /// How often [`join_within`] re-checks whether the worker has finished while waiting out the grace period.
 const POLL_INTERVAL: Duration = Duration::from_millis(5);
 
+/// Wait up to `grace` for every worker to finish, without consuming the handles.
+///
+/// Returns `false` when a worker is still running at the deadline, which after the leader exited usually means a surviving descendant still holds the pipe open.
+pub(crate) fn finish_within(
+    handles: &[Option<&thread::JoinHandle<AppResult<()>>>],
+    grace: Duration,
+) -> bool {
+    let deadline = Instant::now() + grace;
+    loop {
+        if handles.iter().flatten().all(|handle| handle.is_finished()) {
+            return true;
+        }
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        if remaining.is_zero() {
+            return false;
+        }
+        thread::sleep(remaining.min(POLL_INTERVAL));
+    }
+}
+
 /// Join `handle` within `grace`, surfacing worker errors and mapping panics.
 ///
 /// Returns `Ok(())` when there is no handle or the worker finishes within `grace`.

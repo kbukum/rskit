@@ -17,7 +17,7 @@ pub type OutputBytesDelivery = Pin<Box<dyn Future<Output = AppResult<()>> + Send
 
 /// Async consumer of raw process output bytes.
 ///
-/// The reader awaits each delivery before reading more, so a slow consumer applies backpressure: the child blocks on a full pipe instead of output being dropped or buffered without bound. Delivery errors propagate through process completion; incomplete delivery after the post-exit grace period returns a timeout error.
+/// The reader awaits each delivery before reading more, so a slow consumer applies backpressure: the child blocks on a full pipe instead of output being dropped or buffered without bound. Delivery errors propagate through process completion; incomplete delivery after the post-exit grace period returns a timeout error. When the lifecycle policy owns descendants, a group member still holding the pipe at that point is ended first, so its output closes and delivery can finish.
 pub type OutputBytesSink = Arc<dyn Fn(Vec<u8>) -> OutputBytesDelivery + Send + Sync + 'static>;
 
 /// Optional observers for process output.

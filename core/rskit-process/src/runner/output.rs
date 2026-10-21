@@ -10,6 +10,8 @@ use crate::{AppError, AppResult, command::DEFAULT_MAX_OUTPUT_BYTES};
 
 use super::observer::{OutputBytesSink, OutputLineCallback};
 
+const READER_POLL_INTERVAL: Duration = Duration::from_millis(10);
+
 pub(in crate::runner) fn spawn_reader<R>(
     reader: Option<R>,
     capture: SharedOutput,
@@ -37,6 +39,26 @@ where
             retain_output,
         )),
     })
+}
+
+/// Wait up to `grace` for every reader to finish, without consuming the handles.
+///
+/// Returns `false` when a reader is still running at the deadline, which after the leader exited usually means a surviving descendant still holds the pipe open.
+pub(in crate::runner) async fn readers_finish_within(
+    tasks: &[Option<&JoinHandle<AppResult<()>>>],
+    grace: Duration,
+) -> bool {
+    let deadline = tokio::time::Instant::now() + grace;
+    loop {
+        if tasks.iter().flatten().all(|task| task.is_finished()) {
+            return true;
+        }
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            return false;
+        }
+        tokio::time::sleep(remaining.min(READER_POLL_INTERVAL)).await;
+    }
 }
 
 /// Await a reader/stdin task, bounding the wait by `grace`.
