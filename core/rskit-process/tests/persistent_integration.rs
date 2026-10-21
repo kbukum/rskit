@@ -1,14 +1,98 @@
 #![allow(missing_docs)]
 
-use std::time::Duration;
+use std::{
+    error::Error,
+    sync::{Arc, mpsc},
+    time::{Duration, Instant},
+};
 
 use rskit_process::{
-    ErrorCode, InputPolicy, PersistentConfig, PersistentOutput, PersistentOutputStream,
-    PersistentReadiness, PersistentStartErrorKind, ProcessConfig, ProcessSpec, ShutdownOutcome,
-    persistent_start_error_kind, start_persistent_with_cancel,
+    ErrorCode, InputPolicy, PersistentConfig, PersistentOutput, PersistentOutputObserver,
+    PersistentOutputStream, PersistentReadiness, PersistentStartErrorKind, ProcessConfig,
+    ProcessSpec, ShutdownOutcome, persistent_start_error_kind, start_persistent_with_cancel,
 };
 use rskit_testutil::TestWorkspace;
 use tokio_util::sync::CancellationToken;
+
+#[test]
+fn output_readiness_preserves_delivery_failure_and_its_cause() {
+    for stderr in [false, true] {
+        let callback = |_: &[u8]| {
+            Err(
+                rskit_process::AppError::new(ErrorCode::Conflict, "destination failed")
+                    .with_cause(std::io::Error::other("destination unavailable")),
+            )
+        };
+        let observer = if stderr {
+            PersistentOutputObserver::new().with_stderr_bytes(callback)
+        } else {
+            PersistentOutputObserver::new().with_stdout_bytes(callback)
+        };
+        let script = if stderr {
+            "printf ready >&2; sleep 30"
+        } else {
+            "printf ready; sleep 30"
+        };
+        let config = PersistentConfig::default()
+            .with_readiness(PersistentReadiness::OutputContains("ready".into()))
+            .with_readiness_timeout(Duration::from_secs(5))
+            .with_shutdown_grace_period(Duration::from_millis(50))
+            .with_output_observer(observer);
+        let start = Instant::now();
+        let error = start_persistent_with_cancel(
+            &ProcessSpec::new("sh").args(["-c", script]),
+            &ProcessConfig::default(),
+            &config,
+            CancellationToken::new(),
+        )
+        .expect_err("delivery failure must fail readiness");
+
+        assert_eq!(error.code(), ErrorCode::Conflict);
+        assert!(start.elapsed() < Duration::from_secs(2));
+        let mut cause = error.source();
+        let mut found = false;
+        while let Some(error) = cause {
+            found |= error.to_string().contains("destination unavailable");
+            cause = error.source();
+        }
+        assert!(found, "the original delivery cause must survive cleanup");
+    }
+}
+
+#[test]
+fn persistent_wait_reports_incomplete_observed_delivery() {
+    let (entered_tx, entered_rx) = mpsc::channel();
+    let (release_tx, release_rx) = mpsc::channel();
+    let (finished_tx, finished_rx) = mpsc::channel();
+    let release_rx = Arc::new(parking_lot::Mutex::new(release_rx));
+    let observer = PersistentOutputObserver::new().with_stdout_bytes(move |_| {
+        entered_tx.send(()).unwrap();
+        release_rx
+            .lock()
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap();
+        finished_tx.send(()).unwrap();
+        Ok(())
+    });
+    let config = PersistentConfig::default()
+        .with_readiness(PersistentReadiness::Started)
+        .with_shutdown_grace_period(Duration::from_millis(20))
+        .with_output_observer(observer);
+    let run = start_persistent_with_cancel(
+        &ProcessSpec::new("sh").args(["-c", "printf diagnostic"]),
+        &ProcessConfig::default(),
+        &config,
+        CancellationToken::new(),
+    )
+    .unwrap();
+    entered_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    let result = run.process.wait();
+    release_tx.send(()).unwrap();
+    finished_rx.recv_timeout(Duration::from_secs(2)).unwrap();
+    let error = result.expect_err("an undelivered observed stream cannot succeed");
+    assert_eq!(error.code(), ErrorCode::Timeout);
+    assert!(error.source().is_some());
+}
 
 #[test]
 fn started_readiness_allows_natural_wait_to_collect_output() {

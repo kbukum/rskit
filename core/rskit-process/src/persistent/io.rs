@@ -23,7 +23,7 @@ pub(in crate::persistent) fn spawn_output_readers(
     child: &mut Child,
     stdout: &Capture,
     stderr: &Capture,
-    ready_tx: &mpsc::Sender<()>,
+    ready_tx: &mpsc::Sender<AppResult<()>>,
     config: &PersistentConfig,
 ) -> (ReaderThread, ReaderThread) {
     let matcher = match &config.readiness {
@@ -87,7 +87,7 @@ fn spawn_reader<R: Read + Send + 'static>(
     mut reader: R,
     capture: Capture,
     matcher: Option<String>,
-    ready: mpsc::Sender<()>,
+    ready: mpsc::Sender<AppResult<()>>,
     output: Option<PersistentOutputStream>,
     observer: Option<crate::runner::OutputBytesCallback>,
     max_capture_bytes: Option<usize>,
@@ -97,26 +97,38 @@ fn spawn_reader<R: Read + Send + 'static>(
         let mut ready_sent = false;
         let mut match_buffer = Vec::new();
         loop {
-            let read = reader.read(&mut buffer).map_err(AppError::internal)?;
+            let read = reader
+                .read(&mut buffer)
+                .map_err(AppError::internal)
+                .map_err(|error| report_reader_failure(error, &ready))?;
             if read == 0 {
                 break;
             }
             capture.lock().push(&buffer[..read], max_capture_bytes);
             if let Some(observer) = &observer {
-                observer(&buffer[..read]);
+                observer(&buffer[..read]).map_err(|error| report_reader_failure(error, &ready))?;
             }
             if let Some(output) = output {
-                forward_output(output, &buffer[..read])?;
+                forward_output(output, &buffer[..read])
+                    .map_err(|error| report_reader_failure(error, &ready))?;
             }
             if !ready_sent && let Some(matcher) = &matcher {
                 ready_sent = update_match_buffer(&mut match_buffer, &buffer[..read], matcher);
                 if ready_sent {
-                    let _ = ready.send(());
+                    let _ = ready.send(Ok(()));
                 }
             }
         }
         Ok(())
     })
+}
+
+fn report_reader_failure(error: AppError, ready: &mpsc::Sender<AppResult<()>>) -> AppError {
+    let error = Arc::new(error);
+    let notification = AppError::new(error.code(), error.message()).with_cause(Arc::clone(&error));
+    // Startup may already have completed; the worker join still returns the same cause.
+    let _ = ready.send(Err(notification));
+    AppError::new(error.code(), error.message()).with_cause(error)
 }
 
 fn forward_output(stream: PersistentOutputStream, bytes: &[u8]) -> AppResult<()> {
@@ -179,7 +191,10 @@ mod tests {
         let observed = Arc::new(parking_lot::Mutex::new(Vec::new()));
         let observer = {
             let observed = Arc::clone(&observed);
-            Arc::new(move |chunk: &[u8]| observed.lock().extend_from_slice(chunk))
+            Arc::new(move |chunk: &[u8]| {
+                observed.lock().extend_from_slice(chunk);
+                Ok(())
+            })
         };
         let (ready_tx, _ready_rx) = mpsc::channel();
 
@@ -192,11 +207,68 @@ mod tests {
             Some(observer),
             Some(5),
         );
-        join_within(Some(reader), Duration::from_secs(1)).expect("reader completes");
+        join_within(Some(reader), Duration::from_secs(1), true).expect("reader completes");
 
         let output = take_capture(&capture);
         assert_eq!(output.bytes, b"hello");
         assert!(output.truncated);
         assert_eq!(&*observed.lock(), b"hello world");
+    }
+
+    #[test]
+    fn reader_surfaces_delivery_failure() {
+        let (ready_tx, _ready_rx) = mpsc::channel();
+        let reader = spawn_reader(
+            Cursor::new(b"diagnostic"),
+            new_capture(),
+            None,
+            ready_tx,
+            None,
+            Some(Arc::new(|_| {
+                Err(AppError::new(ErrorCode::Conflict, "destination failed"))
+            })),
+            Some(64),
+        );
+        let error =
+            join_within(Some(reader), Duration::from_secs(1), true).expect_err("sink failure");
+        assert_eq!(error.code(), ErrorCode::Conflict);
+        assert!(error.to_string().contains("destination failed"));
+    }
+
+    #[test]
+    fn readiness_waits_for_bounded_blocking_delivery() {
+        let (entered_tx, entered_rx) = mpsc::sync_channel(1);
+        let (release_tx, release_rx) = mpsc::sync_channel(1);
+        let release_rx = parking_lot::Mutex::new(release_rx);
+        let (ready_tx, ready_rx) = mpsc::channel();
+        let reader = spawn_reader(
+            Cursor::new(b"ready"),
+            new_capture(),
+            Some("ready".into()),
+            ready_tx,
+            None,
+            Some(Arc::new(move |_| {
+                entered_tx.send(()).expect("entered");
+                release_rx
+                    .lock()
+                    .recv_timeout(Duration::from_secs(2))
+                    .expect("release");
+                Ok(())
+            })),
+            Some(64),
+        );
+        entered_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("delivery entered");
+        assert!(matches!(
+            ready_rx.try_recv(),
+            Err(mpsc::TryRecvError::Empty)
+        ));
+        release_tx.send(()).expect("release delivery");
+        join_within(Some(reader), Duration::from_secs(1), true).expect("reader completes");
+        ready_rx
+            .recv_timeout(Duration::from_secs(1))
+            .expect("ready")
+            .expect("delivery succeeded");
     }
 }

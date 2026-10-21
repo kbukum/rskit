@@ -40,6 +40,10 @@ let handle = pool.submit("hello".to_string()).await?;
 assert_eq!(handle.result().await?, "HELLO");
 ```
 
+## Shutdown
+
+Closing the pool rejects new submissions with `ServiceUnavailable` and completes accepted tasks that have not started with `Cancelled`. Running tasks keep their own cancellation tokens and return their original results or errors.
+
 ## See Also
 
 [Main repository README](https://github.com/kbukum/rskit)

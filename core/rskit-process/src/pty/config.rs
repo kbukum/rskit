@@ -100,7 +100,7 @@ mod tests {
 
     #[test]
     fn debug_reports_observer_presence() {
-        let io = PtyIo::new(OutputObserver::new().with_stdout_bytes(|_| {}));
+        let io = PtyIo::new(OutputObserver::new().with_stdout_bytes(|_| async { Ok(()) }));
         let rendered = format!("{io:?}");
         assert!(rendered.contains("PtyIo"));
         assert!(rendered.contains("stdout_bytes: true"));

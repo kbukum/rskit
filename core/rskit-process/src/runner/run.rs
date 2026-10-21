@@ -197,6 +197,8 @@ async fn run_process(
         .as_ref()
         .and_then(|observer| observer.stderr_bytes.clone());
 
+    let stdout_delivery = stdout_bytes_observer.is_some();
+    let stderr_delivery = stderr_bytes_observer.is_some();
     let mut cmd = TokioCommand::new(&spec.program);
     configure_command(&mut cmd, spec, config, stdio);
 
@@ -247,13 +249,11 @@ async fn run_process(
 
     let completion = wait_for_completion(scope.child_mut(), spec, config, cancel).await?;
 
-    // The child has exited; drain the workers within the grace period.
-    // A reader still blocked because a surviving descendant holds the pipe open is aborted rather than awaited forever,
-    // and the partial bytes it captured are still recovered from the shared buffer.
+    // Bound post-exit draining, reporting incomplete observed delivery instead of silently losing its final chunks.
     let grace = config.lifecycle.grace_period;
-    join_within(stdin_task, grace).await?;
-    join_within(stdout_task, grace).await?;
-    join_within(stderr_task, grace).await?;
+    let stdin_result = join_within(stdin_task, grace, false).await;
+    let stdout_result = join_within(stdout_task, grace, stdout_delivery).await;
+    let stderr_result = join_within(stderr_task, grace, stderr_delivery).await;
     let stdout_output = captured(&stdout_capture);
     let stdout_bytes = stdout_output.bytes;
     let stdout_truncated = stdout_output.truncated;
@@ -270,6 +270,9 @@ async fn run_process(
     } else {
         scope.disarm();
     }
+    stdin_result?;
+    stdout_result?;
+    stderr_result?;
     let mut stderr_bytes = stderr_output.bytes;
     let mut stderr_truncated = stderr_output.truncated;
     if let Some(extra_stderr) = completion.synthetic_stderr {

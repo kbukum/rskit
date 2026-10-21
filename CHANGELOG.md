@@ -17,14 +17,18 @@ Notable changes, following [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 - **Breaking (bench)**: `Metric::compute` and `Suite::compute` now return `AppResult`.
 - **Breaking (bench)**: `RunProvenance` adds judge provenance and becomes non-exhaustive; construct from `Default` and use open patterns.
+- **Breaking (process)**: `OutputObserver::with_stdout_bytes` and `with_stderr_bytes` take async sinks returning `AppResult<()>`; persistent byte callbacks also return `AppResult<()>`. Delivery applies backpressure and propagates failures, including during readiness. Incomplete observed output after the post-exit grace period returns a timeout error instead of silent output loss, for async and persistent processes.
 
 ### Fixed
 
 - **bench**: semantic similarity rejects empty or dimension-inconsistent provider embeddings instead of scoring them as zero similarity.
+- **worker**: pool shutdown reports accepted but unstarted work as cancelled, keeping it distinct from rejected submissions and failures in running tasks.
+- **process**: PTY runs release the parent's terminal handles after spawn, so Linux output readers finish when the child exits instead of waiting out the grace period.
 
 ### Security
 
 - Update `rustls` to 0.23.46, `quinn-proto` to 0.11.19 and `zip` to 9 to resolve RUSTSEC-2026-0346 to 0349 and the `quinn-proto` and `zip` advisories; `rskit-fs` archive extraction adapts to the zip 9 name API.
+- Update `rustls-webpki` to 0.103.16, and `webpki-roots` and `webpki-root-certs` to 1.0.10, to resolve RUSTSEC-2026-0381, 0382 and 0383 (distrusted emSign intermediates).
 
 ## [v0.2.0-alpha.8] - 2026-08-16
 

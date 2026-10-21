@@ -212,11 +212,9 @@ async fn pool_shutdown_during_active_tasks() {
     cancel_token.cancel();
 }
 
-// Regression: a task whose envelope was dequeued by the runner but had not yet
-// acquired a permit when shutdown fired must surface a `ServiceUnavailable`
-// error to the awaiting handle, not silently drop the oneshot sender.
+// Accepted work waiting for a permit must be cancelled, not misreported as an infrastructure failure.
 #[tokio::test]
-async fn pool_shutdown_fails_dequeued_but_unscheduled_task() {
+async fn pool_shutdown_cancels_dequeued_but_unscheduled_task() {
     let started = Arc::new(Notify::new());
     let pool = Pool::new(
         Arc::new(PendingHandler {
@@ -240,7 +238,7 @@ async fn pool_shutdown_fails_dequeued_but_unscheduled_task() {
 
     // With queue capacity one, a third submit can complete only after h2 has
     // been dequeued by the runner and is waiting for a permit.
-    let _h3 = timeout(Duration::from_secs(2), pool.submit(3))
+    let h3 = timeout(Duration::from_secs(2), pool.submit(3))
         .await
         .expect("runner should dequeue h2 and free queue capacity")
         .unwrap();
@@ -249,11 +247,13 @@ async fn pool_shutdown_fails_dequeued_but_unscheduled_task() {
         .expect("pool shutdown must not hang")
         .unwrap();
 
-    let err = timeout(Duration::from_secs(2), h2.result())
-        .await
-        .expect("handle.result() must not hang after shutdown")
-        .expect_err("dequeued task must fail with ServiceUnavailable");
-    assert_eq!(err.code(), ErrorCode::ServiceUnavailable);
+    for handle in [h2, h3] {
+        let err = timeout(Duration::from_secs(2), handle.result())
+            .await
+            .expect("handle.result() must not hang after shutdown")
+            .expect_err("unstarted task must be cancelled");
+        assert_eq!(err.code(), ErrorCode::Cancelled);
+    }
 }
 
 // A configured size of 0 would create a zero-permit semaphore that blocks

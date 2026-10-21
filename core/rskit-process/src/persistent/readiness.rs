@@ -91,17 +91,17 @@ fn observe_exit_for(
 }
 
 pub(in crate::persistent) fn wait_for_readiness(
-    ready_rx: &mpsc::Receiver<()>,
+    ready_rx: &mpsc::Receiver<AppResult<()>>,
     timeout: Duration,
     cancel: &CancellationToken,
     cancelled: &AtomicBool,
-) -> Result<(), mpsc::RecvTimeoutError> {
+) -> Result<AppResult<()>, mpsc::RecvTimeoutError> {
     const CANCEL_POLL_INTERVAL: Duration = Duration::from_millis(10);
     let deadline = Instant::now() + timeout;
 
     loop {
         match ready_rx.try_recv() {
-            Ok(()) => return Ok(()),
+            Ok(result) => return Ok(result),
             Err(mpsc::TryRecvError::Disconnected) => {
                 return Err(mpsc::RecvTimeoutError::Disconnected);
             }
@@ -119,7 +119,7 @@ pub(in crate::persistent) fn wait_for_readiness(
         }
         let wait = (deadline - now).min(CANCEL_POLL_INTERVAL);
         match ready_rx.recv_timeout(wait) {
-            Ok(()) => return Ok(()),
+            Ok(result) => return Ok(result),
             Err(mpsc::RecvTimeoutError::Disconnected) => {
                 return Err(mpsc::RecvTimeoutError::Disconnected);
             }
@@ -247,7 +247,7 @@ mod tests {
 
     #[test]
     fn wait_for_readiness_reports_disconnected_channel() {
-        let (ready_tx, ready_rx) = mpsc::channel::<()>();
+        let (ready_tx, ready_rx) = mpsc::channel::<AppResult<()>>();
         drop(ready_tx);
         let cancel = CancellationToken::new();
         let cancelled = AtomicBool::new(false);
