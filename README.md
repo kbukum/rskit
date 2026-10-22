@@ -16,24 +16,24 @@
 
 Run `make setup` to install or verify the local Rust/Python tooling used by the Make targets. Use `scripts/setup.sh --system --release` when you also want it to try system/release tool setup.
 
-## Browse by Domain
+## Browse by Group
 
-Modules are organized into domains for scoped development. See [Module Index](docs/MODULE-INDEX.md) for the full breakdown.
+Crates are organized into layered groups, declared in `toven.toml` `[groups.*]`. Each group may depend only on the groups it lists, and Toven rejects any dependency that reaches up a layer. See the [Module Index](docs/MODULE-INDEX.md) for the members, or run `toven groups`.
 
-| Domain | Focus | Quick check |
-| ------ | ----- | ----------- |
+| Group | Focus | Quick check |
+| ----- | ----- | ----------- |
 | core | Foundation types, config, logging | `make check-core` |
 | patterns | Component, provider, DI, hooks | `make check-patterns` |
 | crosscutting | Observability, resilience, security | `make check-crosscutting` |
-| composition | Bootstrap, pipeline, DAG, workers | `make check-composition` |
+| composition | Bootstrap, DAG, chain, workers | `make check-composition` |
 | transport | Server, HTTP, gRPC, SSE | `make check-transport` |
 | auth | Authentication, authorization | `make check-auth` |
 | data | Database, cache, storage, messaging | `make check-data` |
 | ai | LLM, inference, agents, tools | `make check-ai` |
 | media | Media processing, transcription | `make check-media` |
-| infra | Workload, CLI, benchmarks, testing | `make check-infra` |
+| infra | Workload, CLI, benchmarks, datasets | `make check-infra` |
 
-CI runs the full workspace; on pull requests the `changes` job publishes an `affected` domain list from `./scripts/rskit_tool.py domains affected` for workflow steps that consume the same domains developers target locally with `make check-<domain>`.
+`testing` (shared test fixtures), `facade` (the `rskit` umbrella crate) and `examples` sit outside the layer stack. To check only what a change touches, run `make test-affected`.
 
 ## Highlights
 

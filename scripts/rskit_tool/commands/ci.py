@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 
-from ..cargo import Package, discover_packages, package_manifest, packages_for_paths
+from ..cargo import Package, discover_packages, packages_for_paths
 from ..errors import ToolError
 from ..git import changed_paths
 from ..paths import WORKSPACES
@@ -21,10 +21,6 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
 
     parser = subparsers.add_parser("ci", help="Shared CI/local validation helpers")
     ci_sub = parser.add_subparsers(dest="ci_command", required=True)
-
-    manifest = ci_sub.add_parser("package-manifest", help="Print the workspace manifest for a package")
-    manifest.add_argument("package", help="Cargo package name")
-    manifest.set_defaults(func=run_package_manifest)
 
     test = ci_sub.add_parser("test", help="Run selected package tests with nextest")
     add_selection_args(test)
@@ -84,13 +80,6 @@ def add_selection_args(parser: argparse.ArgumentParser) -> None:
         default=[],
         help="Explicit package to include; repeat for multiple packages",
     )
-
-
-def run_package_manifest(args: argparse.Namespace) -> int:
-    """Print the manifest path for a package's workspace."""
-
-    print(package_manifest(args.package))
-    return 0
 
 
 def run_test(args: argparse.Namespace) -> int:

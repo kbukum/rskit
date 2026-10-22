@@ -32,7 +32,7 @@ env:
   # Pinned Toven release used to drive the structural/architectural guardrail
   # gates (structure, topology, l7-edges, public-api, readiness) through the
   # `command` ecosystem tasks declared in toven.toml.
-  TOVEN_VERSION: v0.1.0-alpha.9
+  TOVEN_VERSION: v0.1.0-alpha.15
 
 jobs:
   changes:
@@ -43,7 +43,6 @@ jobs:
     outputs:
       rust-code: ${{ steps.filter.outputs.rust-code }}
       rust-src: ${{ steps.filter.outputs.rust-src }}
-      affected: ${{ steps.domains.outputs.affected || 'all' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -77,23 +76,6 @@ jobs:
               - '**/*.rs'
               - '**/Cargo.toml'
               - '**/Cargo.lock'
-      - name: Detect affected domains
-        id: domains
-        if: github.event_name == 'pull_request'
-        run: |
-          CHANGED=$(git diff --name-only ${{ github.event.pull_request.base.sha }}...${{ github.sha }} 2>/dev/null || echo "")
-          if [ -n "$CHANGED" ]; then
-            AFFECTED=$(echo "$CHANGED" | ./scripts/rskit_tool.py domains affected)
-          else
-            AFFECTED=""
-          fi
-          if [ -z "$AFFECTED" ]; then
-            AFFECTED="all"
-          fi
-          echo "affected<<EOF" >> "$GITHUB_OUTPUT"
-          printf '%s\n' "$AFFECTED" >> "$GITHUB_OUTPUT"
-          echo "EOF" >> "$GITHUB_OUTPUT"
-          echo "Affected domains: $AFFECTED"
 
   # ---------------------------------------------------------------------------
   # Python repository tooling tests
@@ -324,7 +306,7 @@ jobs:
         id: toven
         # Pinned by immutable commit SHA; the `version` input independently pins
         # the installed binary (checksum + keyless Sigstore signature verified).
-        uses: kbukum/toven/.github/actions/toven@d85aee8425fe0cc4584fb20356f0ec96fd44b22f # v0.1.0-alpha.9
+        uses: kbukum/toven/.github/actions/toven@3b869e82e0db5363f8f17e715ba46da76862b676 # v0.1.0-alpha.15
         with:
           version: ${{ env.TOVEN_VERSION }}
       - name: Run coverage
@@ -374,7 +356,7 @@ jobs:
         id: toven
         # Pinned by immutable commit SHA; the `version` input independently pins
         # the installed binary (checksum + keyless Sigstore signature verified).
-        uses: kbukum/toven/.github/actions/toven@d85aee8425fe0cc4584fb20356f0ec96fd44b22f # v0.1.0-alpha.9
+        uses: kbukum/toven/.github/actions/toven@3b869e82e0db5363f8f17e715ba46da76862b676 # v0.1.0-alpha.15
         with:
           version: ${{ env.TOVEN_VERSION }}
       - run: '"${{ steps.toven.outputs.toven }}" run topology'
@@ -407,7 +389,7 @@ jobs:
         run: cargo install cargo-public-api --version 0.52.0 --locked
       - name: Install the pinned Toven release
         id: toven
-        uses: kbukum/toven/.github/actions/toven@d85aee8425fe0cc4584fb20356f0ec96fd44b22f # v0.1.0-alpha.9
+        uses: kbukum/toven/.github/actions/toven@3b869e82e0db5363f8f17e715ba46da76862b676 # v0.1.0-alpha.15
         with:
           version: ${{ env.TOVEN_VERSION }}
       - run: '"${{ steps.toven.outputs.toven }}" run readiness'

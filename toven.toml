@@ -2,6 +2,20 @@
 name = "rskit"
 root = "."
 base_ref = "origin/main"
+# Repo-wide inputs: a change to any of these re-selects every module in
+# changed-scope runs (`toven affected`, `toven coverage --merge-base`).
+global_inputs = [
+  ".cargo/*",
+  ".config/*",
+  ".github/workflows/*",
+  "Makefile",
+  "clippy.toml",
+  "deny*.toml",
+  "rust-toolchain.toml",
+  "rustfmt.toml",
+  "scripts/*",
+  "toven.toml",
+]
 
 # Smart defaults fill in tasks, run strategy, and toolchain probes.
 # Uncomment to override, e.g.:
@@ -205,7 +219,9 @@ kind = "coverage"
 shared_inputs = ["contrib/Cargo.lock", "core/Cargo.lock", "examples/Cargo.lock"]
 
 [ecosystems.rust.tasks.doc]
-argv = ["cargo", "doc", "--manifest-path", "{module.manifest}", "{module.selector}", "--no-deps", "{args}"]
+# rustdoc flags are pinned in the environment: Cargo lets RUSTDOCFLAGS and
+# CARGO_ENCODED_RUSTDOCFLAGS override config, which would drop `-D warnings`.
+argv = ["env", "-u", "CARGO_ENCODED_RUSTDOCFLAGS", "RUSTDOCFLAGS=-D warnings", "cargo", "doc", "--manifest-path", "{module.manifest}", "{module.selector}", "--no-deps", "--document-private-items", "{args}"]
 fan_out = "batchable"
 selector = ["-p", "{module.package}"]
 shared_inputs = ["contrib/Cargo.lock", "core/Cargo.lock", "examples/Cargo.lock"]
@@ -226,8 +242,10 @@ workspace_closure = true
 kind = "format"
 shared_inputs = ["contrib/Cargo.lock", "core/Cargo.lock", "examples/Cargo.lock"]
 
+# Lint, test, doctest, and doc are the full gates `make` runs: clippy and the
+# test suites cover every feature, and warnings fail the run.
 [ecosystems.rust.tasks.lint]
-argv = ["cargo", "clippy", "--manifest-path", "{module.manifest}", "{module.selector}", "{args}"]
+argv = ["cargo", "clippy", "--manifest-path", "{module.manifest}", "{module.selector}", "--all-targets", "--all-features", "{args}", "--", "-D", "warnings"]
 fan_out = "batchable"
 selector = ["-p", "{module.package}"]
 shared_inputs = ["contrib/Cargo.lock", "core/Cargo.lock", "examples/Cargo.lock"]
@@ -240,8 +258,19 @@ selector = ["-p", "{module.package}"]
 shared_inputs = ["contrib/Cargo.lock", "core/Cargo.lock", "examples/Cargo.lock"]
 
 [ecosystems.rust.tasks.test]
+argv = ["cargo", "nextest", "run", "--no-tests=pass", "--manifest-path", "{module.manifest}", "{module.selector}", "--all-features", "{args}"]
+fan_out = "batchable"
+selector = ["-p", "{module.package}"]
+shared_inputs = ["contrib/Cargo.lock", "core/Cargo.lock", "examples/Cargo.lock"]
+
+# `test` covers every feature; `test-default` runs the same suites with only the
+# default features, so a feature-gated item the default build depends on cannot
+# hide behind `--all-features`. The distinct name keeps it a separately cached
+# unit until Toven grows task variants (docs/TOVEN-MIGRATION.md, gap 2).
+[ecosystems.rust.tasks.test-default]
 argv = ["cargo", "nextest", "run", "--no-tests=pass", "--manifest-path", "{module.manifest}", "{module.selector}", "{args}"]
 fan_out = "batchable"
+kind = "test"
 selector = ["-p", "{module.package}"]
 shared_inputs = ["contrib/Cargo.lock", "core/Cargo.lock", "examples/Cargo.lock"]
 
@@ -258,11 +287,181 @@ shared_inputs = ["contrib/Cargo.lock", "core/Cargo.lock", "examples/Cargo.lock"]
 # reuses the Test kind (coverage/affected grouping) while the distinct name
 # keeps it from colliding with the nextest `test` task.
 [ecosystems.rust.tasks.doctest]
-argv = ["cargo", "test", "--doc", "--manifest-path", "{module.manifest}", "{module.selector}", "{args}"]
+argv = ["cargo", "test", "--doc", "--manifest-path", "{module.manifest}", "{module.selector}", "--all-features", "{args}"]
 fan_out = "batchable"
 kind = "test"
 selector = ["-p", "{module.package}"]
 shared_inputs = ["contrib/Cargo.lock", "core/Cargo.lock", "examples/Cargo.lock"]
+
+# Module groups are rskit's architectural layers (the former `domains.toml`).
+# Each group names the layers it may depend on through
+# `guardrails.allow_groups`; Toven validates every direct dependency edge against
+# it, so a crate that reaches up a layer fails planning. `toven groups` lists
+# them, `toven <task> --group <name>` selects them (`make check-<group>`), and
+# `scripts/rskit_tool.py groups` renders the module index and layer diagram
+# from `toven groups --output jsonl`.
+
+[groups.core]
+description = "Foundation types, config, logging, validation, encryption, filesystem utilities"
+ecosystem = "rust"
+modules = [
+  "rskit-errors",
+  "rskit-config",
+  "rskit-logging",
+  "rskit-validation",
+  "rskit-encryption",
+  "rskit-util",
+  "rskit-fs",
+  "rskit-version",
+  "rskit-schema",
+  "rskit-codec",
+  "rskit-stream",
+]
+guardrails.allow_groups = []
+
+[groups.patterns]
+description = "Component lifecycle, provider shapes, DI, hooks"
+ecosystem = "rust"
+modules = [
+  "rskit-component",
+  "rskit-hook",
+  "rskit-provider",
+  "rskit-di",
+]
+guardrails.allow_groups = ["core"]
+
+[groups.crosscutting]
+description = "Observability, resilience, security"
+ecosystem = "rust"
+modules = [
+  "rskit-observability",
+  "rskit-resilience",
+  "rskit-security",
+]
+guardrails.allow_groups = ["core", "patterns", "testing"]
+
+[groups.composition]
+description = "Bootstrap, DAG, chain, worker, process, stateful"
+ecosystem = "rust"
+modules = [
+  "rskit-bootstrap",
+  "rskit-dag",
+  "rskit-chain",
+  "rskit-worker",
+  "rskit-process",
+  "rskit-stateful",
+]
+guardrails.allow_groups = ["core", "patterns", "crosscutting", "testing"]
+
+[groups.transport]
+description = "Server, HTTP client, gRPC, SSE, connect, discovery"
+ecosystem = "rust"
+modules = [
+  "rskit-server",
+  "rskit-httpclient",
+  "rskit-grpc",
+  "rskit-sse",
+  "rskit-http",
+  "rskit-discovery",
+]
+guardrails.allow_groups = ["core", "patterns", "crosscutting", "composition", "testing"]
+
+[groups.auth]
+description = "Authentication and authorization"
+ecosystem = "rust"
+modules = [
+  "rskit-auth",
+  "rskit-authz",
+]
+guardrails.allow_groups = ["core", "patterns", "crosscutting", "transport", "testing"]
+
+[groups.data]
+description = "Database, cache, storage, vectorstore, messaging"
+ecosystem = "rust"
+modules = [
+  "rskit-database",
+  "rskit-database-sqlite",
+  "rskit-cache",
+  "rskit-cache-redis",
+  "rskit-storage",
+  "rskit-storage-gcs",
+  "rskit-storage-s3",
+  "rskit-storage-supabase",
+  "rskit-vectorstore",
+  "rskit-vectorstore-qdrant",
+  "rskit-messaging",
+  "rskit-messaging-kafka",
+  "rskit-messaging-nats",
+  "rskit-messaging-rabbitmq",
+]
+guardrails.allow_groups = ["core", "patterns", "crosscutting", "composition", "transport", "auth", "testing"]
+
+[groups.ai]
+description = "LLM, inference, embedding, agent, tool, MCP, skill"
+ecosystem = "rust"
+modules = [
+  "rskit-ai",
+  "rskit-llm",
+  "rskit-llm-common",
+  "rskit-llm-openai",
+  "rskit-llm-anthropic",
+  "rskit-llm-ollama",
+  "rskit-llm-gemini",
+  "rskit-llm-tiktoken",
+  "rskit-llm-hf-tokenizers",
+  "rskit-embedding",
+  "rskit-inference",
+  "rskit-inference-tgi",
+  "rskit-inference-triton",
+  "rskit-inference-vllm",
+  "rskit-agent",
+  "rskit-tool",
+  "rskit-mcp",
+  "rskit-skill",
+]
+guardrails.allow_groups = ["core", "patterns", "crosscutting", "transport", "auth", "testing"]
+
+[groups.media]
+description = "Media processing, transcription"
+ecosystem = "rust"
+modules = [
+  "rskit-media",
+  "rskit-media-audio",
+  "rskit-media-ffmpeg",
+  "rskit-media-image",
+]
+guardrails.allow_groups = ["core", "patterns", "crosscutting", "composition", "data", "testing"]
+
+[groups.infra]
+description = "CLI, benchmarking, dataset, git, workload"
+ecosystem = "rust"
+modules = [
+  "rskit-bench",
+  "rskit-cli",
+  "rskit-dataset",
+  "rskit-git",
+  "rskit-workload",
+]
+guardrails.allow_groups = ["core", "patterns", "crosscutting", "composition", "ai", "testing"]
+
+# Shared test fixtures. Every layer above `patterns` may take it as a
+# dev-dependency; its optional `llm`/`embedding` features reach into `ai`, so it
+# sits outside the layer stack rather than inside one layer.
+[groups.testing]
+description = "Shared test fixtures and fakes (dev-dependency only)"
+ecosystem = "rust"
+modules = ["rskit-testutil"]
+
+# The `rskit` facade re-exports every layer behind feature flags.
+[groups.facade]
+description = "The rskit umbrella crate re-exporting every layer"
+ecosystem = "rust"
+modules = ["rskit-suite"]
+
+[groups.examples]
+description = "Runnable example applications"
+ecosystem = "rust"
+modules = ["agent-demo", "core-cli", "media-demo"]
 
 # The `command` ecosystem is Toven's generic-tool adapter: tool-specific but
 # language-agnostic gates that have no cargo home. Declaring rskit's structural
@@ -313,15 +512,12 @@ argv = ["scripts/rskit_tool.py", "check", "readiness", "{args}"]
 fan_out = "whole-workspace"
 kind = "lint"
 
+# `module-index` renders docs/MODULE-INDEX.md from `toven groups`.
 [ecosystems.command.tasks.module-index]
-argv = ["scripts/rskit_tool.py", "domains", "module-index", "{args}"]
+argv = ["scripts/rskit_tool.py", "groups", "module-index", "{args}"]
 fan_out = "whole-workspace"
 kind = "doc"
 
-# `depgraphs` renders the domain-layer and contrib dependency SVGs embedded in
-# docs/DESIGN.md. The domain diagram is derived from `domains.toml` — an
-# rskit-specific grouping Toven does not model — so the rendering stays owned by
-# `scripts/rskit_tool.py` (like `module-index`); Toven only orchestrates it.
 # `sbom` renders the CycloneDX SBOMs across rskit's `--all-features` surface —
 # the surface it validates and ships. Toven's native SBOM step omits
 # `--all-features`, so the all-features wrapper stays owned by `rskit_tool`;
@@ -331,8 +527,11 @@ argv = ["scripts/rskit_tool.py", "sbom", "{args}"]
 fan_out = "whole-workspace"
 kind = "doc"
 
+# `depgraphs` renders the group-layer and contrib dependency SVGs embedded in
+# docs/DESIGN.md. The layer diagram reads `toven groups`; Graphviz rendering and
+# the `cargo depgraph` crate view stay in `scripts/rskit_tool.py`.
 [ecosystems.command.tasks.depgraphs]
-argv = ["scripts/rskit_tool.py", "domains", "depgraphs", "{args}"]
+argv = ["scripts/rskit_tool.py", "groups", "depgraphs", "{args}"]
 fan_out = "whole-workspace"
 kind = "doc"
 
