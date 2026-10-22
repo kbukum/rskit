@@ -95,6 +95,37 @@ fn persistent_wait_reports_incomplete_observed_delivery() {
 }
 
 #[test]
+fn persistent_wait_ends_an_owned_descendant_holding_the_observed_pipe() {
+    let observed = Arc::new(parking_lot::Mutex::new(Vec::new()));
+    let observer = PersistentOutputObserver::new().with_stdout_bytes({
+        let observed = Arc::clone(&observed);
+        move |bytes| {
+            observed.lock().extend_from_slice(bytes);
+            Ok(())
+        }
+    });
+    let config = PersistentConfig::default()
+        .with_readiness(PersistentReadiness::Started)
+        .with_shutdown_grace_period(Duration::from_millis(200))
+        .with_output_observer(observer);
+    let start = Instant::now();
+    let run = start_persistent_with_cancel(
+        &ProcessSpec::new("sh").args(["-c", "sleep 30 & printf hello; exit 0"]),
+        &ProcessConfig::default(),
+        &config,
+        CancellationToken::new(),
+    )
+    .unwrap();
+    let result = run
+        .process
+        .wait()
+        .expect("the owned group is ended, so every byte is delivered");
+    assert!(start.elapsed() < Duration::from_secs(3));
+    assert_eq!(result.exit_code, Some(0));
+    assert_eq!(&*observed.lock(), b"hello");
+}
+
+#[test]
 fn started_readiness_allows_natural_wait_to_collect_output() {
     let command = ProcessSpec::new("sh")
         .arg("-c")

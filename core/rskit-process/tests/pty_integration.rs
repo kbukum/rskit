@@ -109,6 +109,37 @@ async fn incomplete_pty_delivery_returns_a_timeout_after_child_exit() {
 }
 
 #[tokio::test]
+async fn an_owned_descendant_holding_the_pty_is_ended_so_delivery_completes() {
+    let chunks = Arc::new(Mutex::new(Vec::<u8>::new()));
+    let observer = {
+        let chunks = Arc::clone(&chunks);
+        OutputObserver::new().with_stdout_bytes(move |bytes: Vec<u8>| {
+            chunks.lock().extend_from_slice(&bytes);
+            async { Ok(()) }
+        })
+    };
+    let config = pty_config(PtyIo::new(observer).with_output(OutputPolicy::observe_only()))
+        .with_lifecycle_policy(
+            LifecyclePolicy::default().with_grace_period(Duration::from_millis(200)),
+        );
+    let start = std::time::Instant::now();
+    let result = tokio::time::timeout(
+        Duration::from_secs(5),
+        run_with_cancel(
+            &ProcessSpec::new("/bin/sh").args(["-c", "sleep 30 & printf hello; exit 0"]),
+            &config,
+            CancellationToken::new(),
+        ),
+    )
+    .await
+    .expect("PTY drain must remain bounded")
+    .expect("the owned group is ended, so every byte is delivered");
+    assert!(start.elapsed() < Duration::from_secs(3));
+    assert_eq!(result.exit_code, Some(0));
+    assert!(String::from_utf8_lossy(&chunks.lock()).contains("hello"));
+}
+
+#[tokio::test]
 async fn merged_output_is_observed_live() {
     let chunks = Arc::new(Mutex::new(Vec::<u8>::new()));
     let observer = {

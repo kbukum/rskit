@@ -16,11 +16,11 @@ use crate::process_group::group_alive;
 use crate::pty::{PtyIo, PtyMaster, PtyPair, install_controlling_tty, open_pty};
 use crate::{
     AppError, AppResult, EnvPolicy, ErrorCode, InputPolicy, ProcessConfig, ProcessResult,
-    ProcessSpec, ProcessSupervisor, command::spawn_error,
+    ProcessSpec, ProcessSupervisor, command::spawn_error, supervisor::end_lingering_group_async,
 };
 
 use super::lifecycle::wait_for_completion;
-use super::output::{captured, join_within, spawn_reader};
+use super::output::{captured, join_within, readers_finish_within, spawn_reader};
 use super::redaction::RedactedArgs;
 use super::scope::ChildScope;
 use super::spawn::spawn_with_etxtbsy_retry;
@@ -117,8 +117,18 @@ pub(in crate::runner) async fn run_pty_mode(
 
     let completion = wait_for_completion(scope.child_mut(), spec, config, cancel).await?;
 
-    // Bound post-exit draining, reporting incomplete observed delivery instead of silently losing its final chunks.
+    // A descendant that outlived the leader can keep the PTY open forever.
+    // When the policy owns the subtree, end it so the reader reaches end-of-file and delivers everything.
     let grace = config.lifecycle.grace_period;
+    if !completion.survived
+        && config.lifecycle.targets_group()
+        && group_alive(leader_pid)
+        && !readers_finish_within(&[reader_task.as_ref()], grace).await
+    {
+        end_lingering_group_async(leader_pid, config.lifecycle, grace).await;
+    }
+
+    // Bound post-exit draining, reporting incomplete observed delivery instead of silently losing its final chunks.
     let stdin_result = join_within(stdin_task, grace, false).await;
     let reader_result = join_within(reader_task, grace, io.observer.stdout_bytes.is_some()).await;
     let captured_output = captured(&reader_capture);

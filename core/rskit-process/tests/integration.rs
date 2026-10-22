@@ -743,20 +743,26 @@ fn blocking_drain_does_not_hang_when_a_descendant_holds_the_pipe() {
     assert_eq!(result.exit_code, Some(0));
 }
 
-#[tokio::test]
-async fn an_open_observed_pipe_reports_incomplete_output_even_after_delivery() {
+fn recording_observer() -> (OutputObserver, Arc<Mutex<Vec<u8>>>) {
     let observed = Arc::new(Mutex::new(Vec::new()));
     let delivered = Arc::clone(&observed);
     let observer = OutputObserver::new().with_stdout_bytes(move |bytes| {
         delivered.lock().extend_from_slice(&bytes);
         async { Ok(()) }
     });
+    (observer, observed)
+}
+
+#[tokio::test]
+async fn an_owned_descendant_holding_the_observed_pipe_is_ended_so_delivery_completes() {
+    let (observer, observed) = recording_observer();
     let config = ProcessConfig::default()
         .with_io(ProcessIo::observed(ObservedIo::new(observer)))
         .with_lifecycle_policy(
             rskit_process::LifecyclePolicy::default().with_grace_period(Duration::from_millis(200)),
         );
-    let error = tokio::time::timeout(
+    let start = std::time::Instant::now();
+    let result = tokio::time::timeout(
         Duration::from_secs(5),
         run_with_cancel(
             &ProcessSpec::new("/bin/sh").args(["-c", "sleep 30 & printf hello; exit 0"]),
@@ -766,7 +772,68 @@ async fn an_open_observed_pipe_reports_incomplete_output_even_after_delivery() {
     )
     .await
     .expect("observed drain must remain bounded")
+    .expect("the owned group is ended, so every byte is delivered");
+    assert!(start.elapsed() < Duration::from_secs(3));
+    assert_eq!(result.exit_code, Some(0));
+    assert_eq!(&*observed.lock(), b"hello");
+}
+
+#[tokio::test]
+async fn an_unowned_descendant_holding_the_observed_pipe_reports_incomplete_output() {
+    let (observer, observed) = recording_observer();
+    let config = ProcessConfig::default()
+        .with_io(ProcessIo::observed(ObservedIo::new(observer)))
+        .with_lifecycle_policy(
+            rskit_process::LifecyclePolicy::default()
+                .with_grace_period(Duration::from_millis(200))
+                .with_terminate_descendants(false),
+        );
+    let error = tokio::time::timeout(
+        Duration::from_secs(5),
+        run_with_cancel(
+            &ProcessSpec::new("/bin/sh").args(["-c", "sleep 3 & printf hello; exit 0"]),
+            &config,
+            CancellationToken::new(),
+        ),
+    )
+    .await
+    .expect("observed drain must remain bounded")
     .expect_err("an open pipe cannot prove complete observed output");
     assert_eq!(error.code(), ErrorCode::Timeout);
     assert_eq!(&*observed.lock(), b"hello");
+}
+
+#[tokio::test]
+async fn a_shared_supervisor_keeps_a_descendant_that_released_the_pipes() {
+    let workspace = TestWorkspace::new("detached-output");
+    let marker = workspace.path().join("alive");
+    let script = format!(
+        "(sleep 1; touch '{}') >/dev/null 2>&1 & printf hello; exit 0",
+        marker.display()
+    );
+    let policy =
+        rskit_process::LifecyclePolicy::default().with_grace_period(Duration::from_millis(200));
+    let supervisor = rskit_process::ProcessSupervisor::new(policy);
+    let (observer, observed) = recording_observer();
+    let config = ProcessConfig::default()
+        .with_io(ProcessIo::observed(ObservedIo::new(observer)))
+        .with_lifecycle_policy(policy);
+    let result = rskit_process::run_with_cancel_supervised(
+        &supervisor,
+        &ProcessSpec::new("/bin/sh").args(["-c", script.as_str()]),
+        &config,
+        CancellationToken::new(),
+    )
+    .await
+    .expect("released pipes do not block delivery");
+    assert_eq!(result.exit_code, Some(0));
+    assert_eq!(&*observed.lock(), b"hello");
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while !marker.exists() && std::time::Instant::now() < deadline {
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    assert!(
+        marker.exists(),
+        "a descendant that released the pipes keeps running"
+    );
 }

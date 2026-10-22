@@ -23,6 +23,7 @@ Notable changes, following [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 - **bench**: semantic similarity rejects empty or dimension-inconsistent provider embeddings instead of scoring them as zero similarity.
 - **worker**: pool shutdown reports accepted but unstarted work as cancelled, keeping it distinct from rejected submissions and failures in running tasks.
+- **process**: a descendant that outlives the leader and keeps the output pipes open no longer fails observed runs with a delivery timeout when the lifecycle policy owns the process group. After the post-exit grace period the async, PTY and persistent runners end the group, then deliver every byte. Policies that do not own descendants, and stalled sinks, still report the timeout.
 - **process**: PTY runs release the parent's terminal handles after spawn, so Linux output readers finish when the child exits instead of waiting out the grace period.
 
 ### Security

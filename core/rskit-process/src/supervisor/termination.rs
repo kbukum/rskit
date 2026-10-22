@@ -55,6 +55,40 @@ async fn wait_group_gone_async(pgid: u32, budget: Duration) -> bool {
     }
 }
 
+/// End the rest of a process group whose leader already exited, when it still holds the run's output pipes.
+///
+/// A member that outlived the leader keeps the inherited stdout/stderr open, so the run could never see end-of-file or prove it delivered every byte. When the policy owns the subtree ([`LifecyclePolicy::targets_group`]), this sends the group `SIGTERM`, waits up to `grace` for it to empty, and sends `SIGKILL` when the policy escalates. The closed pipes then let the readers finish; a member that survives anyway leaves the caller's bounded join to report incomplete delivery. A policy that does not own descendants leaves them alone.
+pub(crate) fn end_lingering_group_blocking(pgid: u32, policy: LifecyclePolicy, grace: Duration) {
+    if !policy.targets_group() || !group_alive(pgid) {
+        return;
+    }
+    debug!(
+        pgid,
+        "descendants hold the output pipes after the leader exited; terminating the group"
+    );
+    terminate_target(pgid, true);
+    if !wait_group_gone_blocking(pgid, grace) && policy.kill_after_grace {
+        kill_target(pgid, true);
+        wait_group_gone_blocking(pgid, grace);
+    }
+}
+
+/// Async twin of [`end_lingering_group_blocking`].
+pub(crate) async fn end_lingering_group_async(pgid: u32, policy: LifecyclePolicy, grace: Duration) {
+    if !policy.targets_group() || !group_alive(pgid) {
+        return;
+    }
+    debug!(
+        pgid,
+        "descendants hold the output pipes after the leader exited; terminating the group"
+    );
+    terminate_target(pgid, true);
+    if !wait_group_gone_async(pgid, grace).await && policy.kill_after_grace {
+        kill_target(pgid, true);
+        wait_group_gone_async(pgid, grace).await;
+    }
+}
+
 /// Outcome of reaping a blocking child within a grace period.
 #[derive(Debug)]
 pub(crate) enum SyncReap {
