@@ -42,13 +42,12 @@ make check-public-api                # only if a public surface changed
 make doc C=<crate>                   # only if public docs changed
 ```
 
-When a change spans a whole workspace or domain rather than a single crate, scope to that level — still much cheaper than the global gate:
+When a change spans a whole workspace or module group rather than a single crate, scope to that level — still much cheaper than the global gate:
 
 ```bash
 make lint W=core                     # W=core|contrib|examples — one workspace
 make test W=contrib
-make check-core                      # per-domain gate: check-core|check-data|check-transport|check-auth|
-                                     #   check-ai|check-media|check-infra|check-crosscutting|check-composition|...
+make check-core                      # one module group: make check-<group> (list: toven groups)
 ```
 
-Prefer `make test-affected` / `make coverage-changed` over the unscoped targets — they run only the crates impacted by the current changes. Step up to `W=<workspace>` or a per-domain `make check-<domain>` when the change spans a workspace/domain. Run the full `make check` / `make deny` only when the change is genuinely workspace-wide, or leave it to CI for sign-off. A green scoped run is necessary but **not sufficient** — it will not catch unbounded concurrency, missing timeouts/cancellation, global-registry composition issues, duplicated owners, or boundary-validation gaps. Those are on the reviewer.
+Prefer `make test-affected` / `make coverage-changed` over the unscoped targets — they run only the crates impacted by the current changes. Step up to `W=<workspace>` or `make check-<group>` when the change spans a workspace or group. Run the full `make check` / `make deny` only when the change is genuinely workspace-wide, or leave it to CI for sign-off. A green scoped run is necessary but **not sufficient** — it will not catch unbounded concurrency, missing timeouts/cancellation, global-registry composition issues, duplicated owners, or boundary-validation gaps. Those are on the reviewer.

@@ -119,7 +119,8 @@ For rapid iteration:
 ```bash
 make help                     # see available targets
 make check-fast               # format + lint + build only (~30s)
-make test-nextest             # parallel tests via nextest
+make test                     # parallel tests via nextest
+make check-transport          # lint + test one module group (see toven groups)
 make test-affected            # test only crates changed vs main
 make test-doc                 # run doctests separately
 make check                    # full validation before PR
@@ -127,7 +128,7 @@ make check                    # full validation before PR
 
 For CI-like local testing:
 ```bash
-PROFILE=ci make test-nextest  # with CI profile (retries, no fail-fast)
+make test PROFILE=ci          # with CI profile (retries, no fail-fast)
 ```
 
 - Every public function and trait impl should have at least one test.

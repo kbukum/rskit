@@ -23,7 +23,7 @@ permissions:
 
 env:
   # Pin the release to an immutable published Toven binary. Bump deliberately.
-  TOVEN_VERSION: v0.1.0-alpha.9
+  TOVEN_VERSION: v0.1.0-alpha.15
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.release.tag_name || inputs.tag }}
@@ -88,7 +88,7 @@ jobs:
         # Pinned by immutable commit SHA; the `version` input independently pins
         # the installed binary. The action wraps the reference install contract
         # (checksum + keyless Sigstore signature over SHA256SUMS) before use.
-        uses: kbukum/toven/.github/actions/toven@d85aee8425fe0cc4584fb20356f0ec96fd44b22f # v0.1.0-alpha.9
+        uses: kbukum/toven/.github/actions/toven@3b869e82e0db5363f8f17e715ba46da76862b676 # v0.1.0-alpha.15
         with:
           version: ${{ env.TOVEN_VERSION }}
       - name: Show the installed Toven version

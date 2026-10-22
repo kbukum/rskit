@@ -17,7 +17,7 @@ When in doubt between core and contrib, ask: does it pull a heavy external depen
 
 ## Step 2 — Confirm dependency direction
 
-rskit layers depend **downward only** — a lower crate never depends on a higher one; the `rskit` facade sits at the top and only re-exports. A lower layer importing a higher one, or behavior added directly to the facade, is a **blocker**. `make check-topology` guards placement and acyclicity.
+rskit layers depend **downward only** — a lower crate never depends on a higher one; the `rskit` facade sits at the top and only re-exports. A lower layer importing a higher one, or behavior added directly to the facade, is a **blocker**. `make check-topology` guards placement and acyclicity, and Toven rejects any dependency outside a module group's `guardrails.allow_groups`.
 
 ## Step 3 — Create the crate
 
@@ -39,6 +39,7 @@ Conventions from `.github/copilot-instructions.md`: typed, minimal public API (n
 ## Step 4 — Wire the workspace and facade
 
 - Add the crate to the matching workspace: `core/Cargo.toml` members, or the `contrib/Cargo.toml` / `examples/Cargo.toml` member pattern.
+- Add the crate to its layer's `modules` list in `toven.toml` `[groups.*]`, then regenerate the module index (`toven run module-index`).
 - For a core capability that consumers should reach through the facade, re-export it from the `rskit` facade (adapter integrations behind a **feature flag**, not unconditionally).
 - Keep shared dependency versions consistent across workspaces (`make check-workspace-deps-sync`).
 
@@ -55,6 +56,7 @@ make lint  C=rskit-<name>
 make test  C=rskit-<name>
 make check-topology
 make doc   C=rskit-<name>
+toven groups                  # the crate is listed under its layer
 ```
 
 ## Checklist
@@ -63,7 +65,7 @@ make doc   C=rskit-<name>
 - [ ] Dependency direction downward-only (`check-topology` clean); facade only re-exports
 - [ ] `#![warn(missing_docs)]` + crate docs; files split by concern; `lib.rs`/`mod.rs` declare-only
 - [ ] Public API typed/minimal, builders `#[must_use]`, growable enums `#[non_exhaustive]`
-- [ ] Added to the right workspace `Cargo.toml`; facade wired (feature-gated if an adapter)
+- [ ] Added to the right workspace `Cargo.toml` and `toven.toml` group; facade wired (feature-gated if an adapter)
 - [ ] Shared dep versions consistent (`check-workspace-deps-sync`)
 - [ ] build/lint/test/doc green for the crate
 

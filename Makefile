@@ -1,6 +1,5 @@
-.PHONY: all setup build test test-nextest test-doc test-python test-affected coverage coverage-changed test-coverage lint fmt fmt-check check check-fast check-facade-features \
-       check-core check-patterns check-crosscutting check-composition check-transport check-auth check-data check-ai \
-       check-media check-infra doc deny check-l7-edges check-workspace-deps-sync check-topology check-public-api release-plan release-status release-readiness release-coverage \
+.PHONY: all setup build test test-default test-doc test-python test-affected coverage coverage-changed test-coverage lint fmt fmt-check check check-fast check-facade-features \
+       doc deny check-l7-edges check-workspace-deps-sync check-topology check-public-api release-plan release-status release-readiness release-coverage \
        release-bump release-tag publish-dry-run release-publish release-sbom depgraphs clean help ci ci-test ci-lint ci-fmt ensure-act structure toven-canary lock
 
 CORE_MANIFEST = core/Cargo.toml
@@ -8,25 +7,22 @@ CONTRIB_MANIFEST = contrib/Cargo.toml
 EXAMPLES_MANIFEST = examples/Cargo.toml
 FUZZ_MANIFEST = fuzz/Cargo.toml
 PYTHON ?= python3
-RSKIT_TOOL = $(PYTHON) ./scripts/rskit_tool.py
-# Candidate Toven binary for the read-only self-hosting canary. Defaults to a
-# `toven` on PATH; point it at a freshly built binary to dogfood a candidate,
-# e.g. `make TOVEN=../toven/target/release/toven toven-canary`.
+# Toven binary that runs every gate. Defaults to a `toven` on PATH; point it at
+# a freshly built binary to dogfood a candidate, e.g.
+# `make TOVEN=../toven/target/release/toven check`.
 TOVEN ?= toven
-WORKSPACE_MANIFESTS = $(CORE_MANIFEST) $(CONTRIB_MANIFEST) $(EXAMPLES_MANIFEST)
 # Baseline ref for changed-scope coverage selection.
 CHANGED_BASE ?= origin/main
-# Every workspace that owns a Cargo.lock, including the fuzz harness excluded
-# from the build/test train.
-LOCK_MANIFESTS = $(WORKSPACE_MANIFESTS) $(FUZZ_MANIFEST)
-FORMAT_MANIFESTS = $(WORKSPACE_MANIFESTS)
-TEST_THREADS ?= 1
+# Every workspace that owns a Cargo.lock, including the fuzz harness Toven
+# excludes. `lock` stays on plain cargo so the fuzz lockfile is refreshed too.
+LOCK_MANIFESTS = $(CORE_MANIFEST) $(CONTRIB_MANIFEST) $(EXAMPLES_MANIFEST) $(FUZZ_MANIFEST)
 THRESHOLD ?=
-FEATURES ?=
-TEST_FEATURES ?= --all-features
 
-# Test filter: pass -- $(T) when T is set
-_T = $(if $(T),-- $(T))
+# Toven module selection: C=<crate>, W=core|contrib|examples, G=<group>.
+# With none set, a task runs over every module.
+_SEL = $(if $(C),--module rust:$(C)) $(if $(W),--workspace rust:$(W)) $(if $(G),--group $(G)) $(if $(JOBS),--jobs $(JOBS))
+# nextest passthrough: PROFILE=<profile> and the T=<pattern> filter.
+_TEST_ARGS = $(if $(PROFILE)$(T),-- $(if $(PROFILE),--profile $(PROFILE)) $(T))
 
 ## Default target
 all: check
@@ -35,47 +31,15 @@ all: check
 setup:
 	@PYTHON="$(PYTHON)" ./scripts/setup.sh
 
-define run_cargo_target
-	@if [ -n "$(C)" ]; then \
-		manifest=$$($(RSKIT_TOOL) ci package-manifest "$(C)") || exit $$?; \
-		cargo $(1) --manifest-path "$$manifest" -p $(C) $(4) $(2); \
-	elif [ -n "$(W)" ]; then \
-		cargo $(1) --manifest-path $(W)/Cargo.toml --workspace $(4) $(2); \
-	else \
-		set -e; \
-		for manifest in $(3); do \
-			cargo $(1) --manifest-path $$manifest --workspace $(4) $(2); \
-		done; \
-	fi
-endef
-
 define run_coverage_target
 	@$(TOVEN) coverage $(1) \
 		$(if $(THRESHOLD),--line $(THRESHOLD)) \
 		$(if $(JOBS),--jobs $(JOBS))
 endef
 
-define run_domain_target
-	@$(RSKIT_TOOL) check domain $(1) \
-		$(if $(JOBS),--jobs $(JOBS))
-endef
-
-define run_fmt_target
-	@if [ -n "$(W)" ]; then \
-		cargo fmt --manifest-path $(W)/Cargo.toml --all $(1); \
-	else \
-		set -e; \
-		for manifest in $(FORMAT_MANIFESTS); do \
-			cargo fmt --manifest-path $$manifest --all $(1); \
-		done; \
-	fi
-endef
-
-## Build workspace (C=<crate> for specific crate, W=core|contrib|examples for specific workspace)
+## Build (C=<crate>, W=core|contrib|examples, G=<group>)
 build:
-	@echo "==> Building..."
-	$(call run_cargo_target,build,,$(WORKSPACE_MANIFESTS),$(FEATURES))
-	@echo "✓ Build succeeded"
+	@$(TOVEN) build $(_SEL)
 
 ## Refresh every workspace Cargo.lock after version or dependency changes.
 ## Re-resolves workspace members only (cargo update --workspace); pass
@@ -88,25 +52,17 @@ lock:
 	done
 	@echo "✓ Lockfiles refreshed"
 
-## Run tests (C=<crate>, T=<test pattern>, W=core|contrib|examples)
+## Run tests with nextest (C=, W=, G=, T=<pattern>, PROFILE=<nextest profile>)
 test:
-	@echo "==> Testing..."
-	$(call run_cargo_target,test,$(_T),$(WORKSPACE_MANIFESTS),$(or $(FEATURES),$(TEST_FEATURES)))
-	@echo "✓ Tests passed"
+	@$(TOVEN) test $(_SEL) $(_TEST_ARGS)
 
-## Run tests using nextest (parallel, with retries in CI)
-test-nextest:
-	@echo "==> Running tests with nextest..."
-ifeq ($(TEST_RUNNER),cargo-test)
-	$(call run_cargo_target,test,-- --test-threads=$(TEST_THREADS),$(WORKSPACE_MANIFESTS),$(or $(FEATURES),$(TEST_FEATURES)))
-else
-	$(call run_cargo_target,nextest run,$(if $(PROFILE),--profile $(PROFILE)),$(WORKSPACE_MANIFESTS),$(or $(FEATURES),$(TEST_FEATURES)))
-endif
+## Run tests with default features only (C=, W=, G=, T=<pattern>, PROFILE=)
+test-default:
+	@$(TOVEN) run test-default $(_SEL) $(_TEST_ARGS)
 
-## Run only doctests (nextest doesn't support doctests)
+## Run only doctests (nextest doesn't run doctests)
 test-doc:
-	@echo "==> Running doctests..."
-	$(call run_cargo_target,test,--doc,$(WORKSPACE_MANIFESTS),$(or $(FEATURES),$(TEST_FEATURES)))
+	@$(TOVEN) run doctest $(_SEL)
 
 ## Run Python repository tooling tests
 test-python:
@@ -114,9 +70,10 @@ test-python:
 	@$(PYTHON) -m unittest discover -s scripts/tests -t .
 	@echo "✓ Python tooling tests passed"
 
-## Run tests only for crates affected by current changes
+## Run tests for crates changed against CHANGED_BASE plus their dependents,
+## with all features and with default features
 test-affected:
-	@$(RSKIT_TOOL) ci test --scope changed --changed-base origin/main...HEAD --feature-mode both $(if $(PROFILE),--profile $(PROFILE),--profile ci)
+	@$(TOVEN) run test,test-default --base $(CHANGED_BASE) --merge-base $(if $(JOBS),--jobs $(JOBS)) $(_TEST_ARGS)
 
 ## Run per-package coverage and gate against the thresholds in toven.toml
 ## (THRESHOLD=<pct> overrides the line floor, JOBS=<n> caps parallelism)
@@ -132,23 +89,17 @@ coverage-changed:
 		$(if $(THRESHOLD),--line $(THRESHOLD)) \
 		$(if $(JOBS),--jobs $(JOBS))
 
-## Run clippy linter (C=<crate>)
+## Run clippy with all features and targets; warnings fail (C=, W=, G=)
 lint:
-	@echo "==> Linting..."
-	$(call run_cargo_target,clippy,--all-targets -- -D warnings,$(WORKSPACE_MANIFESTS),$(or $(FEATURES),--all-features))
-	@echo "✓ Lint passed"
+	@$(TOVEN) lint $(_SEL)
 
 ## Format code (W=core|contrib|examples)
 fmt:
-	@echo "==> Formatting..."
-	$(call run_fmt_target,)
-	@echo "✓ Formatted"
+	@$(TOVEN) run format $(_SEL)
 
 ## Check formatting without modifying files
 fmt-check:
-	@echo "==> Checking format..."
-	$(call run_fmt_target,-- --check)
-	@echo "✓ Format OK"
+	@$(TOVEN) run format-check $(_SEL)
 
 ## Declare-only aggregator guard (lib.rs / mod.rs) + crowded-module advisory
 ## Both gates run through Toven's `command` ecosystem (structure = ast-grep,
@@ -160,22 +111,9 @@ structure:
 	@echo "==> Scanning for crowded modules (advisory)..."
 	@$(TOVEN) run crowded-modules
 
-## Build documentation
+## Build documentation with private items; warnings fail (C=, W=, G=)
 doc:
-	@echo "==> Building docs..."
-	@if [ -n "$(C)" ]; then \
-		RUSTDOCFLAGS="-D warnings" cargo doc --manifest-path $(CORE_MANIFEST) -p $(C) --no-deps --document-private-items 2>/dev/null || \
-		RUSTDOCFLAGS="-D warnings" cargo doc --manifest-path $(CONTRIB_MANIFEST) -p $(C) --no-deps --document-private-items 2>/dev/null || \
-		RUSTDOCFLAGS="-D warnings" cargo doc --manifest-path $(EXAMPLES_MANIFEST) -p $(C) --no-deps --document-private-items; \
-	elif [ -n "$(W)" ]; then \
-		RUSTDOCFLAGS="-D warnings" cargo doc --manifest-path $(W)/Cargo.toml --workspace --no-deps --document-private-items; \
-	else \
-		set -e; \
-		for manifest in $(FORMAT_MANIFESTS); do \
-			RUSTDOCFLAGS="-D warnings" cargo doc --manifest-path $$manifest --workspace --no-deps --document-private-items; \
-		done; \
-	fi
-	@echo "✓ Docs built"
+	@$(TOVEN) doc $(_SEL)
 
 ## Run L7 dependency edge checks
 check-l7-edges:
@@ -298,7 +236,7 @@ release-sbom:
 	@$(TOVEN) run sbom
 
 ## Regenerate workspace dependency-graph SVGs in docs/depgraphs (embedded in docs/DESIGN.md)
-## The domain-layer diagram is derived from domains.toml, so rskit_tool owns the
+## The layer diagram is derived from `toven groups`, so rskit_tool owns the
 ## rendering (Toven orchestrates it as the `depgraphs` command task).
 ## Requires: cargo-depgraph, Graphviz (dot)
 depgraphs:
@@ -306,11 +244,7 @@ depgraphs:
 
 ## Read-only Toven self-hosting canary: discover modules and the dependency
 ## graph, then render the mutation-free release previews (status + plan) with the
-## candidate Toven binary. The native RSKIT_TOOL release path above stays
-## authoritative until parity is proven; `release readiness` stays on that native
-## path because its go/no-go verdict is a release gate (clean tree, registry
-## idempotency), not a binary-contract signal. TOVEN selects the binary (see the
-## TOVEN var).
+## candidate Toven binary. TOVEN selects the binary (see the TOVEN var).
 ## The release previews query crates.io for published-version idempotency, so a
 ## transient registry fault (SSL reset, dropped connection) is retried with
 ## backoff via scripts/retry.sh rather than failing the canary; the local
@@ -324,48 +258,12 @@ toven-canary:
 ## Fast check: format + lint + build only (no tests) — for rapid iteration
 check-fast: fmt-check lint build
 
-## Run all checks (fmt + lint + build + test)
-check: fmt-check structure lint build test-nextest test-doc test-python
+## Run all checks (fmt + structure + lint + build + test + doctest + Python tooling)
+check: fmt-check structure lint build test test-doc test-python
 
-## Check only core domain modules
-check-core:
-	$(call run_domain_target,core)
-
-## Check only patterns domain modules
-check-patterns:
-	$(call run_domain_target,patterns)
-
-## Check only crosscutting domain modules
-check-crosscutting:
-	$(call run_domain_target,crosscutting)
-
-## Check only composition domain modules
-check-composition:
-	$(call run_domain_target,composition)
-
-## Check only transport domain modules
-check-transport:
-	$(call run_domain_target,transport)
-
-## Check only auth domain modules
-check-auth:
-	$(call run_domain_target,auth)
-
-## Check only data domain modules
-check-data:
-	$(call run_domain_target,data)
-
-## Check only ai domain modules
-check-ai:
-	$(call run_domain_target,ai)
-
-## Check only media domain modules
-check-media:
-	$(call run_domain_target,media)
-
-## Check only infra domain modules
-check-infra:
-	$(call run_domain_target,infra)
+## Lint and test one module group (make check-<group>; see `toven groups`)
+check-%:
+	@$(TOVEN) run lint,test --group $* $(if $(JOBS),--jobs $(JOBS))
 
 ## Clean build artifacts
 clean:
@@ -402,26 +300,26 @@ ci-fmt: ensure-act
 
 ## Show help
 help:
-	@echo "Usage: make <target> [C=<crate>] [T=<test>] [PROFILE=<profile>] [W=core|contrib|examples] [FEATURES=...]"
+	@echo "Usage: make <target> [C=<crate>] [W=core|contrib|examples] [G=<group>] [T=<test>] [PROFILE=<profile>] [JOBS=<n>]"
 	@echo ""
 	@echo "Development:"
 	@echo "  make help                                  Show this help"
 	@echo "  make setup                                Install or verify local tooling"
-	@echo "  make build              [C=] [W=] [FEATURES=]                Build workspace(s)"
+	@echo "  make build              [C=] [W=] [G=]     Build"
 	@echo "  make lock               [OFFLINE=1]        Refresh every workspace Cargo.lock (workspace members only)"
-	@echo "  make test               [C=] [T=] [W=] [FEATURES=]            Run tests; defaults to TEST_FEATURES=--all-features"
-	@echo "  make test-nextest       [PROFILE=] [W=] [FEATURES=]           Run tests with nextest; defaults to TEST_FEATURES=--all-features"
-	@echo "  make test-doc           [C=] [W=] [FEATURES=]                 Run doctests only; defaults to TEST_FEATURES=--all-features"
+	@echo "  make test               [C=] [W=] [G=] [T=] [PROFILE=]  Run tests with nextest (all features)"
+	@echo "  make test-default       [C=] [W=] [G=] [T=] [PROFILE=]  Run tests with default features"
+	@echo "  make test-doc           [C=] [W=] [G=]     Run doctests only (all features)"
 	@echo "  make test-python                          Run Python tooling tests"
-	@echo "  make test-affected                        Run tests for changed crates"
+	@echo "  make test-affected      [CHANGED_BASE=] [T=] [PROFILE=]  Test changed crates and dependents (all + default features)"
 	@echo "  make coverage           [JOBS=] [THRESHOLD=]                            Run per-package coverage and gate via toven.toml"
 	@echo "  make coverage-changed   [JOBS=] [THRESHOLD=] [CHANGED_BASE=]            Run coverage for crates changed vs the base ref"
 	@echo "  make test-coverage                                                     Alias for coverage"
-	@echo "  make lint               [C=] [W=] [FEATURES=]                 Run clippy; defaults to --all-features"
-	@echo "  make fmt                [W=]               Format code"
-	@echo "  make fmt-check          [W=]               Check formatting"
+	@echo "  make lint               [C=] [W=] [G=]     Run clippy (all features and targets, -D warnings)"
+	@echo "  make fmt                [C=] [W=] [G=]     Format code"
+	@echo "  make fmt-check          [C=] [W=] [G=]     Check formatting"
 	@echo "  make structure                            Declare-only aggregator guard + crowded-module advisory (CROWDED_MODULE_FILES=15)"
-	@echo "  make doc                [C=] [W=]          Build documentation"
+	@echo "  make doc                [C=] [W=] [G=]     Build documentation"
 	@echo "  make check-l7-edges                       Check L7 dependency edges"
 	@echo "  make check-workspace-deps-sync            Check shared core/contrib/examples dependency versions"
 	@echo "  make check-topology                       Check module topology"
@@ -439,17 +337,8 @@ help:
 	@echo "  make release-sbom                         Generate CycloneDX SBOMs"
 	@echo "  make depgraphs                            Regenerate docs dependency graphs (docs/depgraphs)"
 	@echo "  make check-fast                           fmt + lint + build"
-	@echo "  make check              [C=] [W=]          fmt + lint + build + test"
-	@echo "  make check-core         [JOBS=]            Check only core domain modules"
-	@echo "  make check-patterns     [JOBS=]            Check only patterns domain modules"
-	@echo "  make check-crosscutting [JOBS=]            Check only crosscutting domain modules"
-	@echo "  make check-composition  [JOBS=]            Check only composition domain modules"
-	@echo "  make check-transport    [JOBS=]            Check only transport domain modules"
-	@echo "  make check-auth         [JOBS=]            Check only auth domain modules"
-	@echo "  make check-data         [JOBS=]            Check only data domain modules"
-	@echo "  make check-ai           [JOBS=]            Check only ai domain modules"
-	@echo "  make check-media        [JOBS=]            Check only media domain modules"
-	@echo "  make check-infra        [JOBS=]            Check only infra domain modules"
+	@echo "  make check                                fmt + structure + lint + build + test + doctest + Python tests"
+	@echo "  make check-<group>       [JOBS=]           Lint and test one module group (list: toven groups)"
 	@echo "  make clean                                Remove build artifacts"
 	@echo ""
 	@echo "Local CI (GitHub Actions via act + Docker):"
@@ -458,19 +347,21 @@ help:
 	@echo "  make ci-lint                              Run only lint job"
 	@echo "  make ci-fmt                               Run only fmt job"
 	@echo ""
-	@echo "Crate targeting (C=):"
+	@echo "Selection (C=, W=, G=):"
 	@echo "  C=rskit-errors        Target core crate"
 	@echo "  C=rskit-storage-s3    Target contrib crate"
 	@echo "  C=agent-demo          Target example crate"
+	@echo "  W=contrib             Target one workspace"
+	@echo "  G=transport           Target one module group"
 	@echo ""
 	@echo "Examples:"
-	@echo "  make build                               Build core + contrib workspaces"
+	@echo "  make build                               Build every workspace"
 	@echo "  make build W=examples                    Build examples workspace"
-	@echo "  make test-nextest PROFILE=ci             Run nextest with CI profile"
+	@echo "  make test PROFILE=ci                     Run nextest with CI profile"
 	@echo "  make test-affected                       Test only changed crates"
 	@echo "  make test C=rskit-auth                   Test auth crate"
 	@echo "  make test C=rskit-storage-s3             Test S3 contrib crate"
 	@echo "  make lint C=rskit-errors                 Lint errors crate"
-	@echo "  make check W=core                        Full check on core workspace"
+	@echo "  make check-transport                     Lint and test the transport group"
 	@echo "  make coverage                            Coverage + gate for every workspace in one combined run"
 	@echo "  make coverage-changed                    Coverage for crates changed vs origin/main"

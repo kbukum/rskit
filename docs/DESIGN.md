@@ -38,11 +38,11 @@ See [`adr/`](adr/) for full Architecture Decision Records, and [`adr/0001-layere
 
 rskit is a split workspace family (`core/` and `contrib/`) with no unifying root manifest, so these graphs are generated at two complementary levels rather than as one cross-workspace dump.
 
-### Domain layers
+### Group layers
 
-The big-picture view: the ten domains from [`domains.toml`](../domains.toml) and the dependency direction between them, following the layered architecture in [`adr/0001-layered-crate-architecture.md`](adr/0001-layered-crate-architecture.md). Edges are transitively reduced, so each arrow is an essential layer boundary — a domain only points at the next layer it builds on, never at every ancestor.
+The big-picture view: the layered module groups from `toven.toml` `[groups.*]` (listed by `toven groups`) and the dependency direction between them, following the layered architecture in [`adr/0001-layered-crate-architecture.md`](adr/0001-layered-crate-architecture.md). Edges are transitively reduced, so each arrow is an essential layer boundary — a group only points at the next layer it builds on, never at every ancestor. The unrestricted `testing`, `facade` and `examples` groups sit outside the stack and are not drawn.
 
-![rskit domain layer graph](depgraphs/graph-domains.svg)
+![rskit group layer graph](depgraphs/graph-layers.svg)
 
 ### Contrib adapters
 
@@ -56,4 +56,4 @@ The crate-level detail for the adapter layer: each contrib crate (cache, storage
 make depgraphs
 ```
 
-This regenerates `graph-domains.svg` and `graph-contrib.svg` in `docs/depgraphs/`. `make setup` installs `cargo-depgraph`, but Graphviz `dot` is only installed when system tools are enabled (`scripts/setup.sh --system`, or `INSTALL_SYSTEM_TOOLS=1`); otherwise install Graphviz manually. Regenerate whenever domains or crate dependencies change.
+This regenerates `graph-layers.svg` and `graph-contrib.svg` in `docs/depgraphs/`. `make setup` installs `cargo-depgraph`, but Graphviz `dot` is only installed when system tools are enabled (`scripts/setup.sh --system`, or `INSTALL_SYSTEM_TOOLS=1`); otherwise install Graphviz manually. Regenerate whenever groups or crate dependencies change.

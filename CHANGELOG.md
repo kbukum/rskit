@@ -17,6 +17,7 @@ Notable changes, following [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 - **Breaking (bench)**: `Metric::compute` and `Suite::compute` now return `AppResult`.
 - **Breaking (bench)**: `RunProvenance` adds judge provenance and becomes non-exhaustive; construct from `Default` and use open patterns.
+- **tooling**: module layers move from `domains.toml` into Toven `[groups.*]`, which now enforce the allowed layer dependencies. Every `make` gate runs through Toven with `C=`/`W=`/`G=` selection and `make check-<group>`; `make test` runs nextest, `test-nextest` is removed, and `make test-default` plus `make test-affected` cover the default-features build.
 - **Breaking (process)**: `OutputObserver::with_stdout_bytes` and `with_stderr_bytes` take async sinks returning `AppResult<()>`; persistent byte callbacks also return `AppResult<()>`. Delivery applies backpressure and propagates failures, including during readiness. Incomplete observed output after the post-exit grace period returns a timeout error instead of silent output loss, for async and persistent processes.
 
 ### Fixed

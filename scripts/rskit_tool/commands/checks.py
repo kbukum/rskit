@@ -11,11 +11,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
 
-from ..cargo import Package, discover_packages, package_manifest
-from ..errors import ToolError
+from ..cargo import discover_packages, package_manifest
 from ..paths import ROOT, WORKSPACES
 from ..process import run
-from .domains import list_domain_names, run_domain_checks
 
 
 DISALLOWED_L7_EDGES = (
@@ -46,13 +44,6 @@ def add_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) 
 
     parser = subparsers.add_parser("check", help="Repository guardrail checks")
     check_sub = parser.add_subparsers(dest="check_command", required=True)
-
-    domain = check_sub.add_parser("domain", help="Run clippy/tests for a domain")
-    domain.add_argument("domain", nargs="?", help="Domain name")
-    domain.add_argument("--list", action="store_true", help="List available domains")
-    domain.add_argument("--all", action="store_true", help="Run all domains")
-    domain.add_argument("--jobs", type=int, help="Concurrent independent workspace checks")
-    domain.set_defaults(func=run_domain)
 
     check_sub.add_parser("l7-edges", help="Check disallowed L7 dependency edges").set_defaults(func=run_l7_edges)
     check_sub.add_parser("workspace-deps-sync", help="Check workspace dependency version sync").set_defaults(func=run_workspace_deps_sync)
@@ -254,26 +245,6 @@ def check_unsafe_policy() -> list[str]:
                 if not any("SAFETY:" in candidate for candidate in window):
                     findings.append(f"{relative}:{index + 1}:{line}")
     return findings
-
-
-def run_domain(args: argparse.Namespace) -> int:
-    """Run domain command."""
-
-    if args.list:
-        for name in list_domain_names():
-            print(name)
-        return 0
-    domains = list_domain_names() if args.all else [args.domain]
-    if not domains or domains == [None]:
-        raise ToolError("Usage: check domain <domain|--list|--all>")
-    for domain in domains:
-        run_domain_checks(
-            domain,
-            test_runner=os.environ.get("CHECK_DOMAIN_TEST_RUNNER"),
-            test_threads=os.environ.get("CHECK_DOMAIN_TEST_THREADS", "1"),
-            jobs=args.jobs,
-        )
-    return 0
 
 
 def run_l7_edges(_args: argparse.Namespace) -> int:

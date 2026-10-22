@@ -9,10 +9,10 @@ rskit is a multi-workspace Rust monorepo (`core/`, `contrib/`, `examples/`, `fuz
 
 ## Golden rule: scope to what changed
 
-Never run the whole tree for a small change. Scope by crate (`C=`), by workspace (`W=core|contrib|examples`), or let the affected-set targets compute the affected area.
+Never run the whole tree for a small change. Scope by crate (`C=`), workspace (`W=core|contrib|examples`) or module group (`G=<group>`), or let the affected-set targets compute the affected area. Every gate runs through Toven.
 
 ```bash
-make test-affected                        # only crates the diff touches (+ reverse-deps)
+make test-affected                        # only crates the diff touches (+ dependents), all and default features
 make coverage-changed                     # coverage for changed crates
 ```
 
@@ -20,12 +20,13 @@ make coverage-changed                     # coverage for changed crates
 
 | Intent | Command | Notes |
 |---|---|---|
-| Build | `make build C=<crate>` | `cargo build`; `W=` for a whole workspace |
-| Test | `make test C=<crate> T=<pattern>` | defaults to `--all-features` |
-| Lint | `make lint C=<crate>` | clippy `-D warnings`; defaults to `--all-features` |
+| Build | `make build C=<crate>` | `cargo build` |
+| Test | `make test C=<crate> T=<pattern>` | nextest, all features; `PROFILE=ci` for the CI profile |
+| Test (default features) | `make test-default C=<crate>` | nextest, default features only |
+| Lint | `make lint C=<crate>` | clippy, all targets and features, `-D warnings` |
 | Format (write) | `make fmt` | rustfmt |
 | Format (check) | `make fmt-check` | fast, whole-tree |
-| Doc | `make doc C=<crate>` | `-D warnings` |
+| Doc | `make doc C=<crate>` | private items, `-D warnings` |
 | Doctests | `make test-doc C=<crate>` | doctests only |
 | Deny | `make deny` | cargo-deny: licenses, advisories, sources |
 | Structure | `make structure` | declare-only aggregator guard (`lib.rs`/`mod.rs`) |
@@ -34,6 +35,7 @@ make coverage-changed                     # coverage for changed crates
 
 - `C=<crate>` — one crate, e.g. `C=rskit-storage`, `C=rskit-di`.
 - `W=core|contrib|examples` — one workspace.
+- `G=<group>` — one module group from `toven.toml` (`toven groups` lists them).
 - `T=<pattern>` — a test-name filter passed through to the test runner.
 
 ```bash
@@ -60,14 +62,14 @@ make check-workspace-deps-sync # shared dep versions consistent across workspace
 make check-facade-features     # facade feature wiring
 ```
 
-Per-domain gates aggregate the above for a slice of the tree: `make check-core|check-data|check-transport|check-auth|check-ai|check-media|check-infra|check-crosscutting|check-composition|check-patterns`.
+`make check-<group>` lints and tests one module group, e.g. `make check-core` or `make check-transport`. Toven also rejects any dependency that reaches outside a group's allowed layers.
 
 ## Before you hand work off
 
 For a self-contained change, the minimum passing standard is: `fmt-check`, `lint C=<crate>`, `test C=<crate>` (green under race/shuffle/parallel), `doc C=<crate>` if docs changed, and `check-topology` on any structural change. Escalate to the full canonical gate only for audits or a release:
 
 ```bash
-make check                     # full canonical gate — fmt-check + lint + build + test
+make check                     # full canonical gate — fmt-check + structure + lint + build + test + doctests + Python tooling
 make deny                      # + supply-chain / topology / public-api / dep-sync
 make release-readiness         # supply-chain + API sweep before a release
 ```
