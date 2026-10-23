@@ -29,10 +29,6 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUSTFLAGS: "-D warnings"
-  # Pinned Toven release used to drive the structural/architectural guardrail
-  # gates (structure, topology, l7-edges, public-api, readiness) through the
-  # `command` ecosystem tasks declared in toven.toml.
-  TOVEN_VERSION: v0.1.0-alpha.15
 
 jobs:
   changes:
@@ -304,11 +300,9 @@ jobs:
           tool: cargo-nextest,cargo-llvm-cov
       - name: Install the pinned Toven release
         id: toven
-        # Pinned by immutable commit SHA; the `version` input independently pins
-        # the installed binary (checksum + keyless Sigstore signature verified).
-        uses: kbukum/toven/.github/actions/toven@3b869e82e0db5363f8f17e715ba46da76862b676 # v0.1.0-alpha.15
-        with:
-          version: ${{ env.TOVEN_VERSION }}
+        # Pinned by immutable commit SHA; the action installs the Toven release
+        # built from that commit (checksum + keyless Sigstore signature verified).
+        uses: kbukum/toven/.github/actions/toven@82cd862dc36b942503f62552a9162797bf002ad8 # v0.1.0-alpha.16
       - name: Run coverage
         # Single `toven coverage` entrypoint gated by the floors in toven.toml
         # (line 90%, security-set 95%, per-module floors). On a PR the run is
@@ -354,11 +348,9 @@ jobs:
         run: cargo install cargo-public-api --version 0.52.0 --locked
       - name: Install the pinned Toven release
         id: toven
-        # Pinned by immutable commit SHA; the `version` input independently pins
-        # the installed binary (checksum + keyless Sigstore signature verified).
-        uses: kbukum/toven/.github/actions/toven@3b869e82e0db5363f8f17e715ba46da76862b676 # v0.1.0-alpha.15
-        with:
-          version: ${{ env.TOVEN_VERSION }}
+        # Pinned by immutable commit SHA; the action installs the Toven release
+        # built from that commit (checksum + keyless Sigstore signature verified).
+        uses: kbukum/toven/.github/actions/toven@82cd862dc36b942503f62552a9162797bf002ad8 # v0.1.0-alpha.16
       - run: '"${{ steps.toven.outputs.toven }}" run topology'
       - run: '"${{ steps.toven.outputs.toven }}" run l7-edges'
       - run: '"${{ steps.toven.outputs.toven }}" run public-api'
@@ -389,9 +381,7 @@ jobs:
         run: cargo install cargo-public-api --version 0.52.0 --locked
       - name: Install the pinned Toven release
         id: toven
-        uses: kbukum/toven/.github/actions/toven@3b869e82e0db5363f8f17e715ba46da76862b676 # v0.1.0-alpha.15
-        with:
-          version: ${{ env.TOVEN_VERSION }}
+        uses: kbukum/toven/.github/actions/toven@82cd862dc36b942503f62552a9162797bf002ad8 # v0.1.0-alpha.16
       - run: '"${{ steps.toven.outputs.toven }}" run readiness'
 
   # ---------------------------------------------------------------------------

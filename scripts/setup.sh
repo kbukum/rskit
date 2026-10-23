@@ -5,10 +5,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PYTHON_BIN="${PYTHON:-python3}"
 TOVEN_BIN="${TOVEN:-toven}"
 # Single source of truth for the Toven release pin used by local `make`
-# guardrails and the release targets. Keep this in sync with the `TOVEN_VERSION`
-# env in .github/workflows/{ci,release,toven-canary}.yml. Set TOVEN_ALLOW_ANY_VERSION=1
+# guardrails and the release targets. Keep this in sync with the release named
+# by the Toven action pin in .github/workflows/{ci,release,toven-canary}.yml. Set TOVEN_ALLOW_ANY_VERSION=1
 # to develop against an unpinned Toven on PATH.
-TOVEN_VERSION="${TOVEN_VERSION:-v0.1.0-alpha.4}"
+TOVEN_VERSION="${TOVEN_VERSION:-v0.1.0-alpha.16}"
 TOVEN_ALLOW_ANY_VERSION="${TOVEN_ALLOW_ANY_VERSION:-0}"
 INSTALL_SYSTEM_TOOLS="${INSTALL_SYSTEM_TOOLS:-0}"
 INSTALL_RELEASE_TOOLS="${INSTALL_RELEASE_TOOLS:-0}"
@@ -35,7 +35,7 @@ Options:
 Environment:
   PYTHON=<bin>                 Python binary to validate (default: python3)
   TOVEN=<bin>                  Toven binary to verify (default: toven)
-  TOVEN_VERSION=<tag>          Pinned Toven release to verify/install (default: v0.1.0-alpha.4)
+  TOVEN_VERSION=<tag>          Pinned Toven release to verify/install (default: v0.1.0-alpha.16)
   TOVEN_ALLOW_ANY_VERSION=1    Accept an unpinned Toven on PATH (development override)
   INSTALL_SYSTEM_TOOLS=1       Same as --system
   INSTALL_RELEASE_TOOLS=1      Same as --release
