@@ -20,6 +20,6 @@ No required `plans/` layer, parent indexes, handoff, or extra document set. Add 
 
 Inspect the relevant source first. Describe the intended behavior, owning modules, important decisions, and how success and failure will be verified. Include affected callers and removal of replaced paths. Prefer plain language and outcomes over file-by-file recipes.
 
-Follow the [project standards](../../copilot-instructions.md). Link required [validation](../validate/SKILL.md) rather than copying rules into every step. Preserve useful existing decisions and evidence; update stale notes instead of adding competing instructions.
+Follow the [engineering standard](../../engineering.md). Link required [validation](../validate/SKILL.md) rather than copying rules into every step. Preserve useful existing decisions and evidence; update stale notes instead of adding competing instructions.
 
 Apply a numbered file with [apply-step](../apply-step/SKILL.md), or the whole folder with [apply-plan](../apply-plan/SKILL.md).

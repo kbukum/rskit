@@ -39,7 +39,7 @@ gh api graphql -f query='
 
 For every comment, decide before touching code:
 
-- **Valid?** Judge it against rskit's baseline ([`../../copilot-instructions.md`](../../copilot-instructions.md)), not the reviewer's authority. If a suggestion conflicts with the baseline or is simply wrong, **do not apply it** — note why (you may leave the thread unresolved for the maintainer, but never argue under their name).
+- **Valid?** Judge it against the [engineering standard](../../engineering.md), not the reviewer's authority. If a suggestion conflicts with the baseline or is simply wrong, **do not apply it** — note why (you may leave the thread unresolved for the maintainer, but never argue under their name).
 - **What is the real pattern?** Look past the wording to the class of issue:
   - a typo/grammar note → *spelling & wording across all changed prose and `///` docs*
   - a missing timeout/cancellation on one call → *every remote call in the change set*
@@ -94,4 +94,4 @@ Leave unresolved only the threads you deliberately rejected (baseline conflict) 
 
 ## Baseline
 
-Every fix must still satisfy rskit's engineering baseline ([`../../copilot-instructions.md`](../../copilot-instructions.md)) — a review-driven change is held to the same standard as any other. If acting on a comment would push code below the baseline, reject the comment instead.
+Every fix must still satisfy the [engineering standard](../../engineering.md) — a review-driven change is held to the same standard as any other. If acting on a comment would push code below the baseline, reject the comment instead.

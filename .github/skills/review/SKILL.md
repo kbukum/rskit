@@ -5,39 +5,47 @@ description: "rskit: Review a diff, package, or tree for architecture, correctne
 
 # Review
 
-Apply the [baseline](../../copilot-instructions.md). Review code and evidence, not the author's rationale; plans define scope, not exceptions to requirements.
+Review code and evidence, not the author's rationale. A plan sets scope; it never excuses a rule. Rules live in the [engineering standard](../../engineering.md).
 
-## Scope and execution
-
-Review directly by default. Launch an independent reviewer only when the user requests it; use one bounded reviewer unless distinct additional scopes are explicitly requested. Pass the scope, constraints, and relevant files, not the authoring transcript. Reevaluate returned findings against source before acting.
-
-For changes, include staged/unstaged/untracked work when requested, plus close callers, callees, and affected contracts. Report pre-existing defects in that impact area; do not silently widen into an unrelated audit. For project review, state the package/domain boundary.
-
-Reviews are read-only unless fixes are authorized. For each real defect choose **Redesign / Align / Enhance / Drop** with a one-line reason. Preserve user staging and unrelated work; do not commit, amend, push, resolve remote threads, or post replies implicitly.
-
-## Load checks by trigger
-
-Check placement and canonical reuse first for code changes. A blocker there stops acceptance; report any unperformed checks rather than claiming a complete review. Apply every relevant lens below, in order; load only its file, not the entire reference directory. For prose-only work, use documentation/claim checks rather than runtime test suites.
-
-| Trigger | Checklist |
-|---|---|
-| Code placement, imports, exports, or package wiring | [Pass 00 — Structure and placement](references/00-structure-placement.md) |
-| Shared behavior or a proposed helper/adapter | [Pass 01 — Canonical-owner reuse](references/01-canonical-reuse.md) |
-| Runtime APIs, errors, concurrency, or composition | [Pass 02 — Principle conformance](references/02-principles.md) |
-| Trust boundaries, auth, crypto, privacy, or external input | [Pass 03 — Security & privacy](references/03-security-privacy.md) |
-| Behavior, readability, maintainability, or dead code | [Pass 04 — Quality: simplicity, maintainability, current patterns](references/04-quality.md) |
-| Behavior changes, tests, fixtures, or coverage | [Pass 05 — TDD and tests](references/05-tests-tdd.md) |
-| Documentation, dependencies, CI, or release | [Pass 06 — Documentation and supply chain](references/06-docs-supply-chain.md) |
-| Comments and public API documentation | [Pass 07 — Comments and rustdoc](references/07-comments-rustdoc.md) |
+Review directly. Launch an independent reviewer only when the user asks, and reevaluate its findings against the source before acting. Reviews are read-only unless fixes are authorized. Never commit, amend, push, resolve threads, or post replies without authorization.
 
 ## Modes
 
-- [Changes](references/review-changes.md): diff and affected contracts.
-- [Project](references/review-project.md): bounded tree audit.
-- [Review and fix](references/review-details.md): select only when fixes are requested; confirm the proposed fix scope before editing.
+| Mode | Use when |
+|---|---|
+| [Changes](references/mode-changes.md) | Reviewing a diff, branch, or working tree |
+| [Project](references/mode-project.md) | Auditing a crate, domain, workspace, or tree in priority order |
+| [Review and fix](references/mode-fix.md) | The user asked for fixes too |
 
-## Evidence and output
+## Lenses
 
-Use [validate](../validate/SKILL.md) for scoped gates; reuse fresh evidence and retain required full acceptance gates. Green tooling is necessary, not proof of lifecycle/security correctness.
+Apply each lens whose trigger matches, in this priority order. Load only those files. Placement blockers stop acceptance. For prose-only changes, use docs and gates.
 
-Report `severity | file:line | defect and impact | evidence | proposed action`. **Blocker** means broken behavior/contract or a hard-rule violation; **should-fix** means a substantiated maintainability defect; **nit** is optional style, never a gate. List incomplete/skipped checks and uncertainty. Do not invent findings or treat grep hits as proof.
+| # | Lens | Trigger |
+|---|---|---|
+| 1 | [Placement and ownership](references/placement-and-ownership.md) | New or moved code, imports, crates, shared helpers |
+| 2 | [Security and runtime](references/security-and-runtime.md) | Input, secrets, I/O, tasks, locks, errors, `unsafe`, AI |
+| 3 | [Public API and stability](references/public-api.md) | Any `pub` item, error type, or version change |
+| 4 | [Tests and proof](references/tests.md) | Any behavior change or test |
+| 5 | [Code quality and redesign](references/code-quality.md) | Any code change; CLI output |
+| 6 | [Docs and comments](references/docs-and-comments.md) | rustdoc, comments, READMEs, docs, changelog |
+| 7 | [Dependencies and supply chain](references/supply-chain.md) | Manifests, lockfiles, CI, release |
+| 8 | [Gates and enforcement](references/gates.md) | Every review; gate or tooling changes |
+
+## Severity
+
+| Severity | Meaning |
+|---|---|
+| Blocker | Broken behavior or contract, or a hard-rule violation. Stops acceptance. |
+| Should-fix | A real defect in maintainability, clarity, or consistency. Fix in this change unless deferred with a reason. |
+| Nit | Optional preference. Never blocks. |
+
+## Findings
+
+Write each finding on one line:
+
+```text
+<severity> — <file>:<line> — <defect and impact> — <rule link> — <action: Redesign | Align | Enhance | Drop, and how>
+```
+
+Group repeated patterns into one finding with all locations. List skipped checks and uncertainty. Grep hits are leads, not proof; never invent findings. Green gates are necessary, not sufficient.

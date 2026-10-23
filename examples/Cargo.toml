@@ -19,7 +19,7 @@ publish = false
 rskit = { package = "rskit-suite", path = "../core/rskit", version = "0.2.0-alpha.1" }
 
 # External
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1.54.1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 indicatif = "0.18"
 async-trait = "0.1"

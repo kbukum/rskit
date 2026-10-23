@@ -5,7 +5,7 @@ description: "rskit: Prepare or publish a release through the repository's versi
 
 # Release
 
-Follow [releasing](../../../docs/RELEASING.md), [versioning](../../../docs/VERSIONING.md), and the [baseline](../../copilot-instructions.md). Split Cargo workspaces publish independently versioned crates in dependency order. Toven stages bumps; the maintainer owns the release commit and signed umbrella tag.
+Follow [releasing](../../../docs/RELEASING.md), [versioning](../../../docs/VERSIONING.md), and the [engineering standard](../../engineering.md). Split Cargo workspaces publish independently versioned crates in dependency order. Toven stages bumps; the maintainer owns the release commit and signed umbrella tag.
 
 1. Inspect clean `main`, tags, current manifests, release tooling, credentials availability, and requested scope. Use `make setup` and `scripts/setup.sh --release` only when needed.
 2. Run full `make check`, `make release-readiness`, `make release-coverage`, and a project review. Preserve configured coverage and supply-chain gates.

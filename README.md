@@ -8,7 +8,7 @@
 
 **A production-grade Rust toolkit for building scalable, resilient services.** Structured errors, layered config, OpenTelemetry observability, typestate lifecycle, tower-based resilience, async pipelines, worker pools, security policy, and tonic gRPC — composable building blocks built on the standard Rust async ecosystem.
 
-> **Status — pre-1.0.** Crates are versioned independently per crate. Breaking changes are allowed before `1.0`, documented in [`CHANGELOG.md`](CHANGELOG.md), and governed by [`docs/policy/SEMVER.md`](docs/policy/SEMVER.md). MSRV bumps are minor version changes during `0.x`.
+> **Status — pre-1.0 alpha.** APIs may still change between releases. Crates are versioned independently per crate. Breaking changes are allowed before `1.0`, documented in [`CHANGELOG.md`](CHANGELOG.md), and governed by [`docs/policy/SEMVER.md`](docs/policy/SEMVER.md). MSRV bumps are minor version changes during `0.x`.
 
 > **Sibling project.** [**gokit**](https://github.com/kbukum/gokit) (Go) · rskit (Rust, this repo). Public abstractions (`AppError`, `Component`, `Provider`, `Pipeline`, lifecycle hooks) are evaluated for parity across both.
 
@@ -42,7 +42,7 @@ Crates are organized into layered groups, declared in `toven.toml` `[groups.*]`.
 - **Compile-time lifecycle safety** — typestate `App<S, C>` makes invalid lifecycle transitions impossible to write.
 - **Production resilience** — `governor` rate limiter, circuit breaker, retry with backoff + jitter, bulkhead — all available as `tower::Layer`.
 - **Typed errors** — `ErrorCode` enum (exhaustive match), RFC 9457 problem details, and lightweight HTTP status metadata; gRPC mapping lives in `rskit-grpc`.
-- **Sibling parity** — APIs mirror [gokit](https://github.com/kbukum/gokit) (Go). See [`docs/DESIGN.md`](docs/DESIGN.md) for cross-language design notes.
+- **Sibling parity** — shares concepts and wire contracts with [gokit](https://github.com/kbukum/gokit) (Go) while staying idiomatic Rust. See [`docs/DESIGN.md`](docs/DESIGN.md) for cross-language design notes.
 
 ## Install
 
@@ -116,7 +116,7 @@ Start with the [`developer documentation hub`](docs/README.md) if you are not su
 
 ## Contributing
 
-We welcome contributions. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup, testing conventions, commit style, and the PR process. By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
+We welcome contributions. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup, commit style, and the PR process, and the [engineering standard](.github/engineering.md) for the rules every change follows. By participating you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 Other community docs: [`SECURITY.md`](SECURITY.md) · [`GOVERNANCE.md`](GOVERNANCE.md) · [`MAINTAINERS.md`](MAINTAINERS.md)
 

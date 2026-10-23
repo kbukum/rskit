@@ -56,23 +56,21 @@ $ make test C=rskit-<name>
 
 ## Sibling Parity
 
-<!-- rskit mirrors gokit.
-If this change touches a public abstraction (error codes, Component lifecycle, Provider, Pipeline, etc.),
-confirm parity or link the corresponding sibling issue. -->
+<!-- rskit and gokit share concepts and wire contracts, not internal shapes. If this change touches a shared contract (error codes, Component lifecycle, Provider, Pipeline, wire formats), confirm parity or link the sibling issue. -->
 
 - [ ] Sibling-parity not required (internal change)
 - [ ] Sibling-parity tracked: gokit#___
 
 ## Checklist
 
-- [ ] Public API items have `///` doc comments
-- [ ] New `with_*` builder methods are annotated `#[must_use]`
-- [ ] New public enums are `#[non_exhaustive]` if they may grow
-- [ ] No `unwrap()` / `expect()` in library code (tests are fine)
-- [ ] Any new `unsafe` block has a `// SAFETY:` comment
-- [ ] Affected split workspace lockfiles updated and committed if dependencies changed
-- [ ] CHANGELOG entry added under `[Unreleased]`
-- [ ] New dependencies (if any) are justified and pass the relevant `make deny` check
+<!-- Rules: .github/engineering.md. See its Definition of Done. -->
+
+- [ ] Code sits in the right layer and reuses the concern owner
+- [ ] Trust boundaries, bounds, cancellation, and shutdown are handled; no runtime `unwrap` / `expect` / `panic!`
+- [ ] Public API is minimal and typed; public items have rustdoc
+- [ ] Tests cover the change, including failure paths, and are deterministic
+- [ ] New dependencies are justified; affected lockfiles are updated and committed
+- [ ] CHANGELOG entry added under `[Unreleased]`; breaking changes marked **Breaking**
 
 ## Additional Notes
 

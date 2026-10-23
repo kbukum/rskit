@@ -59,7 +59,7 @@ The `build.rs` script runs at compile time to capture:
 
 ## Cross-Kit Consistency
 
-This crate mirrors the API of:
+This crate aligns in concept with:
 - **gokit** — `version.VersionInfo` / `version.GetVersionInfo()`
 
 ---

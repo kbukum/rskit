@@ -19,7 +19,7 @@ Large multi-crate Rust workspaces converge on one of two versioning models. Both
 
 **Independent** optimizes for meaningful per-crate history and minimal churn, at the cost of managing a compatibility matrix and internal dependency pins — which is only sustainable with automation.
 
-A facade-style suite (rskit ships `rskit-suite`, imported as `rskit`) can lean toward lock-step, because consumers pin the facade and expect the family to move together. rskit uses **independent per-crate** versioning in `0.x` because its crate count (70+ publishable crates) makes full-suite republishing the dominant release cost; caret pins keep the facade's compatibility story simple by absorbing dependency patches.
+A facade-style suite (rskit ships `rskit-suite`, imported as `rskit`) can lean toward lock-step, because consumers pin the facade and expect the family to move together. rskit uses **independent per-crate** versioning in `0.x` because its large crate count makes full-suite republishing the dominant release cost; caret pins keep the facade's compatibility story simple by absorbing dependency patches.
 
 ## How publishing decides what to release
 

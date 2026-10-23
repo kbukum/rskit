@@ -1,6 +1,6 @@
 # rskit skills
 
-Apply the [repository baseline](../copilot-instructions.md). Each skill is the canonical procedure for this repository.
+Apply the [engineering standard](../engineering.md). Each skill is the canonical procedure for this repository.
 
 Skill names/descriptions are discovery context; bodies load on activation; references load only when their task applies. Do not preload the catalog or recursively follow links. Review directly by default; independent agents require the user's request. Routing to a skill is not delegation to another agent.
 

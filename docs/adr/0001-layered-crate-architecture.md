@@ -32,6 +32,10 @@ The layer contract is enforced via:
 - [`cargo-deny`](https://embarkstudios.github.io/cargo-deny/) `bans` rules in [`deny.toml`](../../deny.toml) and the split workspace deny configs — denies forbidden dependency edges and dependency policy violations.
 - The repository tooling app commands that walk the crate graph and assert topology invariants, especially `scripts/rskit_tool.py check topology` and `scripts/rskit_tool.py check l7-edges`.
 
+### Enforcement update
+
+Layering is now enforced by Toven: each `[groups.*]` entry in [`toven.toml`](../../toven.toml) lists its allowed lower layers in `guardrails.allow_groups`, and Toven rejects any upward edge when it plans a task. The current layer membership lives there, not in the list above. `cargo-deny` checks licenses, advisories, and sources, not rskit layer edges. `check topology` and `check l7-edges` guard specific forbidden edges.
+
 ## Consequences
 
 - New crates must be placed in the correct layer; the lint rule fails CI if violated.

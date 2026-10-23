@@ -26,11 +26,12 @@ impl PtyMaster {
     /// Register the (already non-blocking) master fd with the reactor.
     ///
     /// # Errors
-    /// Propagates a reactor-registration failure from [`AsyncFd::new`].
+    /// Propagates a reactor-registration failure from [`AsyncFd::register`].
     pub(crate) fn new(master: OwnedFd) -> io::Result<Self> {
-        Ok(Self {
-            inner: AsyncFd::new(master)?,
-        })
+        // SAFETY: `OwnedFd` owns an open fd, returns that same fd from every
+        // `as_raw_fd` call, and keeps it open until the `AsyncFd` drops it.
+        let inner = unsafe { AsyncFd::register(master) }?;
+        Ok(Self { inner })
     }
 }
 

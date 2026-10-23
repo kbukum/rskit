@@ -28,6 +28,8 @@ This is the documentation hub for developers using or contributing to rskit. The
 | Topic | Read |
 |---|---|
 | Local setup, testing, PR expectations | [Contributing guide](../CONTRIBUTING.md) |
+| Rules every change follows | [Engineering standard](../.github/engineering.md) |
+| Where code goes and who owns a concern | [Design notes](DESIGN.md), [concern owners](CONCERN-OWNERS.md), [naming and structure](naming-and-structure.md), [test layout](TEST-LAYOUT.md) |
 | Workspace and crate ownership | [Package catalog](PACKAGES.md) |
 | Layering decision | [ADR 0001](adr/0001-layered-crate-architecture.md) |
 | Architecture Decision Records | [ADR index](adr/) |

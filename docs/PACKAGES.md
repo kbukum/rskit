@@ -143,4 +143,4 @@ cargo test --manifest-path examples/Cargo.toml --workspace
 
 ## Dependency direction
 
-Lower-level crates must not depend on higher-level crates. The canonical dependency policy is ADR [0001: Layered crate architecture](adr/0001-layered-crate-architecture.md), enforced by `make check-topology` and `make deny`.
+Lower-level crates must not depend on higher-level crates. The canonical dependency policy is ADR [0001: Layered crate architecture](adr/0001-layered-crate-architecture.md), enforced by Toven `[groups.*]` `guardrails.allow_groups` in `toven.toml`. `make check-topology` guards a few specific forbidden edges.

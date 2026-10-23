@@ -27,14 +27,14 @@ Tests that pin an aggregate module's behavior across several of its concern file
 Tests that drive a crate **through its public API only** live in the crate's top-level `tests/` directory (each file is its own crate, black-box by construction). This is where a `contrib/` adapter exercises the backend-agnostic `core` crate's contract, and where cross-crate wiring is proven.
 
 - A test that needs a live service (broker, container, network, real SDK credentials) is marked `#[ignore]` (contrib integration tests) or guarded so the default `cargo nextest run` stays hermetic — never failing a developer who lacks the backend.
-- Backend-agnostic **core** crates are exercised from their `contrib/` adapter's `tests/`; coverage attributes back via the workspace coverage tooling. A core crate reading low in isolation is often covered from its adapter — **re-measure before assuming a gap** (`make coverage`, read `target/coverage/summary.json`).
+- Backend-agnostic **core** crates are exercised from their `contrib/` adapter's `tests/`; coverage attributes back via the workspace coverage tooling. A core crate reading low in isolation is often covered from its adapter — **re-measure before assuming a gap** (`make coverage`, then read the report under `target/toven/coverage`).
 
 ## Where shared test tooling lives
 
 Fakes, harnesses, golden-file helpers, workspace/tempdir setup, and assertions are a **shipped product** (`core/rskit-testutil`: `FakeComponent`, `MockProvider`, `Golden`, `TestWorkspace`, `assert_ok`/`assert_err_code`, `TestEvent`, `TestAppConfig`, `CurrentDirGuard`, …), not throwaway scaffolding.
 
-- Never hand-roll a one-off fake in a `#[cfg(test)]` block when a shared helper exists or the fake should live in `rskit-testutil`. When a test needs a new fake/harness, **add or extend it in `rskit-testutil` (or the domain's testutil module) and reuse it** — added once, reused everywhere (see the reuse dimension in `tmp/tdd-hardening/README.md`).
-- `rskit-testutil` keeps a declare-only `lib.rs`, `#![warn(missing_docs)]`, and accurate rustdoc for every promoted helper.
+- Never hand-roll a one-off fake in a `#[cfg(test)]` block when a shared helper exists or the fake should live in `rskit-testutil`. When a test needs a new fake/harness, **add or extend it in `rskit-testutil` (or the domain's testutil module) and reuse it** — added once, reused everywhere.
+- `rskit-testutil` keeps a declare-only `lib.rs` and accurate rustdoc for every promoted helper.
 
 ## Non-goals
 
@@ -44,4 +44,4 @@ Fakes, harnesses, golden-file helpers, workspace/tempdir setup, and assertions a
 
 ## Enforcement
 
-Test placement is a **review pass**, not a hard gate — see `.github/skills/review/references/00-structure-placement.md` (Test placement). The `declare-only-aggregator` ast-grep rule (`make structure`) already guards aggregators against inline test modules, so tier-2 tests must be a sibling `tests.rs`. Nothing here blocks CI beyond that existing structure guard; the review pass and reviewer judgment carry it.
+Test placement is a **review check**, not a hard gate — see the [placement and ownership lens](../.github/skills/review/references/placement-and-ownership.md). The `declare-only-aggregator` ast-grep rule (`make structure`) already guards aggregators against inline test modules, so tier-2 tests must be a sibling `tests.rs`. Nothing here blocks CI beyond that existing structure guard; the review lens and reviewer judgment carry it.
