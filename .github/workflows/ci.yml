@@ -9,14 +9,10 @@ on:
       - 'LICENSE'
       - '.github/ISSUE_TEMPLATE/**'
       - '.github/PULL_REQUEST_TEMPLATE/**'
+  # No paths-ignore here: the required "CI Status" check must report on every
+  # PR. The `changes` job skips the Rust jobs when no code changed.
   pull_request:
     branches: [main]
-    paths-ignore:
-      - '**.md'
-      - 'docs/**'
-      - 'LICENSE'
-      - '.github/ISSUE_TEMPLATE/**'
-      - '.github/PULL_REQUEST_TEMPLATE/**'
   merge_group:
 
 permissions:

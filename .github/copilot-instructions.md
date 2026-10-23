@@ -1,31 +1,40 @@
 # rskit
 
-Rust infrastructure kit. `core/rskit-*` holds foundations and the facade; `contrib/<domain>/<name>` holds adapters; `examples/` holds consumers. These are separate Cargo workspaces. Read toolchain and dependency versions from their manifests.
+Pre-1.0 Rust infrastructure kit. `core/rskit-*` holds foundations and the `rskit-suite` facade; `contrib/<domain>/<name>` holds adapters; `examples/` holds consumers. Each is a separate Cargo workspace with no root `Cargo.toml`. Read toolchain and dependency versions from the manifests.
 
 ## Invariants
 
-- Pre-stable: fix root causes with Redesign / Align / Enhance / Drop, not compatibility shims. Preserve sound code and keep the change's dependent callers consistent.
-- Consult [concern owners](../docs/CONCERN-OWNERS.md) before adding shared logic. Imports point downward; enhance a lower owner before consuming it. Kits are runtime-independent; consistency and idiomatic Rust outrank symbol parity.
-- Typed, minimal public APIs; preserve causes through `AppError` / `AppResult`. No runtime `unwrap`, `expect`, swallowed errors, or success-shaped fallbacks.
-- Config selects explicit injected registries/adapters. No import-time I/O or global mutable registries; inject telemetry, clients, and policies. Provider shapes: RequestResponse, Stream, Sink, Duplex.
-- Validate trust boundaries; no secrets in code/logs, credential URLs, SQL interpolation, or shell-built subprocesses. Bound remote calls, idempotent jittered retries, buffers, and tasks; own cancellation and shutdown.
-- `lib.rs` / `mod.rs` contain declarations and re-exports only. Use concern-named modules; split by responsibility, not a hard line count. Inherit workspace lints, document public items, mark `with_*` builders `#[must_use]`, and use `#[non_exhaustive]` for growing public enums. Follow the repository's unsafe policy.
-- Test-first and deterministic; reuse doubles, cover failures, and use paused Tokio time, not sleep. Serialize environment mutation. Coverage: >=80% per package, >=85% overall and for errors/auth/authz/security/resilience/encryption. Keep integration proof.
-- Markdown, rustdoc, and comment prose have no arbitrary column wrapping; preserve code examples and directives.
-- Docs and agent instructions are concise, task-first, and organized for the reader. Explain capabilities at a high level; retain detail for correct use, contracts, safety, and verification. Changelogs summarize outcomes; skills link canonical procedures instead of repeating them.
+The [engineering standard](engineering.md) owns these rules; this is the short form.
+
+- Pre-stable: fix root causes with Redesign, Align, Enhance, or Drop. No compatibility shims. Update dependent callers in the same change.
+- Find the [concern owner](../docs/CONCERN-OWNERS.md) before adding shared logic. Imports point down. Idiomatic Rust and project consistency outrank gokit symbol parity.
+- Typed, minimal public APIs. Errors are `AppError` / `AppResult` and keep their cause. No runtime `unwrap`, `expect`, `panic!`, swallowed errors, or success-shaped fallbacks.
+- Config selects injected registries and adapters. No import-time I/O or global mutable registries.
+- Validate trust boundaries. No secrets in code, logs, or URLs; no SQL interpolation or shell-built subprocesses. Bound remote calls, retries, buffers, and tasks; own cancellation and shutdown.
+- `lib.rs` / `mod.rs` hold declarations and re-exports only.
+- Test first, deterministic, with paused Tokio time. Reuse `rskit-testutil` doubles. Coverage floors live in `toven.toml`.
+- Never hard-wrap Markdown, rustdoc, or comment prose.
+- Docs and agent instructions are short and task-first. Skills link rules instead of repeating them.
 
 ## Work and validation
 
-Load only the matching [skill](skills/README.md) and reference sections. Preserve worktree/index changes. Commit, amend, push, or open draft PRs only when authorized. Keep plans in `tmp/<plan>/`, reusing existing folders. Apply each selected step fully; record progress in the step, not routine handoffs.
+- Load only the matching [skill](skills/README.md) and the reference sections it needs.
+- Preserve the worktree and index. Commit, amend, push, or open draft PRs only when authorized.
+- Keep plans in `tmp/<plan>/`, reusing existing folders. Apply a selected step fully and record progress in it.
+- Validate with the smallest covering gate (`make test C=<crate> T=<pattern>`, `make lint C=<crate>`, `make doc C=<crate>`), then `make check`. The [validate skill](skills/validate/SKILL.md) maps changes to gates. Prose-only edits need link checks, not a build.
 
-Use `make test C=<crate> T=<pattern>`, `make lint C=<crate>`, and `make doc C=<crate>` as relevant. `make check` is the full gate; see [validate](skills/validate/SKILL.md) for topology, API, coverage, and dependency gates. Prose-only edits need documentation checks, not a full build.
+## Where to read
 
-## Load before the relevant change
-
-| Change | Reference |
+| Change | Read |
 |---|---|
-| New crate, facade, or adapter | [Crate structure](engineering.md#crate-structure), then `new-crate` / `new-backend` |
-| APIs, locking, module structure, errors | [Code style](engineering.md#code-style) and [Key patterns](engineering.md#key-patterns) |
-| Security, AI, dependencies, release | [Engineering principles](engineering.md#engineering-principles), then the matching checklist |
+| New crate, adapter, or shared helper | [Placement and ownership](engineering.md#placement-and-ownership), then `new-crate` or `new-backend` |
+| Input, secrets, I/O, tasks, `unsafe` | [Security and runtime](engineering.md#security-and-runtime) |
+| Public items, errors, versions | [Public API and stability](engineering.md#public-api-and-stability) |
+| Module layout, locks, lints | [Code style](engineering.md#code-style) |
+| Tests | [Tests](engineering.md#tests) |
+| AI, prompts, tools | [AI features](engineering.md#ai-features) |
+| Dependencies, CI, release | [Dependencies and supply chain](engineering.md#dependencies-and-supply-chain), then `release` |
+| Docs and rustdoc | [Documentation](engineering.md#documentation-and-consumer-experience), then `docs` |
+| Which rules are gated | [Validation](engineering.md#validation) and [Known gaps](engineering.md#known-gaps) |
 
-Read the needed section, not the entire reference. A test double proves a contract, not real integration behavior.
+Read the needed section, not the whole file. A test double proves a contract, not real integration behavior.

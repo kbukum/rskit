@@ -16,7 +16,6 @@ Thank you for your interest in contributing! This document explains how to get s
 - [Commit Style](#commit-style)
 - [Pull Request Process](#pull-request-process)
 - [Adding a New Crate](#adding-a-new-crate)
-- [Crate Conventions](#crate-conventions)
 
 ---
 
@@ -56,7 +55,7 @@ Be respectful, constructive, and patient. We follow the [Contributor Covenant v2
 
 ## Development Setup
 
-**Minimum Rust version:** 1.97 (declared by workspace `rust-version`). The repository pins a newer development toolchain in `rust-toolchain.toml`.
+**Minimum Rust version:** declared by each workspace's `rust-version`. `rust-toolchain.toml` pins the development toolchain.
 
 ```sh
 # Install/verify the pinned toolchain, Python runtime, and local Cargo tools
@@ -103,9 +102,9 @@ cargo test --manifest-path examples/Cargo.toml --workspace
    git checkout -b feat/my-feature
    ```
 
-2. Make the smallest change that achieves the goal. Avoid unrelated clean-up in the same PR — file a separate issue/PR for it.
+2. Follow the [engineering standard](.github/engineering.md). rskit is pre-1.0: fix the root cause, even when that changes a public API, and update every caller in the same change. Keep unrelated clean-up out of the PR.
 
-3. Keep public APIs additive and backward-compatible unless the change is intentionally breaking (discuss first).
+3. Open an issue first for a large or breaking API change so the design can be discussed.
 
 4. Update `CHANGELOG.md` under `## [Unreleased]` with a brief description of what you added, changed, or fixed.
 
@@ -131,10 +130,7 @@ For CI-like local testing:
 make test PROFILE=ci          # with CI profile (retries, no fail-fast)
 ```
 
-- Every public function and trait impl should have at least one test.
-- Time-dependent tests **must** use `tokio::time::pause()` / `tokio::time::advance()` — never `std::thread::sleep`.
-- Env-var tests must hold a `static parking_lot::Mutex<()>` guard to prevent cross-test pollution (see `rskit-config/src/loader.rs` for the pattern).
-- Tests that require a live service (e.g., gRPC integration tests) go in the crate-local `tests/` directory under `core/rskit-<name>/tests/` for foundation crates or `contrib/<domain>/<name>/tests/` for adapters, and are gated with `#[ignore]` plus a doc comment explaining what service is needed.
+Test rules live in the [engineering standard](.github/engineering.md#tests), and test placement lives in [test layout](docs/TEST-LAYOUT.md). Env-var tests hold a shared lock; see `ENV_LOCK` in `core/rskit-config/tests/integration.rs`.
 
 Run the full suite before submitting:
 
@@ -186,31 +182,13 @@ chore(ci): pin cargo-deny to 0.16
 
 1. Create foundation crates under `core/rskit-<name>/` with `cargo new --lib`, or adapter crates under `contrib/<domain>/<name>/`.
 2. Add foundation crates to `core/Cargo.toml` or adapter crates to the matching `contrib/<domain>/*` workspace pattern in `contrib/Cargo.toml`.
-3. Give the crate its own `version` (seeded from the current alpha, e.g. `version = "0.1.0-alpha.1"`), inherit the remaining workspace metadata (`edition.workspace = true`, etc.), and add any shared dependencies through the owning workspace manifest.
-4. Add `#![warn(missing_docs)]` to `src/lib.rs`.
-5. Wire it into the `rskit` facade crate.
+3. Give the crate its own `version` (seeded from the current alpha, e.g. `version = "0.1.0-alpha.1"`), inherit the remaining workspace metadata (`edition.workspace = true`, etc.) and lints (`[lints] workspace = true`), and add shared dependencies through the owning workspace manifest.
+4. Add the crate to its layer's `modules` list in [`toven.toml`](toven.toml) `[groups.*]`, then regenerate [`docs/MODULE-INDEX.md`](docs/MODULE-INDEX.md) with `toven run module-index`.
+5. Wire it into the `rskit-suite` facade when it should be reachable from there.
 6. Add or update package documentation in `docs/PACKAGES.md` and facade feature documentation when applicable.
 7. Open a tracking issue describing the API surface before implementing, so the design can be discussed early.
 
 Version bumps and release preparation are maintainer-only work. Contributors should add `CHANGELOG.md` entries under `[Unreleased]`; maintainers follow [`docs/VERSIONING.md`](docs/VERSIONING.md) and [`docs/RELEASING.md`](docs/RELEASING.md) when cutting a release.
-
----
-
-## Crate Conventions
-
-| Convention | Requirement |
-|---|---|
-| `#![warn(missing_docs)]` | All crates |
-| `#[must_use]` on all `with_*` builder methods | All crates |
-| `#[non_exhaustive]` on public enums | All public enums that may grow |
-| `parking_lot::Mutex` instead of `std::sync::Mutex` | All crates (non-poisoning, consistent) |
-| Async locks | Only when lock ownership must cross `.await` or coordinate async waiters |
-| No `unsafe` without a `// SAFETY:` comment | All crates |
-| No `unwrap()` / `expect()` in library code | All crates (tests are fine) |
-| `tokio::time::pause()` for time-based tests | `rskit-stream`, `rskit-resilience` |
-| `#[allow(async_fn_in_trait)]` for public traits with default impls | As needed |
-
-Prefer synchronous `parking_lot` locks for in-memory state that is accessed and released within a synchronous critical section. Never hold any lock across unrelated I/O; document the reason when an async lock is intentionally required.
 
 ---
 
@@ -225,7 +203,8 @@ Prefer synchronous `parking_lot` locks for in-memory state that is accessed and 
 - [docs/VERSIONING.md](docs/VERSIONING.md) — versioning rules
 - [docs/policy/SEMVER.md](docs/policy/SEMVER.md) · [docs/policy/DEPRECATION.md](docs/policy/DEPRECATION.md)
 - [docs/adr/](docs/adr/) — Architecture Decision Records
+- [.github/engineering.md](.github/engineering.md) — rules every change follows
 
 ### Sibling-parity reminder
 
-Public abstractions (`AppError`, `Component`, `Provider`, lifecycle hooks) are mirrored across [gokit](https://github.com/kbukum/gokit) and [rskit](https://github.com/kbukum/rskit). When you change one of these surfaces here, please open tracking issues in the sibling repo so the change can be evaluated for parity.
+rskit and [gokit](https://github.com/kbukum/gokit) share concepts and wire contracts (`AppError` codes, `Component`, `Provider`, lifecycle hooks), not internal shapes. When you change a shared contract here, open a tracking issue in gokit. See [sibling-parity](.github/skills/sibling-parity/SKILL.md).

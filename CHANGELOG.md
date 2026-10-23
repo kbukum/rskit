@@ -31,6 +31,7 @@ Notable changes, following [Keep a Changelog](https://keepachangelog.com/en/1.1.
 
 - Update `rustls` to 0.23.46, `quinn-proto` to 0.11.19 and `zip` to 9 to resolve RUSTSEC-2026-0346 to 0349 and the `quinn-proto` and `zip` advisories; `rskit-fs` archive extraction adapts to the zip 9 name API.
 - Update `rustls-webpki` to 0.103.16, and `webpki-roots` and `webpki-root-certs` to 1.0.10, to resolve RUSTSEC-2026-0381, 0382 and 0383 (distrusted emSign intermediates).
+- Update `tokio` to 1.54.1 and `ctutils` to 0.4.5 to resolve RUSTSEC-2026-0386 and RUSTSEC-2026-0385; the `rskit-process` PTY master registers its fd with `AsyncFd::register`.
 
 ## [v0.2.0-alpha.8] - 2026-08-16
 

@@ -19,7 +19,7 @@ git diff --cached           # the exact change going in
 
 ## 2. Write the message
 
-rskit uses **Conventional Commits** (`feat`, `fix`, `docs`, `refactor`, `test`, `chore`). A single compact subject line, imperative mood, describing the change **as it now stands**:
+rskit uses **Conventional Commits** with the types in [CONTRIBUTING](../../../CONTRIBUTING.md#commit-style). A single compact subject line, imperative mood, describing the change **as it now stands**:
 
 ```
 feat(storage): add S3 multipart upload
@@ -50,4 +50,4 @@ Use a message file for a subject + body:
 git commit -F <path-to-message>
 ```
 
-Do **not** amend or rewrite already-pushed history, and do **not** run destructive git commands on uncommitted work. Push only when asked (or when the task — e.g. resolving PR reviews — requires the commit to be on the branch).
+Do **not** amend or rewrite already-pushed history, and do **not** run destructive git commands on uncommitted work. Commit, amend, and push only when explicitly authorized.

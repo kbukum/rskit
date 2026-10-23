@@ -43,4 +43,4 @@ If you catch yourself writing `batch-5-...`, ask "what does this change actually
 
 ## After the branch exists
 
-Per repo workflow, this skill **creates the branch and leaves the edits uncommitted** — the maintainer commits and pushes, and opens a PR only when explicitly asked. Do not commit, push, or open a PR as part of creating the branch.
+This skill **creates the branch and leaves the edits uncommitted**. Commit, push, or open a PR only when separately authorized.

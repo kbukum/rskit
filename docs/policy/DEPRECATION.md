@@ -71,4 +71,4 @@ Before merging a deprecation PR:
 - [ ] Replacement API exists and is documented.
 - [ ] If the replacement requires a non-trivial migration, add a `## Migration` block to the CHANGELOG entry showing before/after.
 - [ ] Removal date / version recorded in `docs/policy/DEPRECATIONS.csv` (sortable list — create on first deprecation).
-- [ ] `clippy::deprecated_in_future` check passes (the deprecation compiles cleanly in the workspace).
+- [ ] `make lint` passes with the deprecation in place (the deprecation compiles cleanly in the workspace).

@@ -116,6 +116,6 @@ assert_eq!(rendered, "hello rskit");
 
 ## Cross-kit alignment
 
-This crate mirrors the utility modules in:
+This crate aligns in concept with the utility modules in:
 
 - **gokit** — `github.com/kbukum/gokit/util`

@@ -8,12 +8,12 @@ rskit is **pre-stable** (`v0.x`). Backward compatibility is **not** guaranteed b
 
 ## Sibling-Parity Contract
 
-rskit is part of a sibling pair that intentionally mirrors module structure, naming, and patterns:
+rskit is part of a sibling pair that shares concepts, wire contracts, and lifecycle patterns. Each kit stays idiomatic to its language; neither is canonical:
 
 - [`kbukum/gokit`](https://github.com/kbukum/gokit) — Go
 - [`kbukum/rskit`](https://github.com/kbukum/rskit) — Rust (this repo)
 
-When a public abstraction (`AppError`, `Component`, `Provider`, `Pipeline`, lifecycle hooks, error codes, configuration semantics) is changed in one sibling, the same change should be evaluated for the other. Drift is treated as a finding and tracked in cross-sibling issues.
+When a public abstraction (`AppError`, `Component`, `Provider`, `Pipeline`, lifecycle hooks, error codes, configuration semantics) is changed in one sibling, the same change should be evaluated for the other. Contract drift is a finding tracked in cross-sibling issues; idiomatic differences are not. See [sibling-parity](.github/skills/sibling-parity/SKILL.md).
 
 ## Roles
 

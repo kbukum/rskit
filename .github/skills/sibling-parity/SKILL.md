@@ -45,4 +45,4 @@ Run the affected rskit crates through the `validate` skill and, for a real audit
 make test C=<crate>
 ```
 
-Per repo workflow, **create the branch and make edits only** — the maintainer commits and pushes.
+Leave edits uncommitted. Git actions need authorization.

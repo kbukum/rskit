@@ -10,7 +10,7 @@ This file lists the people responsible for the rskit project. Maintainers are re
 
 ## Bus Factor: 1 — Co-Maintainers Wanted
 
-rskit currently has a **single core maintainer**. This is a known sustainability risk for a project of this size (70+ publishable crates). We are actively looking for contributors interested in becoming co-maintainers, particularly in the following areas:
+rskit currently has a **single core maintainer**. This is a known sustainability risk for a project of this size. We are actively looking for contributors interested in becoming co-maintainers, particularly in the following areas:
 
 - **Foundation**: `rskit-errors`, `rskit-config`, `rskit-logging`, `rskit-validation`
 - **Patterns**: `rskit-provider`, `rskit-resilience`, `rskit-di`, `rskit-bootstrap`, `rskit-observability`
@@ -28,7 +28,7 @@ If you are interested, please open an issue using the [engineering review templa
 New maintainers are added by the existing core maintainers via a pull request that updates this file. Candidates are typically long-term contributors who have demonstrated:
 
 - A track record of high-quality contributions across multiple areas of the codebase.
-- Familiarity with project conventions, the split workspace layout, the layering rules (enforced by topology and dependency policy checks), and the release process.
+- Familiarity with project conventions, the split workspace layout, the layering rules (enforced by Toven module groups), and the release process.
 - A commitment to responsive code review.
 
 ## Responsibilities

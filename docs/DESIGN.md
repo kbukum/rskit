@@ -1,6 +1,6 @@
 # rskit Design Decisions
 
-Why rskit looks the way it does — and how it differs from its sibling [gokit](https://github.com/kbukum/gokit) (Go).
+Why rskit looks the way it does, how its layers fit together, and how it differs from its sibling [gokit](https://github.com/kbukum/gokit) (Go). The rules every change follows live in the [engineering standard](../.github/engineering.md).
 
 ## Core decisions
 
@@ -19,7 +19,7 @@ Why rskit looks the way it does — and how it differs from its sibling [gokit](
 
 ## How rskit differs from gokit
 
-rskit mirrors gokit's package structure and lifecycle philosophy. Key differences come from idiomatic Rust:
+rskit shares gokit's concepts and lifecycle model. Where Go and Rust idioms differ, rskit follows Rust. Wire contracts stay aligned; see [sibling-parity](../.github/skills/sibling-parity/SKILL.md).
 
 | gokit (Go) | rskit (Rust) | Why |
 |---|---|---|

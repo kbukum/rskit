@@ -28,21 +28,22 @@ Add it to the `contrib/Cargo.toml` member pattern and wire a feature flag in the
 
 2. **Define a typed `Config`** for the backend (endpoint, credentials source, timeouts, bucket/topic names). No stringly-typed escape hatch. Validate it at construction — this is a trust boundary.
 
-3. **Implement the adapter** against the core trait. Timeout every remote call; bounded jittered retries for idempotent ops only; degrade/circuit-break rather than success-shaped fallbacks. Tokens go in headers, not query strings. No `unwrap()`/`expect()` on runtime paths; typed `AppError`/`AppResult` preserving cause. Split code by concern into focused files (config, client, adapter, mapping).
+3. **Implement the adapter** against the core trait, following [security and runtime](../../engineering.md#security-and-runtime): timeouts, bounded idempotent retries, header tokens, typed errors. Split code by concern (config, client, adapter, mapping).
 
 4. **Expose explicit registration** that closes over the config and installs the typed factory into the passed registry. No global registry, no import-time side effects.
 
-5. **Crate docs** (`#![warn(missing_docs)]` + `//!`) describing the backend, its config, and its failure modes.
+5. **Crate docs** (`//!`, with workspace lints inherited) describing the backend, its config, and its failure modes.
 
-6. **Tests** — behavioral, deterministic, `tokio::time::pause()`/`advance()` (never `std::thread::sleep`), cover failure paths; fixtures over embedded config; green under race/shuffle/parallel. Integration tests that need a live broker/store are gated/skipped without it.
+6. **Tests** follow [tests](../../engineering.md#tests). Integration tests that need a live broker or store are `#[ignore]`d per [test layout](../../../docs/TEST-LAYOUT.md).
 
 ## Validate
 
 ```bash
-make fmt
+make fmt C=<crate>
 make build C=<crate>                       # e.g. C=rskit-storage-s3 (confirm the crate name)
 make lint  C=<crate>
 make test  C=<crate>
+make doc   C=<crate>
 make check-topology
 ```
 
@@ -53,6 +54,6 @@ make check-topology
 - [ ] Typed `Config`, validated at construction; no `Any`/stringly-typed factory
 - [ ] Explicit registration; no import-time side effects, no mutable global registry
 - [ ] Timeouts, bounded retries (idempotent only), no success-shaped fallbacks, typed errors
-- [ ] Crate docs + behavioral tests green under race/shuffle/parallel
+- [ ] Crate docs, workspace lints, and deterministic behavioral tests
 
-Per repo workflow, **create the branch and make edits only** — the maintainer commits and pushes.
+Leave edits uncommitted. Git actions need authorization.

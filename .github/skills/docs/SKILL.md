@@ -6,7 +6,7 @@ user-invocable: true
 
 # Documentation
 
-Apply the [baseline](../../copilot-instructions.md). Scope to requested docs and directly affected references, including rustdoc and agent docs.
+Apply the [documentation rules](../../engineering.md#documentation-and-consumer-experience). Scope to requested docs and directly affected references, including rustdoc and agent docs.
 
 1. Verify commands against Makefile, crates/workspaces/facade against manifests, and owners against `docs/CONCERN-OWNERS.md`. Check API examples against source; consult sibling-parity only for parity claims.
 2. Lead with the reader's task or capability, then the shortest working example. Use concise active language and clear headings. Keep detail for correct use, contracts, safety, or verification; remove repetition and implementation narration. Changelogs summarize outcomes. Use tables or diagrams only when clearer than prose.
