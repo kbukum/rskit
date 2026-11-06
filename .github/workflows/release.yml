@@ -68,7 +68,7 @@ jobs:
         with:
           toolchain: "1.97"
           components: clippy,rustfmt,llvm-tools-preview
-      - uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283  # v2
+      - uses: taiki-e/install-action@b80e2bb2635f28eb98b9fce1e2f0887e1535c6b2  # v2
         with:
           tool: cargo-deny@0.20.2,cargo-audit,cargo-nextest,cargo-llvm-cov,cargo-cyclonedx
       - name: Install nightly for rustdoc JSON
