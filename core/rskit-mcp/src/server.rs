@@ -8,10 +8,11 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use rmcp::handler::server::ServerHandler;
 use rmcp::model::{
-    CallToolRequestParams, CallToolResult, GetPromptRequestParams, GetPromptResult, Implementation,
-    ListPromptsResult, ListResourceTemplatesResult, ListResourcesResult, ListToolsResult,
-    PaginatedRequestParams, Prompt, ReadResourceRequestParams, ReadResourceResult, Resource,
-    ResourceTemplate, ServerCapabilities, ServerInfo, Tool,
+    CallToolRequestParams, CallToolResponse, GetPromptRequestParams, GetPromptResponse,
+    GetPromptResult, Implementation, ListPromptsResult, ListResourceTemplatesResult,
+    ListResourcesResult, ListToolsResult, PaginatedRequestParams, Prompt,
+    ReadResourceRequestParams, ReadResourceResponse, ReadResourceResult, Resource,
+    ResourceTemplate, ServerCapabilities, Tool,
 };
 use rmcp::service::{RequestContext, RoleServer};
 use rskit_component::{Component, Health};
@@ -104,7 +105,7 @@ impl RegistryHandler {
 }
 
 impl ServerHandler for RegistryHandler {
-    fn get_info(&self) -> ServerInfo {
+    fn get_info(&self) -> rmcp::model::ServerConfig {
         let capabilities = ServerCapabilities::builder()
             .enable_tools()
             .enable_prompts()
@@ -112,7 +113,7 @@ impl ServerHandler for RegistryHandler {
             .build();
         let server_info = Implementation::new(&self.name, &self.version);
 
-        ServerInfo::new(capabilities)
+        rmcp::model::ServerConfig::new(capabilities)
             .with_server_info(server_info)
             .with_instructions(format!(
                 "Tool server '{}' v{} — {} tools available",
@@ -129,11 +130,7 @@ impl ServerHandler for RegistryHandler {
     ) -> Result<ListToolsResult, rmcp::ErrorData> {
         let tools = self.mcp_tools();
         tracing::debug!(count = tools.len(), "MCP tools/list");
-        Ok(ListToolsResult {
-            tools,
-            next_cursor: None,
-            meta: None,
-        })
+        Ok(ListToolsResult::with_all_items(tools))
     }
 
     async fn list_prompts(
@@ -151,8 +148,8 @@ impl ServerHandler for RegistryHandler {
         &self,
         request: GetPromptRequestParams,
         _context: RequestContext<RoleServer>,
-    ) -> Result<GetPromptResult, rmcp::ErrorData> {
-        self.handle_get_prompt(request).await
+    ) -> Result<GetPromptResponse, rmcp::ErrorData> {
+        self.handle_get_prompt(request).await.map(Into::into)
     }
 
     async fn list_resources(
@@ -181,8 +178,8 @@ impl ServerHandler for RegistryHandler {
         &self,
         request: ReadResourceRequestParams,
         _context: RequestContext<RoleServer>,
-    ) -> Result<ReadResourceResult, rmcp::ErrorData> {
-        self.handle_read_resource(request).await
+    ) -> Result<ReadResourceResponse, rmcp::ErrorData> {
+        self.handle_read_resource(request).await.map(Into::into)
     }
 
     fn get_tool(&self, name: &str) -> Option<Tool> {
@@ -199,8 +196,8 @@ impl ServerHandler for RegistryHandler {
         &self,
         request: CallToolRequestParams,
         _context: RequestContext<RoleServer>,
-    ) -> Result<CallToolResult, rmcp::ErrorData> {
-        Ok(self.handle_call_tool(request).await)
+    ) -> Result<CallToolResponse, rmcp::ErrorData> {
+        Ok(self.handle_call_tool(request).await.into())
     }
 }
 
@@ -253,6 +250,7 @@ mod tests {
     use crate::prompts::PromptEntry;
     use crate::resources::{ResourceEntry, ResourceTemplateEntry};
     use parking_lot::Mutex;
+    use rmcp::model::CallToolResult;
 
     use rskit_schema::ValidationResult;
     use rskit_tool::context::Context;
@@ -751,9 +749,7 @@ mod tests {
         result
             .content
             .first()
-            .and_then(|content| match &content.raw {
-                rmcp::model::RawContent::Text(text) => Some(text.text.as_ref()),
-                _ => None,
-            })
+            .and_then(|content| content.as_text())
+            .map(|text| text.text.as_str())
     }
 }

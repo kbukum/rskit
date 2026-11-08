@@ -73,7 +73,7 @@ tokio = { version = "1.54.1", features = ["full"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 tokio-stream = "0.1"
 
-# Tower middleware stack (tonic 0.13 uses tower 0.4)
+# Tower middleware stack
 tower = { version = "0.5", features = ["full"] }
 tower-layer = "0.3"
 tower-service = "0.3"
@@ -109,7 +109,7 @@ config = { version = "0.15", default-features = false, features = ["toml"] }
 dotenvy = "0.15"
 
 # Validation
-validator = "0.20"
+validator = "0.21"
 
 # Error handling
 thiserror = "2"
@@ -120,9 +120,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "fmt"]
 
 # Resilience
 governor = { version = "0.10", features = ["std"] }
-# Keep rand on the current stable line used by governor/opentelemetry/tungstenite.
-# rand 0.10 is only needed by rmcp today and would force duplicate rand/chacha20
-# families into crates that only need simple token/jitter randomness.
+# Stay on the rand line governor/opentelemetry/tungstenite use so the default graph keeps one copy.
 rand = "0.9"
 # Explicit, value-stable ChaCha RNG for reproducible benchmark seeding; pairs with rand 0.9.
 rand_chacha = "0.9"
@@ -138,18 +136,21 @@ prost = "0.14"
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 async-trait = "0.1"
+# Stay on the parking_lot line tokio uses so the graph keeps one copy.
 parking_lot = "0.12"
 bytes = "1"
 http = "1"
 libc = "0.2"
 regex = "1"
 once_cell = "1"
+# Stay on the base64 line axum/tonic/jsonwebtoken use so the graph keeps one shared copy.
 base64 = "0.22"
 schemars = "1"
-jsonschema = { version = "0.46", default-features = false }
+jsonschema = { version = "0.60", default-features = false }
 
 # HTTP server (Phase 2)
 axum = { version = "0.8", features = ["http2", "ws"] }
+# Stay on the tower-http line reqwest uses so the graph keeps one copy.
 tower-http = { version = "0.6", features = ["cors", "trace", "request-id", "timeout"] }
 hyper = { version = "1", features = ["full"] }
 hyper-util = { version = "0.1", features = ["tokio", "server-auto", "service"] }
@@ -157,17 +158,17 @@ rustls = "0.23"
 tokio-rustls = "0.26"
 
 # Auth (Phase 2)
-jsonwebtoken = { version = "10", default-features = false, features = ["aws_lc_rs", "use_pem"] }
-argon2 = { version = "0.5", features = ["password-hash", "rand"] }
+jsonwebtoken = { version = "11", default-features = false, features = ["aws_lc_rs", "use_pem"] }
+argon2 = "0.6"
 
 # Observability (Phase 4)
-opentelemetry = "0.32"
-opentelemetry_sdk = { version = "0.32", features = ["rt-tokio", "logs"] }
-opentelemetry-otlp = { version = "0.32", features = ["grpc-tonic", "metrics", "logs", "http-proto", "tls", "tls-webpki-roots"] }
-opentelemetry-appender-tracing = "0.32"
-opentelemetry-prometheus = "0.32"
+opentelemetry = "0.33"
+opentelemetry_sdk = { version = "0.33", features = ["rt-tokio", "logs"] }
+opentelemetry-otlp = { version = "0.33", features = ["grpc-tonic", "metrics", "logs", "http-proto", "tls-ring", "tls-webpki-roots"] }
+opentelemetry-appender-tracing = "0.33"
+opentelemetry-prometheus = "0.33"
 prometheus = "0.14"
-tracing-opentelemetry = "0.33"
+tracing-opentelemetry = "0.34"
 
 # HTTP client (shared)
 reqwest = { version = "0.13", features = ["json", "rustls", "http2", "query"], default-features = false }
@@ -178,7 +179,7 @@ dashmap = "6"
 # File I/O (rskit-storage)
 tempfile = "3"
 mime_guess = "2"
-infer = "0.19"
+infer = "0.22"
 futures-core = "0.3"
 sha2 = "0.11"
 
@@ -195,9 +196,9 @@ criterion = { version = "0.8", features = ["html_reports", "async_tokio"] }
 insta = { version = "1.47", features = ["json", "yaml", "redactions"] }
 
 # Crypto
-aes-gcm = "0.10"
+aes-gcm = "0.11"
 blake3 = { version = "1" }
-chacha20poly1305 = "0.10"
+chacha20poly1305 = "0.11"
 hex = "0.4"
 hmac = "0.13"
 pbkdf2 = "0.13"
@@ -207,7 +208,7 @@ hkdf = "0.13"
 csv = "1.3"
 git2 = { version = "0.21", default-features = false }
 image = { version = "0.25", default-features = false, features = ["bmp", "gif", "ico", "jpeg", "png", "rayon", "tiff", "webp"] }
-rmcp = { version = "1.5", default-features = false }
+rmcp = { version = "3.9", default-features = false }
 
 # Internal
 rskit = { package = "rskit-suite", path = "rskit", version = "0.2.0-alpha.1" }

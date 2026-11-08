@@ -20,7 +20,12 @@ const AEAD_TAG_SIZE: usize = 16;
 
 /// Decoded versioned ciphertext envelope.
 pub(crate) struct Envelope {
-    data: Vec<u8>,
+    header: [u8; HEADER_SIZE],
+    derivation: Derivation,
+    algorithm: Algorithm,
+    salt: [u8; SALT_SIZE],
+    nonce: [u8; NONCE_SIZE],
+    ciphertext: Vec<u8>,
 }
 
 impl Envelope {
@@ -33,78 +38,80 @@ impl Envelope {
         ciphertext: &[u8],
     ) -> String {
         let mut data = Vec::with_capacity(HEADER_SIZE + ciphertext.len());
-        data.push(derivation.version());
-        data.push(algorithm.id());
-        data.extend_from_slice(salt);
-        data.extend_from_slice(nonce);
+        data.extend_from_slice(&associated_data(derivation, algorithm, salt, nonce));
         data.extend_from_slice(ciphertext);
         STANDARD.encode(data)
     }
 
-    /// Decode and minimally validate a ciphertext envelope.
+    /// Decode and validate a ciphertext envelope header.
     pub(crate) fn decode(ciphertext: &str) -> AppResult<Self> {
         let data = STANDARD.decode(ciphertext).map_err(|err| {
             AppError::new(ErrorCode::InvalidFormat, "ciphertext is not valid base64")
                 .with_cause(err)
         })?;
 
+        let too_short =
+            || AppError::new(ErrorCode::InvalidFormat, "ciphertext envelope is too short");
         if data.len() < HEADER_SIZE + AEAD_TAG_SIZE {
-            return Err(AppError::new(
-                ErrorCode::InvalidFormat,
-                "ciphertext envelope is too short",
-            ));
+            return Err(too_short());
         }
-        if Derivation::from_version(data[0]).is_none() {
-            return Err(AppError::new(
-                ErrorCode::InvalidFormat,
-                "unsupported ciphertext envelope version",
-            ));
-        }
-        if Algorithm::from_id(data[1]).is_none() {
-            return Err(AppError::new(
-                ErrorCode::InvalidFormat,
-                "unsupported ciphertext algorithm",
-            ));
-        }
+        let (header, body) = data
+            .split_first_chunk::<HEADER_SIZE>()
+            .ok_or_else(too_short)?;
+        let [version, algorithm_id, rest @ ..] = header;
+        let (salt, nonce) = rest
+            .split_first_chunk::<SALT_SIZE>()
+            .ok_or_else(too_short)?;
+        let nonce: &[u8; NONCE_SIZE] = nonce.try_into().map_err(|_| too_short())?;
 
-        Ok(Self { data })
-    }
-
-    /// Return the key derivation declared by this envelope's version.
-    pub(crate) fn derivation(&self) -> AppResult<Derivation> {
-        Derivation::from_version(self.data[0]).ok_or_else(|| {
+        let derivation = Derivation::from_version(*version).ok_or_else(|| {
             AppError::new(
                 ErrorCode::InvalidFormat,
                 "unsupported ciphertext envelope version",
             )
+        })?;
+        let algorithm = Algorithm::from_id(*algorithm_id).ok_or_else(|| {
+            AppError::new(ErrorCode::InvalidFormat, "unsupported ciphertext algorithm")
+        })?;
+
+        Ok(Self {
+            header: *header,
+            derivation,
+            algorithm,
+            salt: *salt,
+            nonce: *nonce,
+            ciphertext: body.to_vec(),
         })
+    }
+
+    /// Return the key derivation declared by this envelope's version.
+    pub(crate) const fn derivation(&self) -> Derivation {
+        self.derivation
     }
 
     /// Return the algorithm declared by this envelope.
-    pub(crate) fn algorithm(&self) -> AppResult<Algorithm> {
-        Algorithm::from_id(self.data[1]).ok_or_else(|| {
-            AppError::new(ErrorCode::InvalidFormat, "unsupported ciphertext algorithm")
-        })
+    pub(crate) const fn algorithm(&self) -> Algorithm {
+        self.algorithm
     }
 
     /// Return the bytes authenticated as AEAD associated data.
-    pub(crate) fn associated_data(&self) -> &[u8] {
-        &self.data[..HEADER_SIZE]
+    pub(crate) const fn associated_data(&self) -> &[u8; HEADER_SIZE] {
+        &self.header
     }
 
     /// Return the envelope salt.
-    pub(crate) fn salt(&self) -> &[u8] {
-        &self.data[2..2 + SALT_SIZE]
+    pub(crate) const fn salt(&self) -> &[u8; SALT_SIZE] {
+        &self.salt
     }
 
     /// Return the envelope nonce.
-    pub(crate) fn nonce(&self) -> &[u8] {
-        &self.data[2 + SALT_SIZE..HEADER_SIZE]
+    pub(crate) const fn nonce(&self) -> &[u8; NONCE_SIZE] {
+        &self.nonce
     }
 
     /// Return the sealed ciphertext body.
     pub(crate) fn ciphertext(&self) -> &[u8] {
-        &self.data[HEADER_SIZE..]
+        &self.ciphertext
     }
 }
 

@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use rmcp::model::{
-    CallToolResult, Content, ErrorData, ListToolsResult, RawContent, Tool, ToolAnnotations,
+    CallToolResult, ContentBlock, ErrorData, ListToolsResult, Tool, ToolAnnotations,
 };
 use rskit_errors::{AppError, AppResult, ErrorCode};
 use rskit_tool::result::ToolResult;
@@ -63,11 +63,7 @@ fn to_mcp_annotations(def: &Definition) -> ToolAnnotations {
 /// Convert a list of rskit [`Definition`]s to an MCP [`ListToolsResult`].
 pub fn definitions_to_list_result(defs: &[Definition], prefix: &str) -> ListToolsResult {
     let tools: Vec<Tool> = defs.iter().map(|d| definition_to_tool(d, prefix)).collect();
-    ListToolsResult {
-        tools,
-        next_cursor: None,
-        meta: None,
-    }
+    ListToolsResult::with_all_items(tools)
 }
 
 // ── MCP Tool → Kit Definition ──────────────────────────────────────────────
@@ -158,7 +154,7 @@ fn mcp_schema_to_tool_schema(
 
 /// Convert an rskit [`ToolResult`] to an MCP [`CallToolResult`].
 pub fn tool_result_to_call_result(result: &ToolResult) -> CallToolResult {
-    let content = vec![Content::text(&result.content)];
+    let content = vec![ContentBlock::text(&result.content)];
 
     if result.is_error {
         let mut r = CallToolResult::error(content);
@@ -194,13 +190,7 @@ pub fn call_result_to_tool_result(result: &CallToolResult) -> ToolResult {
     let content: String = result
         .content
         .iter()
-        .filter_map(|c| {
-            if let RawContent::Text(text) = &c.raw {
-                Some(text.text.as_str())
-            } else {
-                None
-            }
-        })
+        .filter_map(|c| c.as_text().map(|text| text.text.as_str()))
         .collect::<Vec<_>>()
         .join("\n");
 
@@ -370,7 +360,7 @@ mod tests {
 
     #[test]
     fn test_call_result_to_tool_result() {
-        let mcp_result = CallToolResult::success(vec![Content::text("result text")]);
+        let mcp_result = CallToolResult::success(vec![ContentBlock::text("result text")]);
         let tool_result = call_result_to_tool_result(&mcp_result);
         assert_eq!(tool_result.content, "result text");
         assert!(!tool_result.is_error);
@@ -378,7 +368,7 @@ mod tests {
 
     #[test]
     fn test_call_result_error_to_tool_result() {
-        let mcp_result = CallToolResult::error(vec![Content::text("error msg")]);
+        let mcp_result = CallToolResult::error(vec![ContentBlock::text("error msg")]);
         let tool_result = call_result_to_tool_result(&mcp_result);
         assert_eq!(tool_result.content, "error msg");
         assert!(tool_result.is_error);
