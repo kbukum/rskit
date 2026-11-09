@@ -18,6 +18,7 @@ Notable changes, following [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - **Breaking (bench)**: `Metric::compute` and `Suite::compute` now return `AppResult`.
 - **Breaking (bench)**: `RunProvenance` adds judge provenance and becomes non-exhaustive; construct from `Default` and use open patterns.
 - **tooling**: module layers move from `domains.toml` into Toven `[groups.*]`, which now enforce the allowed layer dependencies. Every `make` gate runs through Toven with `C=`/`W=`/`G=` selection and `make check-<group>`; `make test` runs nextest, `test-nextest` is removed, and `make test-default` plus `make test-affected` cover the default-features build.
+- **Breaking (deps)**: workspace dependencies move to their latest majors, including `rmcp` 3.9 (re-exported through `rskit-mcp` conversions), OpenTelemetry 0.33 with `tracing-opentelemetry` 0.34, `jsonwebtoken` 11, `jsonschema` 0.60, `validator` 0.21, `argon2` 0.6, `aes-gcm`/`chacha20poly1305` 0.11 and `async-nats` 0.52. OTLP export uses the `tls-ring` feature. `rand`, `base64`, `parking_lot` and `tower-http` stay on the lines the runtime stack shares, so each resolves to one copy.
 - **Breaking (process)**: `OutputObserver::with_stdout_bytes` and `with_stderr_bytes` take async sinks returning `AppResult<()>`; persistent byte callbacks also return `AppResult<()>`. Delivery applies backpressure and propagates failures, including during readiness. Incomplete observed output after the post-exit grace period returns a timeout error instead of silent output loss, for async and persistent processes.
 
 ### Fixed
@@ -25,12 +26,14 @@ Notable changes, following [Keep a Changelog](https://keepachangelog.com/en/1.1.
 - **bench**: semantic similarity rejects empty or dimension-inconsistent provider embeddings instead of scoring them as zero similarity.
 - **worker**: pool shutdown reports accepted but unstarted work as cancelled, keeping it distinct from rejected submissions and failures in running tasks.
 - **process**: a descendant that outlives the leader and keeps the output pipes open no longer fails observed runs with a delivery timeout when the lifecycle policy owns the process group. After the post-exit grace period the async, PTY and persistent runners end the group, then deliver every byte. Policies that do not own descendants, and stalled sinks, still report the timeout.
+- **auth**: Argon2 password verification returns an error for malformed or unsupported hashes instead of reporting them as a password mismatch.
 - **process**: PTY runs release the parent's terminal handles after spawn, so Linux output readers finish when the child exits instead of waiting out the grace period.
 
 ### Security
 
 - Update `rustls` to 0.23.46, `quinn-proto` to 0.11.19 and `zip` to 9 to resolve RUSTSEC-2026-0346 to 0349 and the `quinn-proto` and `zip` advisories; `rskit-fs` archive extraction adapts to the zip 9 name API.
 - Update `rustls-webpki` to 0.103.16, and `webpki-roots` and `webpki-root-certs` to 1.0.10, to resolve RUSTSEC-2026-0381, 0382 and 0383 (distrusted emSign intermediates).
+- Refresh all lockfiles: `libz-sys` 1.1.32 resolves RUSTSEC-2026-0418, and the unmaintained `pin-utils` (RUSTSEC-2026-0441) leaves the graph.
 - Update `tokio` to 1.54.1 and `ctutils` to 0.4.5 to resolve RUSTSEC-2026-0386 and RUSTSEC-2026-0385; the `rskit-process` PTY master registers its fd with `AsyncFd::register`.
 
 ## [v0.2.0-alpha.8] - 2026-08-16

@@ -1,6 +1,6 @@
 use argon2::{
     Algorithm, Argon2, Params, Version,
-    password_hash::{PasswordHash, PasswordHasher as Argon2Hasher, PasswordVerifier, SaltString},
+    password_hash::{self, PasswordHasher as Argon2Hasher, PasswordVerifier, phc::PasswordHash},
 };
 use rskit_errors::{AppError, AppResult};
 
@@ -33,11 +33,8 @@ impl PasswordHasher {
 
     /// Hash a plaintext `password`.
     pub fn hash(&self, password: &str) -> AppResult<String> {
-        let mut rng = argon2::password_hash::rand_core::OsRng;
-        let salt = SaltString::generate(&mut rng);
-        let argon2 = configured_argon2()?;
-        argon2
-            .hash_password(password.as_bytes(), &salt)
+        configured_argon2()?
+            .hash_password(password.as_bytes())
             .map(|h| h.to_string())
             .map_err(|e| {
                 AppError::new(
@@ -55,9 +52,14 @@ impl PasswordHasher {
                 format!("invalid hash format: {e}"),
             )
         })?;
-        Ok(configured_argon2()?
-            .verify_password(password.as_bytes(), &parsed)
-            .is_ok())
+        match configured_argon2()?.verify_password(password.as_bytes(), &parsed) {
+            Ok(()) => Ok(true),
+            Err(password_hash::Error::PasswordInvalid) => Ok(false),
+            Err(e) => Err(AppError::new(
+                rskit_errors::ErrorCode::Internal,
+                format!("password verification error: {e}"),
+            )),
+        }
     }
 }
 
@@ -91,5 +93,15 @@ mod tests {
         assert!(hash.contains("m=65536"));
         assert!(hash.contains("t=3"));
         assert!(hash.contains("p=4"));
+    }
+
+    #[test]
+    fn verify_reports_unsupported_hash_as_error_not_mismatch() {
+        let pbkdf2 =
+            "$pbkdf2-sha256$i=600000$c2FsdHNhbHRzYWx0$Pq3SFyw1h7f6v0n0kGfn0p0r2O6Xn1sQq4mT8Ckz9xA";
+        let err = PasswordHasher::default()
+            .verify("hunter2", pbkdf2)
+            .unwrap_err();
+        assert_eq!(err.code(), rskit_errors::ErrorCode::Internal);
     }
 }

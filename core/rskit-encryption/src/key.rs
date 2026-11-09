@@ -100,9 +100,9 @@ impl MasterKey {
         };
         let mut key = self.message_key(algorithm, salt)?;
         let sealed = match algorithm {
-            Algorithm::AesGcm => Aes256Gcm::new((&key[..]).into()).encrypt(nonce.into(), payload),
+            Algorithm::AesGcm => Aes256Gcm::new((&key).into()).encrypt(nonce.into(), payload),
             Algorithm::ChaCha20Poly1305 => {
-                ChaCha20Poly1305::new((&key[..]).into()).encrypt(nonce.into(), payload)
+                ChaCha20Poly1305::new((&key).into()).encrypt(nonce.into(), payload)
             }
         };
         key.zeroize();
@@ -120,13 +120,13 @@ impl MasterKey {
     /// Open an encoded envelope sealed for this key's derivation and the given algorithm.
     pub(crate) fn open(&self, algorithm: Algorithm, ciphertext: &str) -> AppResult<Vec<u8>> {
         let envelope = Envelope::decode(ciphertext)?;
-        if envelope.derivation()? != self.derivation {
+        if envelope.derivation() != self.derivation {
             return Err(AppError::new(
                 ErrorCode::InvalidFormat,
                 "ciphertext key derivation does not match encryptor",
             ));
         }
-        if envelope.algorithm()? != algorithm {
+        if envelope.algorithm() != algorithm {
             return Err(AppError::new(
                 ErrorCode::InvalidFormat,
                 "ciphertext algorithm does not match encryptor",
@@ -134,15 +134,15 @@ impl MasterKey {
         }
         let payload = Payload {
             msg: envelope.ciphertext(),
-            aad: envelope.associated_data(),
+            aad: envelope.associated_data().as_slice(),
         };
         let mut key = self.message_key(algorithm, envelope.salt())?;
         let opened = match algorithm {
             Algorithm::AesGcm => {
-                Aes256Gcm::new((&key[..]).into()).decrypt(envelope.nonce().into(), payload)
+                Aes256Gcm::new((&key).into()).decrypt(envelope.nonce().into(), payload)
             }
             Algorithm::ChaCha20Poly1305 => {
-                ChaCha20Poly1305::new((&key[..]).into()).decrypt(envelope.nonce().into(), payload)
+                ChaCha20Poly1305::new((&key).into()).decrypt(envelope.nonce().into(), payload)
             }
         };
         key.zeroize();

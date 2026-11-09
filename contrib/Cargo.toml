@@ -69,9 +69,11 @@ reqwest = { version = "0.13", features = ["json", "rustls", "http2", "query"], d
 url = "2"
 chrono = { version = "0.4", features = ["serde"] }
 uuid = { version = "1", features = ["v4"] }
+# Stay on the parking_lot line tokio uses so the graph keeps one copy.
 parking_lot = "0.12"
 prost = "0.14"
 tonic = { version = "0.14", features = ["transport", "tls-ring"] }
+# Stay on the base64 line axum/tonic/jsonwebtoken use so the graph keeps one shared copy.
 base64 = "0.22"
 criterion = { version = "0.8", features = ["html_reports", "async_tokio"] }
 insta = { version = "1.47", features = ["json", "yaml", "redactions"] }
@@ -82,7 +84,7 @@ tokenizers = { version = "0.23", default-features = false, features = ["fancy-re
 
 # Messaging adapters
 rdkafka = { version = "0.39", features = ["tokio"] }
-async-nats = "0.49"
+async-nats = "0.52"
 lapin = { version = "4", default-features = false, features = ["rustls", "tokio"] }
 
 # Media

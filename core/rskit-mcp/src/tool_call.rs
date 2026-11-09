@@ -66,7 +66,7 @@ impl RegistryHandler {
                 event.reason = String::from("not in allow-list");
                 self.audit_tool_call(event).await;
                 tracing::warn!(tool = tool_name, "MCP tool call rejected by allow-list");
-                return CallToolResult::error(vec![rmcp::model::Content::text(
+                return CallToolResult::error(vec![rmcp::model::ContentBlock::text(
                     "tool is not allowed",
                 )]);
             }
@@ -79,7 +79,7 @@ impl RegistryHandler {
                 event.outcome = String::from("input_too_large");
                 event.error = format!("input size exceeds {} bytes", self.config.max_input_bytes);
                 self.audit_tool_call(event).await;
-                return CallToolResult::error(vec![rmcp::model::Content::text(format!(
+                return CallToolResult::error(vec![rmcp::model::ContentBlock::text(format!(
                     "input too large: exceeds {} bytes",
                     self.config.max_input_bytes
                 ))]);
@@ -89,7 +89,7 @@ impl RegistryHandler {
                 event.outcome = String::from("not_found");
                 event.error = format!("tool not found: {tool_name}");
                 self.audit_tool_call(event).await;
-                return CallToolResult::error(vec![rmcp::model::Content::text(format!(
+                return CallToolResult::error(vec![rmcp::model::ContentBlock::text(format!(
                     "tool not found: {tool_name}"
                 ))]);
             };
@@ -100,7 +100,7 @@ impl RegistryHandler {
                 event.outcome = String::from("invalid_input");
                 event.error = details.clone();
                 self.audit_tool_call(event).await;
-                return CallToolResult::error(vec![rmcp::model::Content::text(format!(
+                return CallToolResult::error(vec![rmcp::model::ContentBlock::text(format!(
                     "invalid tool input: {details}"
                 ))]);
             }
@@ -120,7 +120,7 @@ impl RegistryHandler {
                     if !decision.allowed {
                         event.outcome = String::from("denied");
                         self.audit_tool_call(event).await;
-                        return CallToolResult::error(vec![rmcp::model::Content::text(
+                        return CallToolResult::error(vec![rmcp::model::ContentBlock::text(
                             denied_message(&decision.reason),
                         )]);
                     }
@@ -129,7 +129,7 @@ impl RegistryHandler {
                     event.outcome = String::from("authorization_error");
                     event.error = err.clone();
                     self.audit_tool_call(event).await;
-                    return CallToolResult::error(vec![rmcp::model::Content::text(
+                    return CallToolResult::error(vec![rmcp::model::ContentBlock::text(
                         "authorization error",
                     )]);
                 }
@@ -148,7 +148,7 @@ impl RegistryHandler {
                             event.outcome = String::from("result_too_large");
                             event.error = format!("result size exceeds {limit} bytes");
                             self.audit_tool_call(event).await;
-                            return CallToolResult::error(vec![rmcp::model::Content::text(
+                            return CallToolResult::error(vec![rmcp::model::ContentBlock::text(
                                 format!("result too large: exceeds {limit} bytes"),
                             )]);
                         }
@@ -156,7 +156,7 @@ impl RegistryHandler {
                             event.outcome = String::from("output_validation_error");
                             event.error = message.clone();
                             self.audit_tool_call(event).await;
-                            return CallToolResult::error(vec![rmcp::model::Content::text(
+                            return CallToolResult::error(vec![rmcp::model::ContentBlock::text(
                                 format!("output validation error: {message}"),
                             )]);
                         }
@@ -168,7 +168,7 @@ impl RegistryHandler {
                     event.outcome = String::from("tool_error");
                     event.error = err.message().to_string();
                     tracing::warn!(tool = tool_name, error = %err, "tool call failed");
-                    CallToolResult::error(vec![rmcp::model::Content::text(
+                    CallToolResult::error(vec![rmcp::model::ContentBlock::text(
                         err.message().to_string(),
                     )])
                 }
@@ -330,10 +330,8 @@ mod tests {
         result
             .content
             .first()
-            .and_then(|content| match &content.raw {
-                rmcp::model::RawContent::Text(text) => Some(text.text.as_ref()),
-                _ => None,
-            })
+            .and_then(|content| content.as_text())
+            .map(|text| text.text.as_str())
     }
 
     fn echo_request() -> CallToolRequestParams {
